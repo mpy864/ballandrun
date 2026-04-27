@@ -30,13 +30,20 @@ jobs:
               'accept':     'application/json',
           }
 
-          # Current week (most recent Tuesday)
+          # Youth rankings publish on MONDAY — use most recent Monday's ISO week
           today = date.today()
-          days_back = (today.weekday() - 1) % 7
-          tuesday = today - timedelta(days=days_back)
-          iso = tuesday.isocalendar()
+          days_back = today.weekday()          # 0=Mon, so Mon→0 days back
+          monday = today - timedelta(days=days_back)
+          iso = monday.isocalendar()
           YEAR, WEEK = iso.year, iso.week
-          print(f'Target date: {tuesday}  Year={YEAR}  Week={WEEK}\n')
+          print(f'Most recent Monday: {monday}  Year={YEAR}  Week={WEEK}')
+
+          # Also compute the Tuesday-based week (what old probe used) for comparison
+          tue_back = (today.weekday() - 1) % 7
+          tuesday = today - timedelta(days=tue_back)
+          tue_iso = tuesday.isocalendar()
+          print(f'Most recent Tuesday: {tuesday}  Year={tue_iso.year}  Week={tue_iso.week}')
+          print(f'Week delta: {WEEK - tue_iso.week} (non-zero = probe was using wrong week)\n')
 
           def probe(label, params):
               try:
@@ -54,8 +61,14 @@ jobs:
                   print(f'[ERR]  {label} -> {e}')
               time.sleep(1)
 
+          # ── Attempt 0: Sanity check — SEN/MS with Monday week (should return data) ──
+          print('=== Test 0: SEN/MS sanity check with Monday week ===')\
+
+          probe('SEN/MS sanity', {'CategoryCode': 'SEN', 'SubEventCode': 'MS',
+                                   'RankingYear': YEAR, 'RankingWeek': WEEK})
+
           # ── Attempt 1: CategoryCode=YOU, no age sub-param ──────────────────
-          print('=== Test 1: CategoryCode=YOU (no age param) ===')
+          print('\n=== Test 1: CategoryCode=YOU (no age param) ===')
           for sub in ['MS', 'WS', 'MD', 'WD', 'XD', 'MDI', 'WDI', 'XDI']:
               probe(f'YOU/{sub}', {'CategoryCode': 'YOU', 'SubEventCode': sub,
                                    'RankingYear': YEAR, 'RankingWeek': WEEK})
