@@ -2305,33 +2305,31 @@ export default function DynamicOKRDashboard() {
 
                           {/* Legend */}
                           <div className="bg-slate-50 rounded-xl px-4 py-3 space-y-2">
-                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">How to read</p>
-                            <div className="flex items-start flex-wrap gap-x-5 gap-y-2 text-[11px] text-slate-500">
-                              <div className="flex items-center gap-1.5">
+                            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2">How to read</p>
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[11px] text-slate-500">
+                              <div className="flex items-center gap-2">
                                 <div className="w-8 h-2 rounded bg-blue-200 shrink-0" />
-                                <span><b className="text-slate-600">P25–P75 band</b> — middle 50% of elite players</span>
+                                <span><b className="text-slate-600">P25–P75 band</b> — middle 50% of elites</span>
                               </div>
-                              <div className="flex items-center gap-1.5">
-                                <div className="w-px h-4 bg-blue-500 shrink-0" />
-                                <span><b className="text-slate-600">Median (P50)</b> — half of elites above, half below</span>
+                              <div className="flex items-center gap-2">
+                                <div className="w-px h-4 bg-blue-500 shrink-0 mx-[13px]" />
+                                <span><b className="text-slate-600">Median (P50)</b> — half above, half below</span>
                               </div>
+                              {bmMyStats && (<>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-3 h-3 rounded-full bg-emerald-500 shrink-0 mx-[2px]" />
+                                  <span><b className="text-slate-600">Green</b> — at or above median</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-3 h-3 rounded-full bg-amber-400 shrink-0 mx-[2px]" />
+                                  <span><b className="text-slate-600">Amber</b> — P25 to median</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-3 h-3 rounded-full bg-red-400 shrink-0 mx-[2px]" />
+                                  <span><b className="text-slate-600">Red</b> — below P25</span>
+                                </div>
+                              </>)}
                             </div>
-                            {bmMyStats && (
-                              <div className="flex items-start flex-wrap gap-x-5 gap-y-1.5 text-[11px] text-slate-500 pt-1 border-t border-slate-200">
-                                <div className="flex items-center gap-1.5">
-                                  <div className="w-3 h-3 rounded-full bg-emerald-500 shrink-0" />
-                                  <span><b className="text-slate-600">Green</b> — at or above median (top half of elites)</span>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  <div className="w-3 h-3 rounded-full bg-amber-400 shrink-0" />
-                                  <span><b className="text-slate-600">Amber</b> — between P25 and median (above bottom quarter)</span>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  <div className="w-3 h-3 rounded-full bg-red-400 shrink-0" />
-                                  <span><b className="text-slate-600">Red</b> — below P25 (bottom quarter of elites)</span>
-                                </div>
-                              </div>
-                            )}
                           </div>
 
                           {/* Elite players table */}
