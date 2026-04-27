@@ -15,93 +15,81 @@ jobs:
           python-version: '3.11'
       - name: Install deps
         run: pip install requests
-      - name: Probe youth CDN filenames
+      - name: Probe GetRankingIndividuals for youth categories
         run: |
           python3 - <<'EOF'
-          import requests, time, json
+          import requests, json, time
+          from datetime import date, timedelta
 
-          BASE = 'https://wtt-web-frontdoor-withoutcache-cqakg0andqf5hchn.a01.azurefd.net/ranking'
+          API = 'https://wttcmsapigateway-new.azure-api.net/ttu/Rankings/GetRankingIndividuals'
           HEADERS = {
-              'origin':  'https://www.worldtabletennis.com',
-              'referer': 'https://www.worldtabletennis.com/',
-              'accept':  'application/json',
+              'apikey':     '2bf8b222-532c-4c60-8ebe-eb6fdfebe84a',
+              'secapimkey': 'S_WTT_882jjh7basdj91834783mds8j2jsd81',
+              'origin':     'https://www.worldtabletennis.com',
+              'referer':    'https://www.worldtabletennis.com/',
+              'accept':     'application/json',
           }
 
-          # Known working: YOU_SINGLES.json
-          # Guess naming pattern for all disciplines and age groups
-          candidates = [
-              # Youth Singles
-              'YOU_SINGLES.json',
-              'YOU_GIRLS_SINGLES.json',
-              'YOU_WOMEN_SINGLES.json',
-              'YOU_WS.json',
-              'YOU_MS.json',
-              # Youth Doubles
-              'YOU_DOUBLES.json',
-              'YOU_BOYS_DOUBLES.json',
-              'YOU_GIRLS_DOUBLES.json',
-              'YOU_MIXED_DOUBLES.json',
-              'YOU_MD.json',
-              'YOU_WD.json',
-              'YOU_XD.json',
-              # Age-specific patterns
-              'YOU_SINGLES_U17.json',
-              'YOU_SINGLES_U15.json',
-              'YOU_SINGLES_U19.json',
-              'YOU_U17_SINGLES.json',
-              'YOU_U15_SINGLES.json',
-              'YOU_U17_MS.json',
-              'YOU_U17_WS.json',
-              'YOU_U15_MS.json',
-              'YOU_U15_WS.json',
-              'YOU_U17_MD.json',
-              'YOU_U17_WD.json',
-              'YOU_U17_XD.json',
-              'YOU_U15_MD.json',
-              'YOU_U15_WD.json',
-              'YOU_U15_XD.json',
-              # Cadet patterns
-              'CAD_SINGLES.json',
-              'CAD_MS.json',
-              'CAD_WS.json',
-              'JUN_SINGLES.json',
-              'JUN_MS.json',
-              'JUN_WS.json',
-              'JUN_MD.json',
-              'JUN_WD.json',
-              'JUN_XD.json',
-              # Other patterns
-              'YOUTH_SINGLES.json',
-              'YOUTH_MS.json',
-              'YOUTH_WS.json',
-              'U17_MS.json',
-              'U17_WS.json',
-              'U15_MS.json',
-              'U15_WS.json',
-          ]
+          # Current week (most recent Tuesday)
+          today = date.today()
+          days_back = (today.weekday() - 1) % 7
+          tuesday = today - timedelta(days=days_back)
+          iso = tuesday.isocalendar()
+          YEAR, WEEK = iso.year, iso.week
+          print(f'Target date: {tuesday}  Year={YEAR}  Week={WEEK}\n')
 
-          print(f'Probing {len(candidates)} filename candidates...\n')
-          for fname in candidates:
-              url = f'{BASE}/{fname}?q=1'
+          def probe(label, params):
               try:
-                  resp = requests.get(url, headers=HEADERS, timeout=10)
-                  if resp.status_code == 200:
-                      data = resp.json()
-                      # Try to get first player name from the data
-                      if isinstance(data, list) and data:
-                          first = data[0]
-                      elif isinstance(data, dict):
-                          first = (data.get('Result') or data.get('data') or [None])[0]
-                      else:
-                          first = None
-                      name = ''
-                      if first and isinstance(first, dict):
-                          name = first.get('PlayerName') or first.get('name') or str(list(first.keys())[:3])
-                      size = len(resp.content)
-                      print(f'✅ {fname:40} {size:>8} bytes  {name}')
+                  r = requests.get(API, params={**params, 'StartRank': 1, 'EndRank': 5, 'q': 1},
+                                   headers=HEADERS, timeout=30)
+                  body = r.json()
+                  result = body.get('Result', body if isinstance(body, list) else [])
+                  status = f'HTTP {r.status_code}'
+                  if result:
+                      print(f'[OK]   {label} -> {len(result)} records')
+                      print('       First record:', json.dumps(result[0], ensure_ascii=False))
                   else:
-                      print(f'❌ {fname:40} {resp.status_code}')
+                      print(f'[EMPTY] {label} -> {status} body={json.dumps(body)[:120]}')
               except Exception as e:
-                  print(f'💥 {fname:40} {e}')
-              time.sleep(0.3)
+                  print(f'[ERR]  {label} -> {e}')
+              time.sleep(1)
+
+          # ── Attempt 1: CategoryCode=YOU, no age sub-param ──────────────────
+          print('=== Test 1: CategoryCode=YOU (no age param) ===')
+          for sub in ['MS', 'WS', 'MD', 'WD', 'XD', 'MDI', 'WDI', 'XDI']:
+              probe(f'YOU/{sub}', {'CategoryCode': 'YOU', 'SubEventCode': sub,
+                                   'RankingYear': YEAR, 'RankingWeek': WEEK})
+
+          # ── Attempt 2: CategoryCode=YOU + AgeCategoryCode param ────────────
+          print('\n=== Test 2: CategoryCode=YOU + AgeCategoryCode ===')
+          for age in ['U13', 'U15', 'U17', 'U19']:
+              for sub in ['MS', 'WS']:
+                  probe(f'YOU/{age}/{sub}', {'CategoryCode': 'YOU', 'AgeCategoryCode': age,
+                                              'SubEventCode': sub,
+                                              'RankingYear': YEAR, 'RankingWeek': WEEK})
+
+          # ── Attempt 3: CategoryCode encodes both (e.g. YOU_U17) ────────────
+          print('\n=== Test 3: CategoryCode=YOU_U17 style ===')
+          for age in ['U13', 'U15', 'U17', 'U19']:
+              for sub in ['MS', 'WS']:
+                  probe(f'YOU_{age}/{sub}', {'CategoryCode': f'YOU_{age}',
+                                              'SubEventCode': sub,
+                                              'RankingYear': YEAR, 'RankingWeek': WEEK})
+
+          # ── Attempt 4: Historical week — 4 weeks ago ───────────────────────
+          print('\n=== Test 4: Historical date (4 weeks ago) — YOU/MS ===')
+          old = tuesday - timedelta(weeks=4)
+          old_iso = old.isocalendar()
+          for sub in ['MS', 'WS']:
+              probe(f'YOU/{sub} @{old}', {'CategoryCode': 'YOU', 'SubEventCode': sub,
+                                           'RankingYear': old_iso.year, 'RankingWeek': old_iso.week})
+
+          # ── Attempt 5: Historical with AgeCategoryCode ────────────────────
+          print('\n=== Test 5: Historical (4 weeks ago) + AgeCategoryCode ===')
+          for age in ['U17', 'U19']:
+              probe(f'YOU/{age}/MS @{old}', {'CategoryCode': 'YOU', 'AgeCategoryCode': age,
+                                               'SubEventCode': 'MS',
+                                               'RankingYear': old_iso.year, 'RankingWeek': old_iso.week})
+
+          print('\nDone.')
           EOF
