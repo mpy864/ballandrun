@@ -15,77 +15,93 @@ jobs:
           python-version: '3.11'
       - name: Install deps
         run: pip install requests
-      - name: Probe youth API endpoints
+      - name: Probe youth CDN filenames
         run: |
           python3 - <<'EOF'
-          import requests, time
+          import requests, time, json
 
+          BASE = 'https://wtt-web-frontdoor-withoutcache-cqakg0andqf5hchn.a01.azurefd.net/ranking'
           HEADERS = {
-              'apikey':     '2bf8b222-532c-4c60-8ebe-eb6fdfebe84a',
-              'secapimkey': 'S_WTT_882jjh7basdj91834783mds8j2jsd81',
-              'origin':     'https://www.worldtabletennis.com',
-              'referer':    'https://www.worldtabletennis.com/',
-              'accept':     'application/json',
+              'origin':  'https://www.worldtabletennis.com',
+              'referer': 'https://www.worldtabletennis.com/',
+              'accept':  'application/json',
           }
-          BASE = 'https://wttcmsapigateway-new.azure-api.net/ttu'
 
-          # Try different endpoints on same gateway
-          endpoints = [
-              '/Rankings/GetYouthRankingIndividuals',
-              '/Rankings/GetRankingYouth',
-              '/Rankings/GetYouthRanking',
-              '/Rankings/GetJuniorRanking',
-              '/Rankings/GetRankingIndividualsYouth',
-              '/Youth/Rankings/GetRankingIndividuals',
-              '/Rankings/GetRankingIndividuals',  # with AgeGroup param
+          # Known working: YOU_SINGLES.json
+          # Guess naming pattern for all disciplines and age groups
+          candidates = [
+              # Youth Singles
+              'YOU_SINGLES.json',
+              'YOU_GIRLS_SINGLES.json',
+              'YOU_WOMEN_SINGLES.json',
+              'YOU_WS.json',
+              'YOU_MS.json',
+              # Youth Doubles
+              'YOU_DOUBLES.json',
+              'YOU_BOYS_DOUBLES.json',
+              'YOU_GIRLS_DOUBLES.json',
+              'YOU_MIXED_DOUBLES.json',
+              'YOU_MD.json',
+              'YOU_WD.json',
+              'YOU_XD.json',
+              # Age-specific patterns
+              'YOU_SINGLES_U17.json',
+              'YOU_SINGLES_U15.json',
+              'YOU_SINGLES_U19.json',
+              'YOU_U17_SINGLES.json',
+              'YOU_U15_SINGLES.json',
+              'YOU_U17_MS.json',
+              'YOU_U17_WS.json',
+              'YOU_U15_MS.json',
+              'YOU_U15_WS.json',
+              'YOU_U17_MD.json',
+              'YOU_U17_WD.json',
+              'YOU_U17_XD.json',
+              'YOU_U15_MD.json',
+              'YOU_U15_WD.json',
+              'YOU_U15_XD.json',
+              # Cadet patterns
+              'CAD_SINGLES.json',
+              'CAD_MS.json',
+              'CAD_WS.json',
+              'JUN_SINGLES.json',
+              'JUN_MS.json',
+              'JUN_WS.json',
+              'JUN_MD.json',
+              'JUN_WD.json',
+              'JUN_XD.json',
+              # Other patterns
+              'YOUTH_SINGLES.json',
+              'YOUTH_MS.json',
+              'YOUTH_WS.json',
+              'U17_MS.json',
+              'U17_WS.json',
+              'U15_MS.json',
+              'U15_WS.json',
           ]
 
-          for ep in endpoints:
-              url = BASE + ep
-              # Try with AgeCategoryCode param
-              for age in ['U17', 'U19']:
-                  params = {
-                      'CategoryCode': 'YTH',
-                      'SubEventCode': 'MS',
-                      'AgeCategoryCode': age,
-                      'RankingYear': 2026,
-                      'RankingWeek': 17,
-                      'StartRank': 1,
-                      'EndRank': 3,
-                      'q': 1,
-                  }
-                  try:
-                      resp = requests.get(url, params=params, headers=HEADERS, timeout=10)
-                      results = (resp.json().get('Result') or []) if resp.status_code == 200 else []
-                      name = results[0].get('PlayerName', '') if results else ''
-                      status = f'✅ {len(results)} results  {name}' if results else f'❌ {resp.status_code}'
-                  except Exception as e:
-                      status = f'💥 {e}'
-                  print(f'{ep}/{age}: {status}')
-                  time.sleep(0.5)
-
-          # Also try the ITTF gateway (different base URL)
-          print('\n--- ITTF gateway ---')
-          ittf_endpoints = [
-              'https://wttcmsapigateway-new.azure-api.net/ittf/Rankings/GetRankingIndividuals',
-              'https://wttcmsapigateway-new.azure-api.net/ttu/Rankings/GetRankingIndividuals',
-          ]
-          for url in ittf_endpoints:
-              for age in ['U17', 'U15']:
-                  params = {
-                      'AgeCategoryCode': age,
-                      'SubEventCode': 'MS',
-                      'RankingYear': 2026,
-                      'RankingWeek': 17,
-                      'StartRank': 1, 'EndRank': 3, 'q': 1,
-                  }
-                  try:
-                      resp = requests.get(url, params=params, headers=HEADERS, timeout=10)
-                      results = (resp.json().get('Result') or []) if resp.status_code == 200 else []
-                      name = results[0].get('PlayerName', '') if results else ''
-                      status = f'✅ {len(results)} results  {name}' if results else f'❌ {resp.status_code}'
-                  except Exception as e:
-                      status = f'💥 {e}'
-                  print(f'{url.split("/")[-1]}/{age}: {status}')
-                  time.sleep(0.5)
+          print(f'Probing {len(candidates)} filename candidates...\n')
+          for fname in candidates:
+              url = f'{BASE}/{fname}?q=1'
+              try:
+                  resp = requests.get(url, headers=HEADERS, timeout=10)
+                  if resp.status_code == 200:
+                      data = resp.json()
+                      # Try to get first player name from the data
+                      if isinstance(data, list) and data:
+                          first = data[0]
+                      elif isinstance(data, dict):
+                          first = (data.get('Result') or data.get('data') or [None])[0]
+                      else:
+                          first = None
+                      name = ''
+                      if first and isinstance(first, dict):
+                          name = first.get('PlayerName') or first.get('name') or str(list(first.keys())[:3])
+                      size = len(resp.content)
+                      print(f'✅ {fname:40} {size:>8} bytes  {name}')
+                  else:
+                      print(f'❌ {fname:40} {resp.status_code}')
+              except Exception as e:
+                  print(f'💥 {fname:40} {e}')
+              time.sleep(0.3)
           EOF
