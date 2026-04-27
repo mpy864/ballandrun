@@ -1,0 +1,92 @@
+name: Probe Youth CDN Historical URLs
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: pip install requests
+      - name: Probe CDN for historical youth ranking files
+        run: |
+          python3 - <<'EOF'
+          import requests, json
+          from datetime import date, timedelta
+
+          BASE = "https://wtt-web-frontdoor-withoutcache-cqakg0andqf5hchn.a01.azurefd.net/ranking"
+          HEADERS = {
+              "origin":  "https://www.worldtabletennis.com",
+              "referer": "https://www.worldtabletennis.com/",
+              "accept":  "application/json",
+              "user-agent": "Mozilla/5.0",
+          }
+
+          def probe(url):
+              try:
+                  r = requests.get(url, headers=HEADERS, timeout=15)
+                  if r.status_code == 200:
+                      try:
+                          data = r.json()
+                          n = len(data) if isinstance(data, list) else len(data.get("Result", []))
+                          print(f"  [OK {n} records]  {url}")
+                          if n > 0:
+                              sample = data[0] if isinstance(data, list) else data.get("Result", [])[0]
+                              print(f"    Sample keys: {list(sample.keys())[:8]}")
+                      except Exception:
+                          print(f"  [200 non-JSON] {url}  len={len(r.content)}")
+                  else:
+                      print(f"  [HTTP {r.status_code}]  {url}")
+              except Exception as e:
+                  print(f"  [ERR {e}]  {url}")
+
+          # Current week for reference
+          today = date.today()
+          days_back = (today.weekday() - 1) % 7
+          tuesday = today - timedelta(days=days_back)
+          iso = tuesday.isocalendar()
+          YEAR, WEEK = iso.year, iso.week
+          print(f"Current: {tuesday}  Year={YEAR}  Week={WEEK}\n")
+
+          # ── 1. Confirm current files work ──────────────────────────────────
+          print("=== Current week (baseline) ===")
+          probe(f"{BASE}/YOU_SINGLES.json?q=1")
+          probe(f"{BASE}/YOU_DOUBLES.json?q=1")
+
+          # ── 2. Week-in-filename patterns ───────────────────────────────────
+          print("\n=== Pattern: FILENAME_YEAR_WEEK.json (weeks 13-17) ===")
+          for w in range(WEEK - 4, WEEK + 1):
+              for name in ["YOU_SINGLES", "YOU_DOUBLES"]:
+                  probe(f"{BASE}/{name}_{YEAR}_{w}.json?q=1")
+                  probe(f"{BASE}/{name}_{YEAR}_W{w:02d}.json?q=1")
+                  probe(f"{BASE}/{name}_{YEAR}_W{w}.json?q=1")
+
+          # ── 3. Directory-style patterns ────────────────────────────────────
+          print("\n=== Pattern: YEAR/WEEK/FILENAME.json ===")
+          for w in range(WEEK - 4, WEEK + 1):
+              for name in ["YOU_SINGLES", "YOU_DOUBLES"]:
+                  probe(f"{BASE}/{YEAR}/{w}/{name}.json?q=1")
+                  probe(f"{BASE}/{YEAR}/W{w:02d}/{name}.json?q=1")
+
+          # ── 4. Check if senior CDN files also exist here ───────────────────
+          print("\n=== Senior CDN equivalents (to understand naming) ===")
+          for name in ["SEN_MS", "SEN_WS", "SEN_SINGLES", "JUN_MS", "JUN_WS",
+                       "JUN_SINGLES", "MEN_SINGLES", "WOM_SINGLES"]:
+              probe(f"{BASE}/{name}.json?q=1")
+
+          # ── 5. Try older years ─────────────────────────────────────────────
+          print("\n=== Historical: 2025 weeks 1, 26, 52 ===")
+          for w in [1, 26, 52]:
+              for name in ["YOU_SINGLES", "YOU_DOUBLES"]:
+                  probe(f"{BASE}/{name}_2025_{w}.json?q=1")
+                  probe(f"{BASE}/2025/{w}/{name}.json?q=1")
+
+          print("\nDone.")
+          EOF

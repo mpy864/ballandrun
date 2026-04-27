@@ -61,48 +61,83 @@ jobs:
                   print(f'[ERR]  {label} -> {e}')
               time.sleep(1)
 
-          # ── Attempt 0: Sanity check — SEN/MS with Monday week (should return data) ──
-          print('=== Test 0: SEN/MS sanity check with Monday week ===')\
+          CDN      = 'https://wtt-web-frontdoor-withoutcache-cqakg0andqf5hchn.a01.azurefd.net/ranking'
+          CURR_PAIRS = 'https://wttcmsapigateway-new.azure-api.net/internalttu/RankingsCurrentWeek/CurrentWeek/GetRankingPairs'
+          HIST_PAIRS = 'https://wttcmsapigateway-new.azure-api.net/ttu/Rankings/GetRankingPairs'
 
-          probe('SEN/MS sanity', {'CategoryCode': 'SEN', 'SubEventCode': 'MS',
-                                   'RankingYear': YEAR, 'RankingWeek': WEEK})
+          def probe_url(label, url, params):
+              try:
+                  r = requests.get(url, params={**params, 'q': 1}, headers=HEADERS, timeout=30)
+                  body = r.json()
+                  result = body.get('Result', body if isinstance(body, list) else [])
+                  if result:
+                      print(f'[OK]   {label} -> {len(result)} records')
+                      print('       First:', json.dumps(result[0], ensure_ascii=False)[:200])
+                  else:
+                      print(f'[EMPTY] {label} -> HTTP {r.status_code} body={json.dumps(body)[:150]}')
+              except Exception as e:
+                  print(f'[ERR]  {label} -> {e}')
+              time.sleep(0.8)
 
-          # ── Attempt 1: CategoryCode=YOU, no age sub-param ──────────────────
-          print('\n=== Test 1: CategoryCode=YOU (no age param) ===')
-          for sub in ['MS', 'WS', 'MD', 'WD', 'XD', 'MDI', 'WDI', 'XDI']:
+          # ── Test 0: PUBLISH_DATE.json for YOU — what weeks are available? ──
+          print('=== Test 0: PUBLISH_DATE.json — available youth weeks ===')
+          r = requests.get(f'{CDN}/PUBLISH_DATE.json', params={'CategoryCode': 'YOU', 'q': 1},
+                           headers=HEADERS, timeout=30)
+          print(f'HTTP {r.status_code}')
+          if r.status_code == 200:
+              data = r.json()
+              rows = data.get('Result', data if isinstance(data, list) else [])
+              print(f'Total published weeks: {len(rows)}')
+              for row in rows[:10]:
+                  print(f'  {row}')
+              if len(rows) > 10:
+                  print(f'  ... and {len(rows)-10} more')
+          print()
+
+          # ── Test 1: YOU singles current week ───────────────────────────────
+          print('=== Test 1: YOU singles — current week (GetRankingIndividuals) ===')
+          for sub in ['MS', 'WS']:
               probe(f'YOU/{sub}', {'CategoryCode': 'YOU', 'SubEventCode': sub,
                                    'RankingYear': YEAR, 'RankingWeek': WEEK})
 
-          # ── Attempt 2: CategoryCode=YOU + AgeCategoryCode param ────────────
-          print('\n=== Test 2: CategoryCode=YOU + AgeCategoryCode ===')
-          for age in ['U13', 'U15', 'U17', 'U19']:
-              for sub in ['MS', 'WS']:
-                  probe(f'YOU/{age}/{sub}', {'CategoryCode': 'YOU', 'AgeCategoryCode': age,
-                                              'SubEventCode': sub,
-                                              'RankingYear': YEAR, 'RankingWeek': WEEK})
-
-          # ── Attempt 3: CategoryCode encodes both (e.g. YOU_U17) ────────────
-          print('\n=== Test 3: CategoryCode=YOU_U17 style ===')
-          for age in ['U13', 'U15', 'U17', 'U19']:
-              for sub in ['MS', 'WS']:
-                  probe(f'YOU_{age}/{sub}', {'CategoryCode': f'YOU_{age}',
-                                              'SubEventCode': sub,
-                                              'RankingYear': YEAR, 'RankingWeek': WEEK})
-
-          # ── Attempt 4: Historical week — 4 weeks ago ───────────────────────
-          print('\n=== Test 4: Historical date (4 weeks ago) — YOU/MS ===')
-          old = tuesday - timedelta(weeks=4)
-          old_iso = old.isocalendar()
-          for sub in ['MS', 'WS']:
-              probe(f'YOU/{sub} @{old}', {'CategoryCode': 'YOU', 'SubEventCode': sub,
-                                           'RankingYear': old_iso.year, 'RankingWeek': old_iso.week})
-
-          # ── Attempt 5: Historical with AgeCategoryCode ────────────────────
-          print('\n=== Test 5: Historical (4 weeks ago) + AgeCategoryCode ===')
+          # ── Test 2: YOU doubles current week via CurrentWeek/GetRankingPairs
+          print('\n=== Test 2: YOU doubles — current week (CurrentWeek/GetRankingPairs) ===')
+          for sub in ['MD', 'WD', 'XD']:
+              probe_url(f'YOU/{sub}', CURR_PAIRS,
+                        {'CategoryCode': 'YOU', 'SubEventCode': sub,
+                         'StartRank': 1, 'EndRank': 5})
           for age in ['U17', 'U19']:
-              probe(f'YOU/{age}/MS @{old}', {'CategoryCode': 'YOU', 'AgeCategoryCode': age,
-                                               'SubEventCode': 'MS',
-                                               'RankingYear': old_iso.year, 'RankingWeek': old_iso.week})
+              for sub in ['MD', 'WD', 'XD']:
+                  probe_url(f'YOU/{age}/{sub}', CURR_PAIRS,
+                            {'CategoryCode': 'YOU', 'AgeCategoryCode': age,
+                             'SubEventCode': sub, 'StartRank': 1, 'EndRank': 5})
+
+          # ── Test 3: YOU doubles historical via ttu/Rankings/GetRankingPairs ─
+          print('\n=== Test 3: YOU doubles — historical (ttu/Rankings/GetRankingPairs) ===')
+          for weeks_back in [1, 2, 4, 8]:
+              past = monday - timedelta(weeks=weeks_back)
+              iso  = past.isocalendar()
+              for sub in ['MD', 'WD']:
+                  probe_url(f'YOU/{sub} @{past} W={iso.week}', HIST_PAIRS,
+                            {'CategoryCode': 'YOU', 'SubEventCode': sub,
+                             'RankingYear': iso.year, 'RankingWeek': iso.week,
+                             'StartRank': 1, 'EndRank': 5})
+
+          # ── Test 4: YOU singles historical — step back week by week ────────
+          print('\n=== Test 4: YOU singles — historical (1–8 weeks back) ===')
+          for weeks_back in [1, 2, 4, 8]:
+              past = monday - timedelta(weeks=weeks_back)
+              iso  = past.isocalendar()
+              probe(f'YOU/MS @{past} W={iso.week}',
+                    {'CategoryCode': 'YOU', 'SubEventCode': 'MS',
+                     'RankingYear': iso.year, 'RankingWeek': iso.week})
+
+          # ── Test 5: 2025 history depth ─────────────────────────────────────
+          print('\n=== Test 5: 2025 history depth ===')
+          for yr, wk in [(2025, 52), (2025, 26), (2025, 1), (2024, 26)]:
+              probe(f'YOU/MS Y={yr} W={wk}',
+                    {'CategoryCode': 'YOU', 'SubEventCode': 'MS',
+                     'RankingYear': yr, 'RankingWeek': wk})
 
           print('\nDone.')
           EOF
