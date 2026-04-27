@@ -15,12 +15,11 @@ jobs:
           python-version: '3.11'
       - name: Install deps
         run: pip install requests
-      - name: Probe youth API parameters
+      - name: Probe youth API endpoints
         run: |
           python3 - <<'EOF'
-          import requests, time, json
+          import requests, time
 
-          URL = "https://wttcmsapigateway-new.azure-api.net/ttu/Rankings/GetRankingIndividuals"
           HEADERS = {
               'apikey':     '2bf8b222-532c-4c60-8ebe-eb6fdfebe84a',
               'secapimkey': 'S_WTT_882jjh7basdj91834783mds8j2jsd81',
@@ -28,54 +27,65 @@ jobs:
               'referer':    'https://www.worldtabletennis.com/',
               'accept':     'application/json',
           }
+          BASE = 'https://wttcmsapigateway-new.azure-api.net/ttu'
 
-          # From URL analysis:
-          # U19 → no AgeCategoryCode (just Age=YOUTH) → likely CategoryCode=JUN
-          # U17/U15/U13/U11 → AgeCategoryCode=U17 etc
-          # Tabs → MS, WS, MD, WD, XD
-
-          combos = [
-              # U19 guesses
-              ('JUN',  'MS', None),
-              ('JUN',  'WS', None),
-              ('JUN',  'MD', None),
-              ('JUN',  'WD', None),
-              ('JUN',  'XD', None),
-              # U17 with AgeCategoryCode
-              ('YTH',  'MS', 'U17'),
-              ('YTH',  'WS', 'U17'),
-              ('YTH',  'MD', 'U17'),
-              ('YTH',  'WD', 'U17'),
-              ('YTH',  'XD', 'U17'),
-              ('JUN',  'MS', 'U17'),
-              ('JUN',  'WS', 'U17'),
-              ('CAD',  'MS', 'U17'),
-              ('CAD',  'WS', 'U17'),
-              # U15
-              ('YTH',  'MS', 'U15'),
-              ('YTH',  'WS', 'U15'),
-              ('CAD',  'MS', 'U15'),
-              ('CAD',  'WS', 'U15'),
+          # Try different endpoints on same gateway
+          endpoints = [
+              '/Rankings/GetYouthRankingIndividuals',
+              '/Rankings/GetRankingYouth',
+              '/Rankings/GetYouthRanking',
+              '/Rankings/GetJuniorRanking',
+              '/Rankings/GetRankingIndividualsYouth',
+              '/Youth/Rankings/GetRankingIndividuals',
+              '/Rankings/GetRankingIndividuals',  # with AgeGroup param
           ]
 
-          for cat, sub, age in combos:
-              params = {
-                  'CategoryCode': cat,
-                  'SubEventCode': sub,
-                  'RankingYear':  2026,
-                  'RankingWeek':  17,
-                  'StartRank':    1,
-                  'EndRank':      3,
-                  'q':            1,
-              }
-              if age:
-                  params['AgeCategoryCode'] = age
+          for ep in endpoints:
+              url = BASE + ep
+              # Try with AgeCategoryCode param
+              for age in ['U17', 'U19']:
+                  params = {
+                      'CategoryCode': 'YTH',
+                      'SubEventCode': 'MS',
+                      'AgeCategoryCode': age,
+                      'RankingYear': 2026,
+                      'RankingWeek': 17,
+                      'StartRank': 1,
+                      'EndRank': 3,
+                      'q': 1,
+                  }
+                  try:
+                      resp = requests.get(url, params=params, headers=HEADERS, timeout=10)
+                      results = (resp.json().get('Result') or []) if resp.status_code == 200 else []
+                      name = results[0].get('PlayerName', '') if results else ''
+                      status = f'✅ {len(results)} results  {name}' if results else f'❌ {resp.status_code}'
+                  except Exception as e:
+                      status = f'💥 {e}'
+                  print(f'{ep}/{age}: {status}')
+                  time.sleep(0.5)
 
-              resp = requests.get(URL, params=params, headers=HEADERS, timeout=20)
-              results = resp.json().get('Result') or []
-              age_str = age or 'U19?'
-              name = results[0].get('PlayerName', '') if results else ''
-              status = f'✅ {len(results)} results  {name}' if results else '❌ EMPTY'
-              print(f'{cat:6}/{sub}/{age_str:4}: {status}')
-              time.sleep(1.2)
+          # Also try the ITTF gateway (different base URL)
+          print('\n--- ITTF gateway ---')
+          ittf_endpoints = [
+              'https://wttcmsapigateway-new.azure-api.net/ittf/Rankings/GetRankingIndividuals',
+              'https://wttcmsapigateway-new.azure-api.net/ttu/Rankings/GetRankingIndividuals',
+          ]
+          for url in ittf_endpoints:
+              for age in ['U17', 'U15']:
+                  params = {
+                      'AgeCategoryCode': age,
+                      'SubEventCode': 'MS',
+                      'RankingYear': 2026,
+                      'RankingWeek': 17,
+                      'StartRank': 1, 'EndRank': 3, 'q': 1,
+                  }
+                  try:
+                      resp = requests.get(url, params=params, headers=HEADERS, timeout=10)
+                      results = (resp.json().get('Result') or []) if resp.status_code == 200 else []
+                      name = results[0].get('PlayerName', '') if results else ''
+                      status = f'✅ {len(results)} results  {name}' if results else f'❌ {resp.status_code}'
+                  except Exception as e:
+                      status = f'💥 {e}'
+                  print(f'{url.split("/")[-1]}/{age}: {status}')
+                  time.sleep(0.5)
           EOF
