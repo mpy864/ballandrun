@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabase.js'
 
 // ── CSS animations injected once ─────────────────────────────────────────────
@@ -433,6 +433,18 @@ export default function LiveProbability() {
   const [loading,  setLoading]  = useState(true)
   const channelRef              = useRef(null)
 
+  const sortByMatchId = arr => [...arr].sort((a, b) => String(a.match_id).localeCompare(String(b.match_id)))
+
+  const sortedMatches = useMemo(() => {
+    const isIndia = m =>
+      players[m.comp1_id]?.country_code === 'IND' ||
+      players[m.comp2_id]?.country_code === 'IND'
+    return [...matches].sort((a, b) => {
+      const diff = (isIndia(a) ? 0 : 1) - (isIndia(b) ? 0 : 1)
+      return diff !== 0 ? diff : String(a.match_id).localeCompare(String(b.match_id))
+    })
+  }, [matches, players])
+
   const fetchPlayers = useCallback(async (ids) => {
     if (!ids.length) return
     const [pRes, rRes] = await Promise.all([
@@ -455,7 +467,7 @@ export default function LiveProbability() {
       supabase.from('wtt_game_log').select('*').order('completed_at', { ascending: true }),
     ])
     const live = liveRes.data || []
-    setMatches(live)
+    setMatches(sortByMatchId(live))
     if (logRes.data) setGameLog(logRes.data)
     setLoading(false)
     const ids = [...new Set(live.flatMap(m => [m.comp1_id, m.comp2_id]).filter(Boolean))]
@@ -485,7 +497,7 @@ export default function LiveProbability() {
           } else {
             if (idx >= 0) next.splice(idx, 1)
           }
-          return next
+          return sortByMatchId(next)
         })
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'wtt_game_log' },
@@ -538,10 +550,10 @@ export default function LiveProbability() {
       <StyleInjector />
       <div style={{
         display: 'grid',
-        gridTemplateColumns: matches.length > 1 ? 'repeat(auto-fill, minmax(380px, 1fr))' : '1fr',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))',
         gap: 16,
       }}>
-        {matches.map(m => (
+        {sortedMatches.map(m => (
           <MatchCard key={m.match_id} match={m} gameLog={gameLog} players={players} events={events} />
         ))}
       </div>

@@ -50,11 +50,7 @@ export default function App() {
           <H2HDashboard />
         </ProtectedRoute>
       } />
-      <Route path="/live" element={
-        <ProtectedRoute>
-          <LivePage />
-        </ProtectedRoute>
-      } />
+      <Route path="/live" element={<LivePage />} />
       <Route path="/tournament" element={
         <ProtectedRoute>
           <TournamentPage />

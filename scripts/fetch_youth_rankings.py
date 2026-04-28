@@ -40,6 +40,7 @@ PAGE_SIZE  = 500
 
 SINGLE_EVENTS  = ["MS", "WS"]
 DOUBLES_EVENTS = ["MD", "WD", "XD"]
+AGE_CATEGORIES = ["U13", "U15", "U17", "U19"]
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
@@ -99,13 +100,53 @@ def upsert_batched(supabase, table: str, rows: list[dict]) -> None:
     print(f"  -> upserted {len(rows)} rows into {table}")
 
 
+# ── Age-category rank helpers ────────────────────────────────────────────────
+
+def collect_singles_age_cat_ranks() -> dict[tuple, int]:
+    """Query each age_category × sub_event to get WTT-matching RankingPosition."""
+    rank_map: dict[tuple, int] = {}
+    for age_cat in AGE_CATEGORIES:
+        for sub in SINGLE_EVENTS:
+            records = fetch_paginated(IND_URL, {
+                "CategoryCode": "YOU", "SubEventCode": sub, "AgeCategoryCode": age_cat,
+            })
+            for r in records:
+                if r.get("AgeCategoryCode") == age_cat:
+                    key = (str(r["IttfId"]), r["SubEventCode"])
+                    rank = safe_int(r.get("RankingPosition"))
+                    if rank is not None:
+                        rank_map[key] = rank
+            time.sleep(0.5)
+    return rank_map
+
+
+def collect_doubles_age_cat_ranks() -> dict[tuple, int]:
+    rank_map: dict[tuple, int] = {}
+    for age_cat in AGE_CATEGORIES:
+        for sub in DOUBLES_EVENTS:
+            records = fetch_paginated(PAIRS_URL, {
+                "CategoryCode": "YOU", "SubEventCode": sub, "AgeCategoryCode": age_cat,
+            })
+            for r in records:
+                if r.get("AgeCategoryCode") == age_cat:
+                    key = (str(r["PairId"]), r["SubEventCode"])
+                    rank = safe_int(r.get("RankingPosition"))
+                    if rank is not None:
+                        rank_map[key] = rank
+            time.sleep(0.5)
+    return rank_map
+
+
 # ── Singles ─────────────────────────────────────────────────────────────────
 
 def process_singles(supabase) -> None:
     print("Fetching youth singles (MS + WS, all age groups) ...")
     now = datetime.now(timezone.utc).isoformat()
-    rows = []
 
+    print("  Collecting age-category ranks ...")
+    age_cat_ranks = collect_singles_age_cat_ranks()
+
+    rows = []
     for sub in SINGLE_EVENTS:
         records = fetch_paginated(IND_URL, {"CategoryCode": "YOU", "SubEventCode": sub})
         if not records:
@@ -118,13 +159,15 @@ def process_singles(supabase) -> None:
             continue
         print(f"  YOU/{sub}: {len(records)} records  (Y={yr} W={wk})")
         for r in records:
+            ittf_id = str(r["IttfId"])
+            sub_event = r["SubEventCode"]
             rows.append({
-                "ittf_id":       str(r["IttfId"]),
+                "ittf_id":       ittf_id,
                 "player_name":   r["PlayerName"],
                 "country_code":  r["CountryCode"],
                 "country_name":  r["CountryName"],
                 "age_category":  r["AgeCategoryCode"],
-                "sub_event":     r["SubEventCode"],
+                "sub_event":     sub_event,
                 "ranking_year":  safe_int(r.get("RankingYear")),
                 "ranking_month": safe_int(r.get("RankingMonth")),
                 "ranking_week":  safe_int(r.get("RankingWeek")),
@@ -133,6 +176,7 @@ def process_singles(supabase) -> None:
                 "previous_rank": safe_int(r.get("PreviousRank")),
                 "rank_diff":     safe_int(r.get("RankingDifference")),
                 "publish_date":  parse_date(r.get("PublishDate")),
+                "age_cat_rank":  age_cat_ranks.get((ittf_id, sub_event)),
                 "fetched_at":    now,
             })
         time.sleep(1)
@@ -146,8 +190,11 @@ def process_singles(supabase) -> None:
 def process_doubles(supabase) -> None:
     print("Fetching youth doubles (MD + WD + XD, all age groups) ...")
     now = datetime.now(timezone.utc).isoformat()
-    rows = []
 
+    print("  Collecting age-category ranks ...")
+    age_cat_ranks = collect_doubles_age_cat_ranks()
+
+    rows = []
     for sub in DOUBLES_EVENTS:
         records = fetch_paginated(PAIRS_URL, {"CategoryCode": "YOU", "SubEventCode": sub})
         if not records:
@@ -155,8 +202,10 @@ def process_doubles(supabase) -> None:
             continue
         print(f"  YOU/{sub}: {len(records)} records")
         for r in records:
+            pair_id = str(r["PairId"])
+            sub_event = r["SubEventCode"]
             rows.append({
-                "pair_id":       str(r["PairId"]),
+                "pair_id":       pair_id,
                 "ittf_id1":      str(r["IttfId1"]),
                 "player_name1":  r["PlayerName1"],
                 "country_code1": r["CountryCode1"],
@@ -166,7 +215,7 @@ def process_doubles(supabase) -> None:
                 "country_code2": r["CountryCode1d"],
                 "country_name2": r["CountryName1d"],
                 "age_category":  r["AgeCategoryCode"],
-                "sub_event":     r["SubEventCode"],
+                "sub_event":     sub_event,
                 "ranking_year":  safe_int(r.get("RankingYear")),
                 "ranking_month": safe_int(r.get("RankingMonth")),
                 "ranking_week":  safe_int(r.get("RankingWeek")),
@@ -175,6 +224,7 @@ def process_doubles(supabase) -> None:
                 "previous_rank": safe_int(r.get("PreviousRank")),
                 "rank_diff":     safe_int(r.get("RankingDifference")),
                 "publish_date":  parse_date(r.get("PublishDate")),
+                "age_cat_rank":  age_cat_ranks.get((pair_id, sub_event)),
                 "fetched_at":    now,
             })
         time.sleep(1)
