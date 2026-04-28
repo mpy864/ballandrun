@@ -1105,7 +1105,7 @@ export default function H2HDashboard() {
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'Sora, sans-serif' }}>
+    <div style={{ minHeight: '100vh', fontFamily: 'Sora, sans-serif', position: 'relative', zIndex: 4 }}>
       <AuthBar />
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 

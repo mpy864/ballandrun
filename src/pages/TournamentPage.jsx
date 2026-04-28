@@ -9,9 +9,9 @@ export default function TournamentPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#f8fafc',
       padding: '24px 16px',
       fontFamily: 'system-ui, -apple-system, sans-serif',
+      position: 'relative', zIndex: 4,
     }}>
       <div style={{ maxWidth: 960, margin: '0 auto' }}>
 

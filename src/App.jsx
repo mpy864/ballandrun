@@ -5,6 +5,7 @@ import DynamicOKRDashboard from './components/DynamicOKRDashboard.jsx'
 import H2HDashboard from './components/H2HDashboard.jsx'
 import LivePage from './pages/LivePage.jsx'
 import TournamentPage from './pages/TournamentPage.jsx'
+import PageBackground from './components/PageBackground.jsx'
 
 function ProtectedRoute({ children }) {
   const { session, loading } = useAuth()
@@ -38,6 +39,8 @@ function RedirectIfAuthed({ children }) {
 
 export default function App() {
   return (
+    <>
+    <PageBackground />
     <Routes>
       <Route path="/login" element={<RedirectIfAuthed><LoginPage /></RedirectIfAuthed>} />
       <Route path="/" element={
@@ -57,5 +60,6 @@ export default function App() {
         </ProtectedRoute>
       } />
     </Routes>
+    </>
   )
 }
