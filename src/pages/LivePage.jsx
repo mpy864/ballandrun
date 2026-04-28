@@ -22,8 +22,8 @@ export default function LivePage() {
         gridTemplateRows: 'repeat(2, 1fr)',
         transform: 'scale(1.06)',
         transformOrigin: 'center center',
-        filter: 'blur(6px) saturate(0.80)',
-        opacity: 0.65,
+        filter: 'blur(4px) saturate(0.85)',
+        opacity: 0.72,
         zIndex: 0,
         pointerEvents: 'none',
       }}>
@@ -55,7 +55,7 @@ export default function LivePage() {
         pointerEvents: 'none',
       }}>
         <img
-          src="/players/SAI logo.png"
+          src="/players/SAI%20logo.png"
           alt=""
           draggable={false}
           style={{
@@ -67,11 +67,11 @@ export default function LivePage() {
         />
       </div>
 
-      {/* ── Light blue wash overlay ───────────────────────────────────────── */}
+      {/* ── Soft white overlay — keeps cards readable without killing photos ── */}
       <div style={{
         position: 'fixed',
         inset: 0,
-        background: 'linear-gradient(160deg, rgba(190,215,248,0.42) 0%, rgba(210,228,252,0.35) 50%, rgba(190,215,248,0.42) 100%)',
+        background: 'rgba(220,232,252,0.30)',
         zIndex: 2,
         pointerEvents: 'none',
       }} />
@@ -98,7 +98,7 @@ export default function LivePage() {
           Built by
         </span>
         <img
-          src="/players/SAI logo.png"
+          src="/players/SAI%20logo.png"
           alt="SAI"
           style={{
             height: 44,
