@@ -13,17 +13,17 @@ export default function LivePage() {
       overflow: 'hidden',
     }}>
 
-      {/* ── Player photo collage (fixed behind everything) ───────────────── */}
+      {/* ── Player photo collage (fixed, behind everything) ──────────────── */}
       <div style={{
         position: 'fixed',
         inset: 0,
         display: 'grid',
         gridTemplateColumns: 'repeat(5, 1fr)',
         gridTemplateRows: 'repeat(2, 1fr)',
-        transform: 'scale(1.08)',
+        transform: 'scale(1.06)',
         transformOrigin: 'center center',
-        filter: 'blur(12px) saturate(0.75) brightness(1.05)',
-        opacity: 0.45,
+        filter: 'blur(6px) saturate(0.80)',
+        opacity: 0.65,
         zIndex: 0,
         pointerEvents: 'none',
       }}>
@@ -44,24 +44,83 @@ export default function LivePage() {
         ))}
       </div>
 
-      {/* ── Dark gradient overlay ────────────────────────────────────────── */}
+      {/* ── SAI logo watermark (large, centred, very subtle) ─────────────── */}
       <div style={{
         position: 'fixed',
         inset: 0,
-        background: [
-          'linear-gradient(160deg,',
-          '  rgba(180,210,245,0.72) 0%,',
-          '  rgba(200,220,248,0.60) 50%,',
-          '  rgba(180,210,245,0.72) 100%)',
-        ].join(''),
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         zIndex: 1,
+        pointerEvents: 'none',
+      }}>
+        <img
+          src="/players/SAI logo.png"
+          alt=""
+          draggable={false}
+          style={{
+            width: 340,
+            opacity: 0.07,
+            filter: 'blur(1px)',
+            objectFit: 'contain',
+          }}
+        />
+      </div>
+
+      {/* ── Light blue wash overlay ───────────────────────────────────────── */}
+      <div style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'linear-gradient(160deg, rgba(190,215,248,0.42) 0%, rgba(210,228,252,0.35) 50%, rgba(190,215,248,0.42) 100%)',
+        zIndex: 2,
         pointerEvents: 'none',
       }} />
 
-      {/* ── Page content ────────────────────────────────────────────────── */}
+      {/* ── SAI attribution — top right corner (fixed) ───────────────────── */}
+      <div style={{
+        position: 'fixed',
+        top: 22,
+        right: 28,
+        zIndex: 10,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 3,
+        pointerEvents: 'none',
+      }}>
+        <span style={{
+          fontSize: 9,
+          fontWeight: 600,
+          color: 'rgba(15,42,94,0.55)',
+          letterSpacing: 1.5,
+          textTransform: 'uppercase',
+        }}>
+          Built by
+        </span>
+        <img
+          src="/players/SAI logo.png"
+          alt="SAI"
+          style={{
+            height: 44,
+            objectFit: 'contain',
+            filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.12))',
+          }}
+        />
+        <span style={{
+          fontSize: 9,
+          fontWeight: 600,
+          color: 'rgba(15,42,94,0.55)',
+          letterSpacing: 1.5,
+          textTransform: 'uppercase',
+        }}>
+          with passion
+        </span>
+      </div>
+
+      {/* ── Page content ─────────────────────────────────────────────────── */}
       <div style={{
         position: 'relative',
-        zIndex: 2,
+        zIndex: 3,
         maxWidth: 900,
         margin: '0 auto',
         padding: '36px 16px 48px',
@@ -97,9 +156,9 @@ export default function LivePage() {
               LIVE
             </span>
             <span style={{
-              color: 'rgba(20,50,110,0.55)',
+              color: 'rgba(15,42,94,0.55)',
               fontSize: 11,
-              fontWeight: 500,
+              fontWeight: 600,
               letterSpacing: 2.5,
               textTransform: 'uppercase',
             }}>
@@ -111,20 +170,21 @@ export default function LivePage() {
             color: '#0f2a5e',
             fontSize: 24,
             fontWeight: 800,
-            margin: '0 0 4px',
+            margin: '0 0 5px',
             letterSpacing: -0.5,
             lineHeight: 1.2,
+            textShadow: '0 1px 8px rgba(255,255,255,0.6)',
           }}>
             World Team Table Tennis Championships
           </h1>
           <div style={{
-            color: 'rgba(20,50,110,0.60)',
+            color: 'rgba(15,42,94,0.62)',
             fontSize: 13,
-            fontWeight: 400,
+            fontWeight: 500,
             letterSpacing: 0.3,
           }}>
             London 2026 &nbsp;·&nbsp; OVO Arena Wembley &nbsp;·&nbsp;
-            <span style={{ color: '#1a3a8f', fontWeight: 600 }}>
+            <span style={{ color: '#1a3a8f', fontWeight: 700 }}>
               🇮🇳 India
             </span>
           </div>
