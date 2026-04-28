@@ -1,4 +1,5 @@
 import LiveProbability from '../components/LiveProbability.jsx'
+import PredictionAccuracy from '../components/PredictionAccuracy.jsx'
 
 export default function LivePage() {
   return (
@@ -46,6 +47,23 @@ export default function LivePage() {
         </div>
 
         <LiveProbability />
+
+        {/* Divider */}
+        <div style={{
+          margin: '36px 0 28px',
+          display: 'flex', alignItems: 'center', gap: 14,
+        }}>
+          <div style={{ flex: 1, height: 1, background: 'rgba(15,42,94,0.10)' }} />
+          <span style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: 2.5,
+            color: 'rgba(15,42,94,0.35)', textTransform: 'uppercase',
+          }}>
+            Model Accountability
+          </span>
+          <div style={{ flex: 1, height: 1, background: 'rgba(15,42,94,0.10)' }} />
+        </div>
+
+        <PredictionAccuracy />
 
       </div>
     </div>

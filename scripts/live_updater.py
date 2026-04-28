@@ -436,6 +436,41 @@ def _maybe_write_game_log(db, match_id, event_id, m, ga, gb, p_win,
         print(f"  [DB] game_log error: {e}")
 
 
+def _write_match_result(db, match_id: str, match_p0_by_id: dict, last_state: dict):
+    """Write final prediction outcome to wtt_match_results when a match completes."""
+    state = last_state.get(match_id)
+    p_pre = match_p0_by_id.get(match_id)
+    if not state or p_pre is None:
+        return
+    ga, gb = state["games_a"], state["games_b"]
+    if ga >= 3:
+        result = "W"
+    elif gb >= 3:
+        result = "L"
+    else:
+        result = None  # insufficient data — skip
+    correct = ((p_pre > 0.5) == (result == "W")) if result else None
+    try:
+        db.table("wtt_match_results").upsert({
+            "match_id":   match_id,
+            "event_id":   state["event_id"],
+            "comp1_id":   state["comp1_id"],
+            "comp2_id":   state["comp2_id"],
+            "comp1_name": state["comp1_name"],
+            "comp2_name": state["comp2_name"],
+            "round_name": state["round_name"],
+            "p_prematch": round(p_pre, 4),
+            "p_final":    state["p_final"],
+            "games_a":    ga,
+            "games_b":    gb,
+            "result":     result,
+            "correct":    correct,
+        }).execute()
+        print(f"  [DB] result saved: {match_id} → {result}, correct={correct}")
+    except Exception as e:
+        print(f"  [DB] match_results error: {e}")
+
+
 def poll_points(mp: MatchPredictor, event_id: int, gender_label: str,
                 interval: float = 2.0, db=None):
     """
@@ -444,11 +479,13 @@ def poll_points(mp: MatchPredictor, event_id: int, gender_label: str,
     Press Ctrl+C to stop.
     """
     print(f"  Polling every {interval}s — press Ctrl+C to stop.\n")
-    last_seq:    dict[str, int]   = {}  # doc_code → last seen seq_num
-    match_p0:    dict[str, float] = {}  # doc_code → pre-match probability
-    last_games:    dict[str, int]   = {}  # match_id → last total games completed
-    seen_matches:  set              = set()
-    missing_counts: dict[str, int] = {}  # match_id → consecutive absent polls
+    last_seq:        dict[str, int]   = {}  # doc_code → last seen seq_num
+    match_p0:        dict[str, float] = {}  # doc_code → pre-match probability
+    match_p0_by_id:  dict[str, float] = {}  # match_id → pre-match probability
+    last_games:      dict[str, int]   = {}  # match_id → last total games completed
+    last_state:      dict[str, dict]  = {}  # match_id → last known live state
+    seen_matches:    set              = set()
+    missing_counts:  dict[str, int]  = {}  # match_id → consecutive absent polls
 
     try:
         while True:
@@ -471,6 +508,7 @@ def poll_points(mp: MatchPredictor, event_id: int, gender_label: str,
                     if doc not in match_p0:
                         sc = _get_mp(mp, m["round"]).predict_score(id1, id2)
                         match_p0[doc] = sc["p_match"]
+                        match_p0_by_id[match_id] = sc["p_match"]
                         last_seq[doc] = -1
                         print(f"\n  ── {m['name1']} vs {m['name2']} ──")
                         print(f"  Pre-match: {sh1} {sc['p_match']*100:.1f}% / {sh2} {(1-sc['p_match'])*100:.1f}%")
@@ -507,6 +545,17 @@ def poll_points(mp: MatchPredictor, event_id: int, gender_label: str,
                                                ga, gb, pts_a, pts_b, p, p0, seq)
                             _maybe_write_game_log(db, match_id, event_id, m,
                                                   ga, gb, p, done_games, last_games)
+                        last_state[match_id] = {
+                            "event_id":   event_id,
+                            "comp1_id":   m["id1"],
+                            "comp2_id":   m["id2"],
+                            "comp1_name": m["name1"],
+                            "comp2_name": m["name2"],
+                            "round_name": m["round"],
+                            "games_a":    ga,
+                            "games_b":    gb,
+                            "p_final":    round(p, 4),
+                        }
                         last_games[match_id] = ga + gb
 
             # Mark matches that disappeared from live feed as complete.
@@ -520,6 +569,7 @@ def poll_points(mp: MatchPredictor, event_id: int, gender_label: str,
                           .eq("match_id", mid).execute()
                     except Exception:
                         pass
+                    _write_match_result(db, mid, match_p0_by_id, last_state)
             for mid in now_ids:
                 missing_counts.pop(mid, None)  # reset counter when match reappears
             seen_matches = now_ids
