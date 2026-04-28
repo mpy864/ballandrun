@@ -487,6 +487,17 @@ def poll_points(mp: MatchPredictor, event_id: int, gender_label: str,
     seen_matches:    set              = set()
     missing_counts:  dict[str, int]  = {}  # match_id → consecutive absent polls
 
+    # Seed seen_matches from DB so script restarts don't leave stale 'live' rows
+    if db:
+        try:
+            existing = db.table("wtt_live_state").select("match_id").eq("status", "live").execute()
+            for row in (existing.data or []):
+                seen_matches.add(row["match_id"])
+            if seen_matches:
+                print(f"  [DB] Seeded {len(seen_matches)} in-progress match(es) from DB")
+        except Exception as e:
+            print(f"  [DB] Could not seed seen_matches: {e}")
+
     try:
         while True:
             matches  = fetch_live(event_id)
