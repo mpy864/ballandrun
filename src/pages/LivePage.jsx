@@ -7,7 +7,7 @@ export default function LivePage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#07101f',
+      background: '#c8daf5',
       fontFamily: 'system-ui, -apple-system, sans-serif',
       position: 'relative',
       overflow: 'hidden',
@@ -22,8 +22,8 @@ export default function LivePage() {
         gridTemplateRows: 'repeat(2, 1fr)',
         transform: 'scale(1.08)',
         transformOrigin: 'center center',
-        filter: 'blur(22px) saturate(0.6)',
-        opacity: 0.22,
+        filter: 'blur(12px) saturate(0.75) brightness(1.05)',
+        opacity: 0.45,
         zIndex: 0,
         pointerEvents: 'none',
       }}>
@@ -50,9 +50,9 @@ export default function LivePage() {
         inset: 0,
         background: [
           'linear-gradient(160deg,',
-          '  rgba(4,10,30,0.90) 0%,',
-          '  rgba(8,22,58,0.80) 50%,',
-          '  rgba(4,10,30,0.92) 100%)',
+          '  rgba(180,210,245,0.72) 0%,',
+          '  rgba(200,220,248,0.60) 50%,',
+          '  rgba(180,210,245,0.72) 100%)',
         ].join(''),
         zIndex: 1,
         pointerEvents: 'none',
@@ -97,7 +97,7 @@ export default function LivePage() {
               LIVE
             </span>
             <span style={{
-              color: 'rgba(255,255,255,0.38)',
+              color: 'rgba(20,50,110,0.55)',
               fontSize: 11,
               fontWeight: 500,
               letterSpacing: 2.5,
@@ -108,7 +108,7 @@ export default function LivePage() {
           </div>
 
           <h1 style={{
-            color: '#ffffff',
+            color: '#0f2a5e',
             fontSize: 24,
             fontWeight: 800,
             margin: '0 0 4px',
@@ -118,13 +118,13 @@ export default function LivePage() {
             World Team Table Tennis Championships
           </h1>
           <div style={{
-            color: 'rgba(255,255,255,0.45)',
+            color: 'rgba(20,50,110,0.60)',
             fontSize: 13,
             fontWeight: 400,
             letterSpacing: 0.3,
           }}>
-            London 2026 &nbsp;·&nbsp; ExCeL Centre &nbsp;·&nbsp;
-            <span style={{ color: 'rgba(255,200,60,0.7)', fontWeight: 600 }}>
+            London 2026 &nbsp;·&nbsp; OVO Arena Wembley &nbsp;·&nbsp;
+            <span style={{ color: '#1a3a8f', fontWeight: 600 }}>
               🇮🇳 India
             </span>
           </div>

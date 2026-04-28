@@ -351,14 +351,14 @@ function MatchCard({ match, gameLog, players, events }) {
     <div
       className="card-in"
       style={{
-        background: 'rgba(255, 255, 255, 0.88)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
+        background: 'rgba(255, 255, 255, 0.82)',
+        backdropFilter: 'blur(18px)',
+        WebkitBackdropFilter: 'blur(18px)',
         borderRadius: 18,
         padding: '22px 24px',
         marginBottom: 20,
         border: `1px solid ${borderColor}`,
-        boxShadow: '0 8px 40px rgba(0,0,0,0.28), 0 1px 0 rgba(255,255,255,0.6) inset',
+        boxShadow: '0 4px 32px rgba(30,70,160,0.13), 0 1px 0 rgba(255,255,255,0.9) inset',
       }}
     >
       {/* Round + LIVE badge */}
