@@ -1274,11 +1274,23 @@ export default function DynamicOKRDashboard() {
     (async () => {
       try {
         const table = isDoubles ? 'youth_rankings_doubles' : 'youth_rankings_singles';
+        // Fetch latest week first, then query only that week
+        const { data: latestRow } = await supabase.from(table)
+          .select('ranking_year, ranking_week')
+          .eq('age_category', youthAgeGroup)
+          .eq('sub_event', youthDiscipline)
+          .order('ranking_year', { ascending: false })
+          .order('ranking_week', { ascending: false })
+          .limit(1);
+        const latest = latestRow?.[0];
+        if (!latest) { if (!cancelled) { setYouthRows([]); setYouthLoading(false); } return; }
         const { data } = await supabase.from(table)
           .select('*')
           .eq('age_category', youthAgeGroup)
           .eq('sub_event', youthDiscipline)
-          .order('current_rank', { ascending: true })
+          .eq('ranking_year', latest.ranking_year)
+          .eq('ranking_week', latest.ranking_week)
+          .order('age_cat_rank', { ascending: true })
           .limit(100);
         if (!cancelled) setYouthRows(data || []);
       } finally {
@@ -2543,7 +2555,7 @@ export default function DynamicOKRDashboard() {
                               background: isIndia ? '#eff6ff' : i % 2 === 0 ? '#fff' : '#fafbfc',
                             }}>
                             <td style={{ textAlign: 'right', padding: '6px 8px 6px 16px', color: '#94a3b8', fontWeight: 600, fontSize: 11 }}>
-                              {row.current_rank}
+                              {row.age_cat_rank ?? row.current_rank}
                             </td>
                             <td style={{ padding: '6px 8px', color: isIndia ? '#1d4ed8' : '#334155', fontWeight: isIndia ? 600 : 400 }}>
                               {isDoubles ? (
