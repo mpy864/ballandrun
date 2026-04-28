@@ -1018,7 +1018,6 @@ export default function DynamicOKRDashboard() {
 
   const switchTab = (id) => {
     setActiveTab(id);
-    setTimeout(() => tabContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   };
 
   const changeDataSource = (ds) => {
