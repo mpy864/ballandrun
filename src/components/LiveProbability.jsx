@@ -486,6 +486,10 @@ export default function LiveProbability() {
 
   useEffect(() => {
     fetchData()
+
+    // Polling fallback: re-fetch every 10s in case Realtime WebSocket drops
+    const pollTimer = setInterval(fetchData, 10_000)
+
     const channel = supabase
       .channel('live-prob-v2')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'wtt_live_state' }, (payload) => {
@@ -507,7 +511,10 @@ export default function LiveProbability() {
       )
       .subscribe()
     channelRef.current = channel
-    return () => { supabase.removeChannel(channel) }
+    return () => {
+      clearInterval(pollTimer)
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   if (loading) {

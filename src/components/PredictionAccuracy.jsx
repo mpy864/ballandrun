@@ -57,6 +57,8 @@ export default function PredictionAccuracy() {
     }
     fetchResults()
 
+    const pollTimer = setInterval(fetchResults, 30_000)
+
     const channel = supabase
       .channel('pred-accuracy-live')
       .on('postgres_changes',
@@ -65,7 +67,10 @@ export default function PredictionAccuracy() {
       )
       .subscribe()
     channelRef.current = channel
-    return () => supabase.removeChannel(channel)
+    return () => {
+      clearInterval(pollTimer)
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   if (loading) return null
