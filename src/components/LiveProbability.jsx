@@ -48,7 +48,7 @@ const FLAG = {
   CAN:'🇨🇦', AUS:'🇦🇺', GRE:'🇬🇷', SUI:'🇨🇭', UKR:'🇺🇦',
   BLR:'🇧🇾', SRB:'🇷🇸', QAT:'🇶🇦', KAZ:'🇰🇿', UZB:'🇺🇿',
 }
-const flag = code => FLAG[code] || (code || '')
+const flag = code => FLAG[code] || ''
 
 // ── Probability bar ───────────────────────────────────────────────────────────
 
@@ -351,12 +351,14 @@ function MatchCard({ match, gameLog, players, events }) {
     <div
       className="card-in"
       style={{
-        background: '#ffffff',
-        borderRadius: 16,
+        background: 'rgba(255, 255, 255, 0.88)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderRadius: 18,
         padding: '22px 24px',
         marginBottom: 20,
         border: `1px solid ${borderColor}`,
-        boxShadow: '0 2px 16px rgba(0,0,0,0.06)',
+        boxShadow: '0 8px 40px rgba(0,0,0,0.28), 0 1px 0 rgba(255,255,255,0.6) inset',
       }}
     >
       {/* Round + LIVE badge */}
@@ -515,29 +517,31 @@ export default function LiveProbability() {
   if (matches.length === 0) {
     return (
       <div style={{
-        background: '#ffffff',
-        borderRadius: 16,
+        background: 'rgba(255,255,255,0.10)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderRadius: 18,
         padding: '56px 32px',
         textAlign: 'center',
-        border: '1px solid #e2e8f0',
-        boxShadow: '0 2px 16px rgba(0,0,0,0.04)',
+        border: '1px solid rgba(255,255,255,0.18)',
+        boxShadow: '0 8px 40px rgba(0,0,0,0.28)',
       }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>🏓</div>
-        <div style={{ color: '#0f172a', fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
+        <div style={{ color: 'rgba(255,255,255,0.90)', fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
           No live matches right now
         </div>
-        <div style={{ color: '#64748b', fontSize: 13, marginBottom: 24 }}>
+        <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13, marginBottom: 24 }}>
           Run the polling script when a tournament is live
         </div>
         <div style={{
-          background: '#f8fafc',
-          border: '1px solid #e2e8f0',
+          background: 'rgba(255,255,255,0.08)',
+          border: '1px solid rgba(255,255,255,0.15)',
           borderRadius: 8,
           padding: '12px 20px',
           display: 'inline-block',
           fontFamily: 'monospace',
           fontSize: 12,
-          color: '#64748b',
+          color: 'rgba(255,255,255,0.55)',
         }}>
           python scripts/live_updater.py --event &lt;id&gt; --points --db
         </div>
