@@ -41,8 +41,7 @@ export default function LivePage() {
             World Team Table Tennis Championships
           </h1>
           <div style={{ color: 'rgba(15,42,94,0.62)', fontSize: 13, fontWeight: 500 }}>
-            London 2026 &nbsp;·&nbsp; OVO Arena Wembley &nbsp;·&nbsp;
-            <span style={{ color: '#1a3a8f', fontWeight: 700 }}>🇮🇳 India</span>
+            London 2026 &nbsp;·&nbsp; OVO Arena Wembley
           </div>
         </div>
 
