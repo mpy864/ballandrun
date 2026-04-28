@@ -30,7 +30,7 @@ export default function LivePage() {
         {[...MEN, ...WOMEN].map(name => (
           <img
             key={name}
-            src={`/players/${name}.jpeg`}
+            src={`/Players/${name}.jpeg`}
             alt=""
             draggable={false}
             style={{
@@ -55,7 +55,7 @@ export default function LivePage() {
         pointerEvents: 'none',
       }}>
         <img
-          src="/players/SAI%20logo.png"
+          src="/Players/SAI%20logo.png"
           alt=""
           draggable={false}
           style={{
@@ -98,7 +98,7 @@ export default function LivePage() {
           Built by
         </span>
         <img
-          src="/players/SAI%20logo.png"
+          src="/Players/SAI%20logo.png"
           alt="SAI"
           style={{
             height: 44,
