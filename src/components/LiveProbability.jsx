@@ -434,6 +434,8 @@ export default function LiveProbability() {
   const [events,   setEvents]   = useState({})   // { event_id: event_name }
   const [loading,  setLoading]  = useState(true)
   const channelRef              = useRef(null)
+  const loadedIdsRef            = useRef(new Set())  // player IDs already fetched
+  const loadedEventIdsRef       = useRef(new Set())  // event IDs already fetched
 
   const sortByMatchId = arr => [...arr].sort((a, b) => String(a.match_id).localeCompare(String(b.match_id)))
 
@@ -469,18 +471,36 @@ export default function LiveProbability() {
       supabase.from('wtt_game_log').select('*').order('completed_at', { ascending: true }),
     ])
     const live = liveRes.data || []
-    setMatches(sortByMatchId(live))
+
+    // Merge into existing array instead of full replace — prevents card flicker
+    setMatches(prev => {
+      const liveMap = new Map(live.map(m => [m.match_id, m]))
+      const liveIds = new Set(liveMap.keys())
+      const prevIds = new Set(prev.map(m => m.match_id))
+      const updated = prev.filter(m => liveIds.has(m.match_id)).map(m => liveMap.get(m.match_id))
+      const added   = live.filter(m => !prevIds.has(m.match_id))
+      return sortByMatchId([...updated, ...added])
+    })
+
     if (logRes.data) setGameLog(logRes.data)
     setLoading(false)
-    const ids = [...new Set(live.flatMap(m => [m.comp1_id, m.comp2_id]).filter(Boolean))]
-    fetchPlayers(ids)
 
-    const eventIds = [...new Set(live.map(m => m.event_id).filter(Boolean))]
-    if (eventIds.length) {
-      const evRes = await supabase.from('wtt_events').select('event_id, event_name').in('event_id', eventIds)
+    // Only fetch players/events for IDs we haven't loaded yet
+    const allIds = [...new Set(live.flatMap(m => [m.comp1_id, m.comp2_id]).filter(Boolean))]
+    const newIds = allIds.filter(id => !loadedIdsRef.current.has(id))
+    if (newIds.length) {
+      newIds.forEach(id => loadedIdsRef.current.add(id))
+      fetchPlayers(newIds)
+    }
+
+    const allEventIds = [...new Set(live.map(m => m.event_id).filter(Boolean))]
+    const newEventIds = allEventIds.filter(id => !loadedEventIdsRef.current.has(id))
+    if (newEventIds.length) {
+      newEventIds.forEach(id => loadedEventIdsRef.current.add(id))
+      const evRes = await supabase.from('wtt_events').select('event_id, event_name').in('event_id', newEventIds)
       const evMap = {}
       ;(evRes.data || []).forEach(e => { evMap[e.event_id] = e.event_name })
-      setEvents(evMap)
+      setEvents(prev => ({ ...prev, ...evMap }))
     }
   }
 
