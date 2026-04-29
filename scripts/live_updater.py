@@ -487,12 +487,28 @@ def poll_points(mp: MatchPredictor, event_id: int, gender_label: str,
     seen_matches:    set              = set()
     missing_counts:  dict[str, int]  = {}  # match_id → consecutive absent polls
 
-    # Seed seen_matches from DB so script restarts don't leave stale 'live' rows
+    # Seed seen_matches + last_state + match_p0_by_id from DB on startup.
+    # Without seeding last_state, _write_match_result returns early for any
+    # match that was already in DB when the script (re)started.
     if db:
         try:
-            existing = db.table("wtt_live_state").select("match_id").eq("status", "live").execute()
+            existing = db.table("wtt_live_state").select("*").eq("status", "live").execute()
             for row in (existing.data or []):
-                seen_matches.add(row["match_id"])
+                mid = row["match_id"]
+                seen_matches.add(mid)
+                last_state[mid] = {
+                    "event_id":   row.get("event_id"),
+                    "comp1_id":   row.get("comp1_id"),
+                    "comp2_id":   row.get("comp2_id"),
+                    "comp1_name": row.get("comp1_name", ""),
+                    "comp2_name": row.get("comp2_name", ""),
+                    "round_name": row.get("round_name", ""),
+                    "games_a":    row.get("games_a") or 0,
+                    "games_b":    row.get("games_b") or 0,
+                    "p_final":    round(row.get("p_win") or 0.5, 4),
+                }
+                if row.get("p_prematch"):
+                    match_p0_by_id[mid] = row["p_prematch"]
             if seen_matches:
                 print(f"  [DB] Seeded {len(seen_matches)} in-progress match(es) from DB")
         except Exception as e:
