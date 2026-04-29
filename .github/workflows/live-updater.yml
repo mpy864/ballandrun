@@ -1,0 +1,27 @@
+name: Live Updater
+
+on:
+  schedule:
+    - cron: '0 */5 * * *'   # restart every 5 hours (job runs up to 6h)
+  workflow_dispatch:          # manual trigger from GitHub UI
+
+jobs:
+  run-updater:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300      # 5 hours per run
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Run live updater
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python scripts/live_updater.py --event 3216 --gender all --points --db --interval 3
