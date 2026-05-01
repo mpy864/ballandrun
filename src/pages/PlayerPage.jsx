@@ -146,7 +146,7 @@ export default function PlayerPage() {
   const [searchParams] = useSearchParams()
   const subEvent    = searchParams.get('sub') || 'MS'
   const ageCategory = searchParams.get('age') || null
-  const isDoubles   = ['MD', 'WD', 'XD'].includes(subEvent)
+  const isDoubles   = ['MD', 'WD', 'XD', 'MDI', 'WDI', 'XDI'].includes(subEvent)
   const numId       = parseInt(ittf_id)
 
   const [playerInfo,  setPlayerInfo]  = useState(null)

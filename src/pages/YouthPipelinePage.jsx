@@ -711,7 +711,8 @@ export default function YouthPipelinePage() {
           .limit(500) : { data: [] },
       ])
 
-      setSingles(singlesRes.data || [])
+      // Filter out stray MDI/WDI/XDI rows from singles table — real doubles data is in youth_rankings_doubles
+      setSingles((singlesRes.data || []).filter(p => !['MDI','WDI','XDI'].includes(p.sub_event)))
       setDoubles(doublesRes.data || [])
       setLoading(false)
 
