@@ -41,9 +41,12 @@ const CHART_COLORS = [
   '#14b8a6','#f43f5e','#a855f7','#22c55e','#eab308',
 ]
 
-const SINGLES_DISCS = [
-  { code: 'MS', label: 'Boys Singles' },
-  { code: 'WS', label: 'Girls Singles' },
+const CHART_DISCS = [
+  { code: 'MS', label: 'Boys Singles',  table: 'singles' },
+  { code: 'WS', label: 'Girls Singles', table: 'singles' },
+  { code: 'MD', label: 'Boys Doubles',  table: 'doubles' },
+  { code: 'WD', label: 'Girls Doubles', table: 'doubles' },
+  { code: 'XD', label: 'Mixed Doubles', table: 'doubles' },
 ]
 
 function Top64Chart({ ageGroup }) {
@@ -63,33 +66,61 @@ function Top64Chart({ ageGroup }) {
       cutoff.setMonth(cutoff.getMonth() - months)
       const cutoffStr = cutoff.toISOString().split('T')[0]
 
-      const { data } = await supabase
-        .from('youth_rankings_singles')
-        .select('ittf_id, player_name, publish_date, age_cat_rank, current_rank')
-        .eq('country_code', 'IND')
-        .eq('age_category', ageGroup)
-        .eq('sub_event', subEvent)
-        .gte('publish_date', cutoffStr)
-        .order('publish_date', { ascending: true })
-        .limit(10000)
+      const disc = CHART_DISCS.find(d => d.code === subEvent)
+      const isDoubles = disc?.table === 'doubles'
+
+      let rows = []
+      if (isDoubles) {
+        const { data } = await supabase
+          .from('youth_rankings_doubles')
+          .select('pair_id, player_name1, player_name2, country_code1, country_code2, publish_date, age_cat_rank, current_rank')
+          .eq('age_category', ageGroup)
+          .eq('sub_event', subEvent)
+          .or('country_code1.eq.IND,country_code2.eq.IND')
+          .gte('publish_date', cutoffStr)
+          .order('publish_date', { ascending: true })
+          .limit(10000)
+        // Normalise to common shape
+        rows = (data || []).map(r => ({
+          id:   r.pair_id,
+          name: `${r.player_name1?.split(' ').slice(-1)[0]} / ${r.player_name2?.split(' ').slice(-1)[0]}`,
+          publish_date:  r.publish_date,
+          age_cat_rank:  r.age_cat_rank,
+          current_rank:  r.current_rank,
+        }))
+      } else {
+        const { data } = await supabase
+          .from('youth_rankings_singles')
+          .select('ittf_id, player_name, publish_date, age_cat_rank, current_rank')
+          .eq('country_code', 'IND')
+          .eq('age_category', ageGroup)
+          .eq('sub_event', subEvent)
+          .gte('publish_date', cutoffStr)
+          .order('publish_date', { ascending: true })
+          .limit(10000)
+        rows = (data || []).map(r => ({
+          id:   r.ittf_id,
+          name: r.player_name,
+          publish_date:  r.publish_date,
+          age_cat_rank:  r.age_cat_rank,
+          current_rank:  r.current_rank,
+        }))
+      }
 
       if (cancelled) return
 
-      const rows = data || []
-
       // Find players who were ever in top 64
       const inTop64 = new Set(
-        rows.filter(r => (r.age_cat_rank || r.current_rank) <= 64)
-            .map(r => r.ittf_id)
+        rows.filter(r => (r.age_cat_rank || r.current_rank) <= 64).map(r => r.id)
       )
-      const top64Rows = rows.filter(r => inTop64.has(r.ittf_id))
+      const top64Rows = rows.filter(r => inTop64.has(r.id))
 
       // Unique players sorted by best rank
       const playerMap = {}
       for (const r of top64Rows) {
-        if (!playerMap[r.ittf_id]) playerMap[r.ittf_id] = { ittf_id: r.ittf_id, name: r.player_name, best: 9999 }
         const rank = r.age_cat_rank || r.current_rank
-        if (rank < playerMap[r.ittf_id].best) playerMap[r.ittf_id].best = rank
+        if (!playerMap[r.id]) playerMap[r.id] = { id: r.id, name: r.name, best: 9999 }
+        if (rank < playerMap[r.id].best) playerMap[r.id].best = rank
       }
       const sortedPlayers = Object.values(playerMap).sort((a, b) => a.best - b.best)
 
@@ -98,15 +129,11 @@ function Top64Chart({ ageGroup }) {
       for (const r of top64Rows) {
         const d = r.publish_date
         if (!byDate[d]) byDate[d] = { date: d }
-        byDate[d][r.ittf_id] = r.age_cat_rank || r.current_rank
+        byDate[d][r.id] = r.age_cat_rank || r.current_rank
       }
-      const shaped = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
-
-      // Format date labels: show month/week compactly
-      const formatted = shaped.map(row => ({
-        ...row,
-        label: row.date.slice(5), // MM-DD
-      }))
+      const formatted = Object.values(byDate)
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map(row => ({ ...row, label: row.date.slice(5) }))
 
       if (!cancelled) {
         setChartData(formatted)
@@ -141,8 +168,8 @@ function Top64Chart({ ageGroup }) {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {/* Sub-event toggle */}
-          <div style={{ display: 'flex', gap: 4 }}>
-            {SINGLES_DISCS.map(d => (
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {CHART_DISCS.map(d => (
               <button key={d.code} onClick={() => setSubEvent(d.code)} style={{
                 fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 20,
                 border: subEvent === d.code ? '1px solid #1d4ed8' : '1px solid #e2e8f0',
@@ -185,8 +212,8 @@ function Top64Chart({ ageGroup }) {
               <Tooltip
                 contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0', background: 'rgba(255,255,255,0.96)' }}
                 formatter={(val, name) => {
-                  const p = players.find(p => p.ittf_id === name)
-                  return [`#${val}`, p?.name?.split(' ').slice(-1)[0] || name]
+                  const p = players.find(p => p.id === name)
+                  return [`#${val}`, p?.name || name]
                 }}
                 labelFormatter={l => `Week of ${l}`}
               />
@@ -199,14 +226,14 @@ function Top64Chart({ ageGroup }) {
                 label={{ value: 'Top 64', position: 'right', fontSize: 8, fill: '#ef4444' }} />
               {players.map((p, i) => (
                 <Line
-                  key={p.ittf_id}
+                  key={p.id}
                   type="monotone"
-                  dataKey={p.ittf_id}
+                  dataKey={p.id}
                   stroke={CHART_COLORS[i % CHART_COLORS.length]}
                   strokeWidth={2}
                   dot={false}
                   connectNulls
-                  name={p.ittf_id}
+                  name={p.id}
                 />
               ))}
             </LineChart>
