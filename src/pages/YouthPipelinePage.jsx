@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '../lib/supabase.js'
 import AuthBar from '../components/AuthBar.jsx'
 import PageBackground from '../components/PageBackground.jsx'
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, ReferenceLine,
+  AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, ReferenceLine, Legend,
 } from 'recharts'
 
 const AGE_GROUPS = ['U11', 'U13', 'U15', 'U17', 'U19']
@@ -33,6 +33,200 @@ function rankColor(rank) {
   if (rank <= 50)  return '#2563eb'
   if (rank <= 100) return '#d97706'
   return '#64748b'
+}
+
+const CHART_COLORS = [
+  '#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6',
+  '#06b6d4','#ec4899','#84cc16','#f97316','#6366f1',
+  '#14b8a6','#f43f5e','#a855f7','#22c55e','#eab308',
+]
+
+const SINGLES_DISCS = [
+  { code: 'MS', label: 'Boys Singles' },
+  { code: 'WS', label: 'Girls Singles' },
+]
+
+function Top64Chart({ ageGroup }) {
+  const [months, setMonths]         = useState(6)
+  const [subEvent, setSubEvent]     = useState('MS')
+  const [chartData, setChartData]   = useState([])
+  const [players, setPlayers]       = useState([])
+  const [loading, setLoading]       = useState(false)
+
+  useEffect(() => {
+    if (!ageGroup || ageGroup === 'all') return
+    let cancelled = false
+    setLoading(true)
+
+    async function load() {
+      const cutoff = new Date()
+      cutoff.setMonth(cutoff.getMonth() - months)
+      const cutoffStr = cutoff.toISOString().split('T')[0]
+
+      const { data } = await supabase
+        .from('youth_rankings_singles')
+        .select('ittf_id, player_name, publish_date, age_cat_rank, current_rank')
+        .eq('country_code', 'IND')
+        .eq('age_category', ageGroup)
+        .eq('sub_event', subEvent)
+        .gte('publish_date', cutoffStr)
+        .order('publish_date', { ascending: true })
+        .limit(10000)
+
+      if (cancelled) return
+
+      const rows = data || []
+
+      // Find players who were ever in top 64
+      const inTop64 = new Set(
+        rows.filter(r => (r.age_cat_rank || r.current_rank) <= 64)
+            .map(r => r.ittf_id)
+      )
+      const top64Rows = rows.filter(r => inTop64.has(r.ittf_id))
+
+      // Unique players sorted by best rank
+      const playerMap = {}
+      for (const r of top64Rows) {
+        if (!playerMap[r.ittf_id]) playerMap[r.ittf_id] = { ittf_id: r.ittf_id, name: r.player_name, best: 9999 }
+        const rank = r.age_cat_rank || r.current_rank
+        if (rank < playerMap[r.ittf_id].best) playerMap[r.ittf_id].best = rank
+      }
+      const sortedPlayers = Object.values(playerMap).sort((a, b) => a.best - b.best)
+
+      // Reshape: one row per publish_date
+      const byDate = {}
+      for (const r of top64Rows) {
+        const d = r.publish_date
+        if (!byDate[d]) byDate[d] = { date: d }
+        byDate[d][r.ittf_id] = r.age_cat_rank || r.current_rank
+      }
+      const shaped = Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date))
+
+      // Format date labels: show month/week compactly
+      const formatted = shaped.map(row => ({
+        ...row,
+        label: row.date.slice(5), // MM-DD
+      }))
+
+      if (!cancelled) {
+        setChartData(formatted)
+        setPlayers(sortedPlayers)
+        setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [ageGroup, subEvent, months])
+
+  if (!ageGroup || ageGroup === 'all') return null
+
+  return (
+    <div style={{
+      background: 'rgba(255,255,255,0.88)',
+      backdropFilter: 'blur(18px)',
+      border: '1px solid rgba(30,70,160,0.10)',
+      borderRadius: 16,
+      padding: '20px 20px 16px',
+      marginBottom: 24,
+    }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 }}>
+            India {ageGroup} · Top 64 Tracker
+          </div>
+          <div style={{ fontSize: 12, color: '#64748b' }}>
+            {players.length} Indian player{players.length !== 1 ? 's' : ''} reached top 64 in this period
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Sub-event toggle */}
+          <div style={{ display: 'flex', gap: 4 }}>
+            {SINGLES_DISCS.map(d => (
+              <button key={d.code} onClick={() => setSubEvent(d.code)} style={{
+                fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 20,
+                border: subEvent === d.code ? '1px solid #1d4ed8' : '1px solid #e2e8f0',
+                background: subEvent === d.code ? '#1d4ed8' : 'white',
+                color: subEvent === d.code ? 'white' : '#64748b',
+                cursor: 'pointer',
+              }}>{d.label}</button>
+            ))}
+          </div>
+          {/* Time toggle */}
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[3, 6, 12].map(m => (
+              <button key={m} onClick={() => setMonths(m)} style={{
+                fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20,
+                border: months === m ? '1px solid #334155' : '1px solid #e2e8f0',
+                background: months === m ? '#334155' : 'white',
+                color: months === m ? 'white' : '#64748b',
+                cursor: 'pointer',
+              }}>{m}M</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 12, padding: '30px 0' }}>Loading…</div>
+      ) : players.length === 0 ? (
+        <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 12, padding: '30px 0' }}>
+          No Indian players in top 64 for this period.
+        </div>
+      ) : (
+        <>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: -10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#94a3b8' }}
+                interval={Math.max(1, Math.floor(chartData.length / 8))} />
+              <YAxis reversed domain={[1, 64]} tick={{ fontSize: 9, fill: '#94a3b8' }}
+                label={{ value: 'Rank', angle: -90, position: 'insideLeft', fontSize: 9, fill: '#94a3b8' }} />
+              <Tooltip
+                contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0', background: 'rgba(255,255,255,0.96)' }}
+                formatter={(val, name) => {
+                  const p = players.find(p => p.ittf_id === name)
+                  return [`#${val}`, p?.name?.split(' ').slice(-1)[0] || name]
+                }}
+                labelFormatter={l => `Week of ${l}`}
+              />
+              {/* Reference lines for milestones */}
+              <ReferenceLine y={16} stroke="#16a34a" strokeDasharray="4 3" strokeOpacity={0.5}
+                label={{ value: 'Top 16', position: 'right', fontSize: 8, fill: '#16a34a' }} />
+              <ReferenceLine y={32} stroke="#f59e0b" strokeDasharray="4 3" strokeOpacity={0.5}
+                label={{ value: 'Top 32', position: 'right', fontSize: 8, fill: '#f59e0b' }} />
+              <ReferenceLine y={64} stroke="#ef4444" strokeDasharray="4 3" strokeOpacity={0.4}
+                label={{ value: 'Top 64', position: 'right', fontSize: 8, fill: '#ef4444' }} />
+              {players.map((p, i) => (
+                <Line
+                  key={p.ittf_id}
+                  type="monotone"
+                  dataKey={p.ittf_id}
+                  stroke={CHART_COLORS[i % CHART_COLORS.length]}
+                  strokeWidth={2}
+                  dot={false}
+                  connectNulls
+                  name={p.ittf_id}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+
+          {/* Player legend */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+            {players.map((p, i) => (
+              <div key={p.ittf_id} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ width: 10, height: 3, borderRadius: 2, background: CHART_COLORS[i % CHART_COLORS.length], flexShrink: 0 }} />
+                <span style={{ fontSize: 10, color: '#475569' }}>
+                  {p.name} <span style={{ color: '#94a3b8' }}>#{p.best}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
 }
 
 function SparkLine({ data }) {
@@ -582,6 +776,9 @@ export default function YouthPipelinePage() {
               </div>
             </div>
           </div>
+
+          {/* ── Top 64 Chart ── */}
+          <Top64Chart ageGroup={filterAge} />
 
           {/* ── Content ── */}
           {loading ? (
