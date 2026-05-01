@@ -846,11 +846,11 @@ const TABS = [
 ];
 
 const YOUTH_DISCIPLINES = [
-  { code: 'MS', label: 'Boys Singles',  table: 'singles' },
-  { code: 'WS', label: 'Girls Singles', table: 'singles' },
-  { code: 'MD', label: 'Boys Doubles',  table: 'doubles' },
-  { code: 'WD', label: 'Girls Doubles', table: 'doubles' },
-  { code: 'XD', label: 'Mixed Doubles', table: 'doubles' },
+  { code: 'MS',  label: 'Boys Singles',  table: 'singles' },
+  { code: 'WS',  label: 'Girls Singles', table: 'singles' },
+  { code: 'MDI', label: 'Boys Doubles',  table: 'doubles' },
+  { code: 'WDI', label: 'Girls Doubles', table: 'doubles' },
+  { code: 'XDI', label: 'Mixed Doubles', table: 'doubles' },
 ];
 
 const BM_METRICS = [
@@ -2483,6 +2483,90 @@ export default function DynamicOKRDashboard() {
             </>
           )}
 
+          {/* ── Youth Rankings ── */}
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <div className="px-4 pt-4 pb-3 border-b border-slate-100">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-3">Youth Rankings</p>
+              {/* Age group tabs */}
+              <div className="flex gap-1.5 flex-wrap mb-2">
+                {['U11','U13','U15','U17','U19'].map(ag => (
+                  <button key={ag} onClick={() => {
+                    setYouthAgeGroup(ag);
+                    if (['U11','U13'].includes(ag) && ['MDI','WDI','XDI'].includes(youthDiscipline)) {
+                      setYouthDiscipline('MS');
+                    }
+                  }}
+                  className={`text-xs px-3 py-1 rounded-full border font-semibold transition-all ${
+                    youthAgeGroup === ag
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+                  }`}>
+                    {ag}
+                  </button>
+                ))}
+              </div>
+              {/* Discipline chips */}
+              <div className="flex gap-1.5 flex-wrap">
+                {YOUTH_DISCIPLINES
+                  .filter(d => !['U11','U13'].includes(youthAgeGroup) || d.table === 'singles')
+                  .map(d => (
+                    <button key={d.code} onClick={() => setYouthDiscipline(d.code)}
+                      className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
+                        youthDiscipline === d.code
+                          ? 'bg-slate-800 text-white border-slate-800'
+                          : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+                      }`}>
+                      {d.label}
+                    </button>
+                  ))
+                }
+              </div>
+            </div>
+
+            <div className="px-4 py-3">
+              {youthLoading ? (
+                <p className="text-xs text-slate-400 py-4 text-center">Loading…</p>
+              ) : youthRows.length === 0 ? (
+                <p className="text-xs text-slate-400 py-4 text-center">No data available for this category.</p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] text-slate-400">
+                      Top {youthRows.length} · Week {youthRows[0]?.ranking_week}/{youthRows[0]?.ranking_year}
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      {youthRows.filter(r => (r.country_code || r.country_code1) === 'IND' || r.country_code2 === 'IND').length} Indians ranked
+                    </p>
+                  </div>
+                  <div className="space-y-0.5">
+                    {youthRows.map((r, i) => {
+                      const isDoubles = YOUTH_DISCIPLINES.find(d => d.code === youthDiscipline)?.table === 'doubles';
+                      const name    = isDoubles ? `${r.player_name1} / ${r.player_name2}` : r.player_name;
+                      const country = isDoubles ? r.country_code1 : r.country_code;
+                      const isInd   = country === 'IND' || r.country_code2 === 'IND';
+                      const points  = isDoubles ? r.points : r.points_ytd;
+                      const diff    = r.rank_diff;
+                      return (
+                        <div key={i} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs ${
+                          isInd ? 'bg-orange-50 border border-orange-100' : i % 2 === 0 ? '' : 'bg-slate-50/50'
+                        }`}>
+                          <span className="w-7 text-right font-mono text-slate-400 shrink-0">#{r.age_cat_rank}</span>
+                          <span className={`flex-1 font-medium truncate ${isInd ? 'text-orange-800' : 'text-slate-700'}`}>{name}</span>
+                          <span className="text-[10px] text-slate-400 shrink-0">{country}{isDoubles && r.country_code2 !== r.country_code1 ? `/${r.country_code2}` : ''}</span>
+                          <span className="text-[10px] text-slate-400 shrink-0 w-16 text-right">{points != null ? Math.round(points).toLocaleString() : '—'} pts</span>
+                          <span className={`text-[10px] w-8 text-right shrink-0 font-semibold ${
+                            diff > 0 ? 'text-emerald-500' : diff < 0 ? 'text-red-400' : 'text-slate-300'
+                          }`}>
+                            {diff > 0 ? `↑${diff}` : diff < 0 ? `↓${Math.abs(diff)}` : '—'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
 
         </div>
       </div>
