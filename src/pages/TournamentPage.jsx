@@ -17,12 +17,22 @@ export default function TournamentPage() {
 
         {/* Header */}
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#0f172a' }}>
-            WTTC 2026 — Tournament Simulator
-          </h1>
-          <p style={{ margin: '4px 0 12px', fontSize: 13, color: '#64748b' }}>
-            London, April 28 – May 10, 2026 · V8 MatchPredictor · 5,000 Monte Carlo simulations
-          </p>
+          <div style={{
+            background: 'rgba(255,255,255,0.82)',
+            backdropFilter: 'blur(18px)',
+            WebkitBackdropFilter: 'blur(18px)',
+            border: '1px solid rgba(30,70,160,0.08)',
+            borderRadius: 12,
+            padding: '14px 18px',
+            marginBottom: 12,
+          }}>
+            <h1 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 700, color: '#0f172a' }}>
+              WTTC 2026 — Tournament Simulator
+            </h1>
+            <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>
+              London, April 28 – May 10, 2026 · V8 MatchPredictor · 5,000 Monte Carlo simulations
+            </p>
+          </div>
           <div style={{
             background: '#eff6ff', border: '1px solid #bfdbfe',
             borderRadius: 8, padding: '8px 14px',

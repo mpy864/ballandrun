@@ -12,7 +12,15 @@ export default function LivePage() {
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '36px 16px 48px' }}>
 
         {/* Header */}
-        <div style={{ marginBottom: 36 }}>
+        <div style={{
+          marginBottom: 36,
+          background: 'rgba(255,255,255,0.82)',
+          backdropFilter: 'blur(18px)',
+          WebkitBackdropFilter: 'blur(18px)',
+          border: '1px solid rgba(30,70,160,0.08)',
+          borderRadius: 14,
+          padding: '16px 20px',
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
             <span style={{
               background: '#ef4444', color: '#fff',
