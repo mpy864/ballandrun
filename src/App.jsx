@@ -5,6 +5,7 @@ import DynamicOKRDashboard from './components/DynamicOKRDashboard.jsx'
 import H2HDashboard from './components/H2HDashboard.jsx'
 import LivePage from './pages/LivePage.jsx'
 import TournamentPage from './pages/TournamentPage.jsx'
+import YouthPipelinePage from './pages/YouthPipelinePage.jsx'
 import PageBackground from './components/PageBackground.jsx'
 
 function ProtectedRoute({ children }) {
@@ -54,6 +55,11 @@ export default function App() {
         </ProtectedRoute>
       } />
       <Route path="/live" element={<LivePage />} />
+      <Route path="/youth" element={
+        <ProtectedRoute>
+          <YouthPipelinePage />
+        </ProtectedRoute>
+      } />
       <Route path="/tournament" element={
         <ProtectedRoute>
           <TournamentPage />

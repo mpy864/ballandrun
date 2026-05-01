@@ -1618,6 +1618,9 @@ export default function DynamicOKRDashboard() {
               {selectedPlayer && playerMetrics && (
                 <DataSourceToggle value={dataSource} onChange={changeDataSource} showDomestic={isIndian} />
               )}
+              <a href="/youth" className="text-xs font-medium text-emerald-600 hover:text-emerald-800 flex items-center gap-1">
+                Youth Pipeline <ArrowRight size={11} />
+              </a>
               <a href="/h2h" className="text-xs font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1">
                 Compare players <ArrowRight size={11} />
               </a>
