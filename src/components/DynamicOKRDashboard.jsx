@@ -846,11 +846,11 @@ const TABS = [
 ];
 
 const YOUTH_DISCIPLINES = [
-  { code: 'MS',  label: 'Boys Singles',  table: 'singles' },
-  { code: 'WS',  label: 'Girls Singles', table: 'singles' },
-  { code: 'MDI', label: 'Boys Doubles',  table: 'doubles' },
-  { code: 'WDI', label: 'Girls Doubles', table: 'doubles' },
-  { code: 'XDI', label: 'Mixed Doubles', table: 'doubles' },
+  { code: 'MS', label: 'Boys Singles',  table: 'singles' },
+  { code: 'WS', label: 'Girls Singles', table: 'singles' },
+  { code: 'MD', label: 'Boys Doubles',  table: 'doubles' },
+  { code: 'WD', label: 'Girls Doubles', table: 'doubles' },
+  { code: 'XD', label: 'Mixed Doubles', table: 'doubles' },
 ];
 
 const BM_METRICS = [
@@ -2492,7 +2492,7 @@ export default function DynamicOKRDashboard() {
                 {['U11','U13','U15','U17','U19'].map(ag => (
                   <button key={ag} onClick={() => {
                     setYouthAgeGroup(ag);
-                    if (['U11','U13'].includes(ag) && ['MDI','WDI','XDI'].includes(youthDiscipline)) {
+                    if (['U11','U13'].includes(ag) && ['MD','WD','XD'].includes(youthDiscipline)) {
                       setYouthDiscipline('MS');
                     }
                   }}
