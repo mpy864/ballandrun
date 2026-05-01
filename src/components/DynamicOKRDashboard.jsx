@@ -1612,8 +1612,15 @@ export default function DynamicOKRDashboard() {
       <div className="okr min-h-screen" style={{ position: 'relative', zIndex: 4 }}>
         <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
 
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">TOPS · Table Tennis</p>
+          <div className="flex items-center justify-between" style={{
+            background: 'rgba(255,255,255,0.82)',
+            backdropFilter: 'blur(18px)',
+            WebkitBackdropFilter: 'blur(18px)',
+            border: '1px solid rgba(30,70,160,0.08)',
+            borderRadius: 12,
+            padding: '10px 16px',
+          }}>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">TOPS · Table Tennis</p>
             <div className="flex items-center gap-3">
               {selectedPlayer && playerMetrics && (
                 <DataSourceToggle value={dataSource} onChange={changeDataSource} showDomestic={isIndian} />

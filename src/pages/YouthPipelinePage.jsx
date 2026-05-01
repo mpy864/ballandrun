@@ -380,6 +380,36 @@ function MatchRow({ match, playerId }) {
   )
 }
 
+function DoublesMatchRow({ match }) {
+  const result = match.result_player
+  const scores = match.game_scores || match.match_score || '—'
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '7px 10px', borderRadius: 8,
+      background: result === 'W' ? 'rgba(22,163,74,0.05)' : 'rgba(220,38,38,0.04)',
+      border: result === 'W' ? '1px solid rgba(22,163,74,0.15)' : '1px solid rgba(220,38,38,0.12)',
+      marginBottom: 4,
+    }}>
+      <span style={{ fontSize: 13, fontWeight: 800, width: 16, color: result === 'W' ? '#16a34a' : '#dc2626' }}>
+        {result === 'W' ? '✓' : '✗'}
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#0f172a',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          vs {match.opp_name}
+        </div>
+        <div style={{ fontSize: 10, color: '#94a3b8' }}>
+          {match.round_phase || ''}{match.round_phase && match.event_date ? ' · ' : ''}{match.event_date || ''}
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: '#64748b', textAlign: 'right', flexShrink: 0 }}>
+        {scores}
+      </div>
+    </div>
+  )
+}
+
 function PlayerProfile({ player, isDoubles, onClose }) {
   const [history, setHistory]   = useState([])
   const [matches, setMatches]   = useState([])
@@ -404,10 +434,10 @@ function PlayerProfile({ player, isDoubles, onClose }) {
         .order('ranking_week', { ascending: true })
         .limit(200)
 
-      // Match history (singles only for now)
+      // Match history
       let matchData = []
+      const numId = parseInt(ittfId)
       if (!isDoubles) {
-        const numId = parseInt(ittfId)
         const [{ data: asComp1 }, { data: asComp2 }] = await Promise.all([
           supabase.from('wtt_matches_singles')
             .select('match_id, comp1_id, comp2_id, result, game_scores, match_score, event_date, event_id')
@@ -431,16 +461,50 @@ function PlayerProfile({ player, isDoubles, onClose }) {
           m.comp1_id === numId ? m.comp2_id : m.comp1_id
         ))]
         if (oppIds.length > 0) {
-          const { data: players } = await supabase
+          const { data: pls } = await supabase
             .from('wtt_players')
             .select('ittf_id, player_name')
             .in('ittf_id', oppIds)
-          const pMap = Object.fromEntries((players || []).map(p => [p.ittf_id, p.player_name]))
+          const pMap = Object.fromEntries((pls || []).map(p => [p.ittf_id, p.player_name]))
           matchData = matchData.map(m => ({
             ...m,
-            comp1_name: m.comp1_id === numId ? (isDoubles ? player.player_name1 : player.player_name) : pMap[m.comp1_id],
-            comp2_name: m.comp2_id === numId ? (isDoubles ? player.player_name1 : player.player_name) : pMap[m.comp2_id],
+            comp1_name: m.comp1_id === numId ? player.player_name : pMap[m.comp1_id],
+            comp2_name: m.comp2_id === numId ? player.player_name : pMap[m.comp2_id],
           }))
+        }
+      } else {
+        // Doubles: query wtt_matches_doubles by any of the 4 pair-player slots
+        const { data: dbMatches } = await supabase
+          .from('wtt_matches_doubles')
+          .select('match_id, comp1_p1_id, comp1_p2_id, comp2_p1_id, comp2_p2_id, result, game_scores, match_score, event_date, round_phase')
+          .or(`comp1_p1_id.eq.${numId},comp1_p2_id.eq.${numId},comp2_p1_id.eq.${numId},comp2_p2_id.eq.${numId}`)
+          .order('event_date', { ascending: false })
+          .limit(40)
+
+        if (dbMatches?.length) {
+          // Collect all opponent IDs
+          const oppIdSet = new Set()
+          for (const m of dbMatches) {
+            const onComp1 = m.comp1_p1_id === numId || m.comp1_p2_id === numId
+            if (onComp1) { oppIdSet.add(m.comp2_p1_id); oppIdSet.add(m.comp2_p2_id) }
+            else         { oppIdSet.add(m.comp1_p1_id); oppIdSet.add(m.comp1_p2_id) }
+          }
+          oppIdSet.delete(null); oppIdSet.delete(undefined)
+
+          const { data: pls } = await supabase
+            .from('wtt_players')
+            .select('ittf_id, player_name')
+            .in('ittf_id', [...oppIdSet])
+          const pMap = Object.fromEntries((pls || []).map(p => [p.ittf_id, p.player_name]))
+
+          matchData = dbMatches.map(m => {
+            const onComp1 = m.comp1_p1_id === numId || m.comp1_p2_id === numId
+            const result_player = onComp1 ? m.result : (m.result === 'W' ? 'L' : 'W')
+            const opp1Id = onComp1 ? m.comp2_p1_id : m.comp1_p1_id
+            const opp2Id = onComp1 ? m.comp2_p2_id : m.comp1_p2_id
+            const opp_name = [pMap[opp1Id], pMap[opp2Id]].filter(Boolean).join(' / ') || 'Unknown pair'
+            return { ...m, result_player, opp_name }
+          })
         }
       }
 
@@ -465,8 +529,12 @@ function PlayerProfile({ player, isDoubles, onClose }) {
   const lastRank  = history[history.length - 1]?.age_cat_rank || history[history.length - 1]?.current_rank
   const improvement = firstRank && lastRank ? firstRank - lastRank : null
 
-  const wins   = matches.filter(m => (m.comp1_id === parseInt(ittfId) ? m.result : (m.result === 'W' ? 'L' : 'W')) === 'W')
-  const losses = matches.filter(m => (m.comp1_id === parseInt(ittfId) ? m.result : (m.result === 'W' ? 'L' : 'W')) === 'L')
+  const wins = isDoubles
+    ? matches.filter(m => m.result_player === 'W')
+    : matches.filter(m => (m.comp1_id === parseInt(ittfId) ? m.result : (m.result === 'W' ? 'L' : 'W')) === 'W')
+  const losses = isDoubles
+    ? matches.filter(m => m.result_player === 'L')
+    : matches.filter(m => (m.comp1_id === parseInt(ittfId) ? m.result : (m.result === 'W' ? 'L' : 'W')) === 'L')
 
   const name = isDoubles
     ? `${player.player_name1} / ${player.player_name2}`
@@ -518,10 +586,8 @@ function PlayerProfile({ player, isDoubles, onClose }) {
                 : '—',
                 color: improvement > 0 ? '#16a34a' : improvement < 0 ? '#ef4444' : '#64748b',
               },
-              ...(!isDoubles ? [
-                { label: 'Youth Matches', value: matches.length },
-                { label: 'Win Rate',      value: matches.length ? `${Math.round(wins.length / matches.length * 100)}%` : '—' },
-              ] : []),
+              { label: isDoubles ? 'Doubles Matches' : 'Youth Matches', value: matches.length },
+              { label: 'Win Rate', value: matches.length ? `${Math.round(wins.length / matches.length * 100)}%` : '—' },
             ].map(s => (
               <div key={s.label} style={{
                 background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10,
@@ -566,22 +632,24 @@ function PlayerProfile({ player, isDoubles, onClose }) {
             </div>
           )}
 
-          {/* Match history (singles only) */}
-          {!isDoubles && matches.length > 0 && (
+          {/* Match history */}
+          {matches.length > 0 && (
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', letterSpacing: 2,
                 textTransform: 'uppercase', marginBottom: 10 }}>
-                Recent Youth Matches — {wins.length}W {losses.length}L
+                Recent {isDoubles ? 'Doubles' : 'Youth'} Matches — {wins.length}W {losses.length}L
               </div>
-              {matches.slice(0, 20).map(m => (
-                <MatchRow key={m.match_id} match={m} playerId={ittfId} />
-              ))}
+              {matches.slice(0, 20).map(m =>
+                isDoubles
+                  ? <DoublesMatchRow key={m.match_id} match={m} />
+                  : <MatchRow key={m.match_id} match={m} playerId={ittfId} />
+              )}
             </div>
           )}
 
-          {!isDoubles && matches.length === 0 && (
+          {matches.length === 0 && (
             <p style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', padding: '12px 0' }}>
-              No youth match data available for this player.
+              No youth {isDoubles ? 'doubles ' : ''}match data available for this player.
             </p>
           )}
         </>
@@ -720,9 +788,17 @@ export default function YouthPipelinePage() {
 
           {/* ── Header ── */}
           <div style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12,
+              background: 'rgba(255,255,255,0.82)',
+              backdropFilter: 'blur(18px)',
+              WebkitBackdropFilter: 'blur(18px)',
+              border: '1px solid rgba(30,70,160,0.08)',
+              borderRadius: 14,
+              padding: '16px 20px',
+            }}>
               <div>
-                <p style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: '#64748b', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 4 }}>
                   TOPS · Table Tennis
                 </p>
                 <h1 style={{ fontSize: 26, fontWeight: 900, color: '#0f172a', margin: 0, letterSpacing: -0.5 }}>
@@ -732,7 +808,7 @@ export default function YouthPipelinePage() {
                   All Indian youth players ranked internationally · U11 → U19
                 </p>
               </div>
-              <a href="/" style={{ fontSize: 12, color: '#2563eb', textDecoration: 'none', marginTop: 8 }}>
+              <a href="/" style={{ fontSize: 12, color: '#2563eb', textDecoration: 'none', marginTop: 8, fontWeight: 600 }}>
                 ← Senior Dashboard
               </a>
             </div>
