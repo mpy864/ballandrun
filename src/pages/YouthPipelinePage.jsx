@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import AuthBar from '../components/AuthBar.jsx'
 import PageBackground from '../components/PageBackground.jsx'
@@ -761,17 +762,13 @@ export default function YouthPipelinePage() {
     return map
   }, [filtered])
 
+  const navigate = useNavigate()
+
   function selectPlayer(p) {
-    const key = `${p.ittf_id ?? p.ittf_id1}__${p.sub_event}`
     const isDoubles = p._type === 'doubles'
-    const sparkline = !isDoubles ? (sparklines[key] || []) : []
-    const enriched = { ...p, sparkline }
-    if (selectedPlayer?.ittf_id === p.ittf_id && selectedPlayer?.sub_event === p.sub_event) {
-      setSelectedPlayer(null)
-    } else {
-      setSelectedPlayer(enriched)
-      setSelectedIsDoubles(isDoubles)
-    }
+    const id = isDoubles ? p.ittf_id1 : p.ittf_id
+    if (!id) return
+    navigate(`/player/${id}?sub=${p.sub_event}&age=${p.age_category}`)
   }
 
   const totalIndia   = allPlayers.length
@@ -918,34 +915,17 @@ export default function YouthPipelinePage() {
                         const isDoubles = p._type === 'doubles'
                         const key = `${p.ittf_id ?? p.ittf_id1}__${p.sub_event}`
                         const sparkline = sparklines[key] || []
-                        const isSelected = selectedPlayer &&
-                          (selectedPlayer.ittf_id === p.ittf_id || selectedPlayer.ittf_id1 === p.ittf_id1) &&
-                          selectedPlayer.sub_event === p.sub_event
                         return (
                           <PlayerCard
                             key={`${p.ittf_id ?? p.pair_id}__${p.sub_event}__${i}`}
                             player={{ ...p, sparkline }}
                             isDoubles={isDoubles}
                             onClick={() => selectPlayer(p)}
-                            selected={isSelected}
+                            selected={false}
                           />
                         )
                       })}
                     </div>
-
-                    {/* Player profile panel — shown below selected player's row */}
-                    {selectedPlayer && players.some(p =>
-                      (p.ittf_id === selectedPlayer.ittf_id || p.ittf_id1 === selectedPlayer.ittf_id1) &&
-                      p.sub_event === selectedPlayer.sub_event
-                    ) && (
-                      <div style={{ marginTop: 12 }}>
-                        <PlayerProfile
-                          player={selectedPlayer}
-                          isDoubles={selectedIsDoubles}
-                          onClose={() => setSelectedPlayer(null)}
-                        />
-                      </div>
-                    )}
                   </div>
                 )
               })}

@@ -6,6 +6,7 @@ import H2HDashboard from './components/H2HDashboard.jsx'
 import LivePage from './pages/LivePage.jsx'
 import TournamentPage from './pages/TournamentPage.jsx'
 import YouthPipelinePage from './pages/YouthPipelinePage.jsx'
+import PlayerPage from './pages/PlayerPage.jsx'
 import PageBackground from './components/PageBackground.jsx'
 
 function ProtectedRoute({ children }) {
@@ -63,6 +64,11 @@ export default function App() {
       <Route path="/tournament" element={
         <ProtectedRoute>
           <TournamentPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/player/:ittf_id" element={
+        <ProtectedRoute>
+          <PlayerPage />
         </ProtectedRoute>
       } />
     </Routes>
