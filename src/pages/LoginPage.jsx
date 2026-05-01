@@ -39,8 +39,9 @@ export default function LoginPage() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: '#f8fafc',
       fontFamily: 'system-ui, sans-serif',
+      position: 'relative',
+      zIndex: 4,
     }}>
       <div style={{
         width: '100%',
