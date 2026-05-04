@@ -186,7 +186,6 @@ export default function PlayerPage() {
         .order('ranking_year', { ascending: true })
         .order('ranking_week', { ascending: true })
         .limit(300)
-      if (ageCategory) rankQ = rankQ.eq('age_category', ageCategory)
       const { data: hist } = await rankQ
 
       // Partner info for doubles
