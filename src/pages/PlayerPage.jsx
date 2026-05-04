@@ -247,17 +247,42 @@ export default function PlayerPage() {
           evtMap = Object.fromEntries((evts || []).map(e => [e.event_id, e.event_name]))
         }
 
+        // Opponent ranking histories — for rank-context metrics
+        const singlesOppIds = [...new Set(matchData.map(m => m.comp1_id === numId ? m.comp2_id : m.comp1_id).filter(Boolean))]
+        let oppRankMap = {}
+        if (singlesOppIds.length) {
+          const { data: oppRanks } = await supabase
+            .from('youth_rankings_singles')
+            .select('ittf_id, current_rank, publish_date')
+            .in('ittf_id', singlesOppIds.map(String))
+            .eq('sub_event', subEvent)
+            .order('publish_date', { ascending: false })
+          for (const r of oppRanks || []) {
+            if (!oppRankMap[r.ittf_id]) oppRankMap[r.ittf_id] = []
+            oppRankMap[r.ittf_id].push({ rank: r.current_rank, date: r.publish_date })
+          }
+        }
+
+        // Player rank history sorted desc for match-time lookup
+        const histDesc = (hist || []).slice().reverse()
+
         matchData = matchData.map(m => {
           const onComp1 = m.comp1_id === numId
           const oppId = onComp1 ? m.comp2_id : m.comp1_id
           const opp = oppMap[oppId]
+          const matchDate = new Date(m.event_date)
+          const oppH = oppRankMap[String(oppId)] || []
+          const opponentRank = oppH.find(r => new Date(r.date) <= matchDate)?.rank ?? 999
+          const playerRankAtMatch = histDesc.find(r => new Date(r.publish_date) <= matchDate)?.current_rank ?? 999
           return {
             ...m,
-            opp_name:      opp?.player_name || `Player ${oppId}`,
-            opp_country:   opp?.country_code || '—',
-            player_result: onComp1 ? m.result : (m.result === 'W' ? 'L' : 'W'),
-            round:         cleanRound(m.round_phase),
-            event_name:    cleanEventName(evtMap[m.event_id]),
+            opp_name:          opp?.player_name || `Player ${oppId}`,
+            opp_country:       opp?.country_code || '—',
+            player_result:     onComp1 ? m.result : (m.result === 'W' ? 'L' : 'W'),
+            round:             cleanRound(m.round_phase),
+            event_name:        cleanEventName(evtMap[m.event_id]),
+            opponentRank,
+            playerRankAtMatch,
           }
         })
         if (!cancelled) setEvents(evtMap)
@@ -432,6 +457,18 @@ export default function PlayerPage() {
         }
       }
     }
+    // Rank-context metrics (require opponentRank + playerRankAtMatch on each match)
+    const ranked = matches.filter(m => m.opponentRank !== 999 && m.playerRankAtMatch && m.playerRankAtMatch !== 999)
+    const vsHigher = ranked.filter(m => m.opponentRank < m.playerRankAtMatch)
+    const vsLower  = ranked.filter(m => m.opponentRank > m.playerRankAtMatch)
+    const vsHigherWins = vsHigher.filter(m => m.player_result === 'W').length
+    const vsLowerWins  = vsLower.filter(m => m.player_result === 'W').length
+    const upsetRate     = vsHigher.length >= 3 ? (vsHigherWins / vsHigher.length) * 100 : null
+    const dominanceRate = vsLower.length  >= 3 ? (vsLowerWins  / vsLower.length)  * 100 : null
+    const bananaSkinMatches = matches.filter(m => m.player_result === 'L' && m.opponentRank !== 999 && m.playerRankAtMatch && m.opponentRank > m.playerRankAtMatch)
+    const bananaSkinRate = vsLower.length > 0 ? (bananaSkinMatches.length / vsLower.length) * 100 : null
+    const biggestScalp = vsHigher.filter(m => m.player_result === 'W').sort((a, b) => a.opponentRank - b.opponentRank)[0] ?? null
+
     return {
       straightWins, straightLosses, comebacks,
       clutchIndex: clutchTotal >= 3 ? (clutchWins / clutchTotal) * 100 : null,
@@ -440,6 +477,13 @@ export default function PlayerPage() {
       avgPtDiff: totalGames > 0 ? (totalPlayerPts - totalOppPts) / totalGames : null,
       ppg: totalGames > 0 ? totalPlayerPts / totalGames : null,
       tournamentDepth: Object.values(depthMap),
+      // rank context
+      upsetRate, dominanceRate, bananaSkinRate,
+      vsHigher, vsLower, vsHigherCount: vsHigher.length, vsLowerCount: vsLower.length,
+      bananaSkinMatches,
+      biggestScalpRank: biggestScalp?.opponentRank ?? null,
+      biggestScalpName: biggestScalp?.opp_name ?? null,
+      hasRankContext: ranked.length >= 5,
     }
   }, [matches, numId])
 
@@ -741,6 +785,24 @@ export default function PlayerPage() {
                             { label: 'Straight-Set Losses',value: `${perfMetrics.straightLosses}`, sub: losses.length > 0 ? `${((perfMetrics.straightLosses / losses.length) * 100).toFixed(0)}% of losses` : null, accent: '#f87171', desc: 'Lost without winning a game — complete capitulations' },
                           ],
                         },
+                        ...(perfMetrics.hasRankContext ? [{
+                          key: 'ambition',
+                          heading: 'Ambition — Playing Up',
+                          summary: `Upset Rate ${perfMetrics.upsetRate != null ? perfMetrics.upsetRate.toFixed(0) + '%' : '—'} · Best scalp ${perfMetrics.biggestScalpRank ? '#' + perfMetrics.biggestScalpRank : '—'} ${perfMetrics.biggestScalpName ? '(' + perfMetrics.biggestScalpName + ')' : ''}`,
+                          items: [
+                            { label: 'Upset Rate',       value: perfMetrics.upsetRate != null ? `${perfMetrics.upsetRate.toFixed(1)}%` : '—',   accent: perfMetrics.upsetRate != null && perfMetrics.upsetRate >= 30 ? '#10b981' : '#94a3b8', desc: `Win % vs higher-ranked opponents · ${perfMetrics.vsHigherCount} matches` },
+                            { label: 'Best Single Upset',value: perfMetrics.biggestScalpRank ? `#${perfMetrics.biggestScalpRank}` : '—',         accent: '#8b5cf6', desc: perfMetrics.biggestScalpName ? `Beat ${perfMetrics.biggestScalpName}` : 'Highest-ranked opponent beaten' },
+                          ],
+                        }] : []),
+                        ...(perfMetrics.hasRankContext ? [{
+                          key: 'consistency',
+                          heading: 'Consistency — Holding Ground',
+                          summary: `Dominance Rate ${perfMetrics.dominanceRate != null ? perfMetrics.dominanceRate.toFixed(0) + '%' : '—'} · Banana Skin Rate ${perfMetrics.bananaSkinRate != null ? perfMetrics.bananaSkinRate.toFixed(0) + '%' : '—'}`,
+                          items: [
+                            { label: 'Dominance Rate',   value: perfMetrics.dominanceRate != null ? `${perfMetrics.dominanceRate.toFixed(1)}%` : '—',   accent: perfMetrics.dominanceRate != null && perfMetrics.dominanceRate >= 70 ? '#10b981' : '#f59e0b', desc: `Win % vs lower-ranked opponents · ${perfMetrics.vsLowerCount} matches` },
+                            { label: 'Banana Skin Rate', value: perfMetrics.bananaSkinRate != null ? `${perfMetrics.bananaSkinRate.toFixed(1)}%` : '—', accent: perfMetrics.bananaSkinRate != null && perfMetrics.bananaSkinRate > 30 ? '#f87171' : '#94a3b8', desc: `Shock losses to lower-ranked opponents · ${perfMetrics.bananaSkinMatches.length} matches` },
+                          ],
+                        }] : []),
                         {
                           key: 'mental',
                           heading: 'Mental Game — Under Pressure',
