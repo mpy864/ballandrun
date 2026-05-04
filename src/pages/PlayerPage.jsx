@@ -8,6 +8,10 @@ import {
   Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react'
+import {
+  parseScoresForPlayer, parseGame1Won, countDeuceGames, checkComeback,
+  computeWindowData, nsNarrative,
+} from '../lib/playerMetrics.js'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -141,6 +145,230 @@ function MatchMiniRow({ match }) {
   )
 }
 
+// ─── Senior Performance Tab ──────────────────────────────────────────────────
+
+function SeniorPerformanceTab({ metrics, perfWindow, setPerfWindow, openPerfSections, setOpenPerfSections, openPerfItem, setOpenPerfItem }) {
+  if (!metrics) {
+    return (
+      <div style={{ textAlign: 'center', color: '#94a3b8', padding: '40px 0', fontSize: 13 }}>
+        Loading performance data…
+      </div>
+    )
+  }
+
+  const dna = metrics.wttWindows[perfWindow]
+  if (!dna) return null
+  const rc = dna.rankContext
+
+  const GRADE_DESC = { '1':'Olympics, Worlds, Grand Smash', '2':'Asian Games, WTT Champions, World Cup', '3':'WTT Star Contender, Commonwealth', '4':'WTT Contender, South Asian', '5':'WTT Feeder', '6':'TTFI Nationals, Ranking, Khelo India' }
+
+  const toggleSection = (key) => {
+    setOpenPerfSections(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+    setOpenPerfItem(null)
+  }
+
+  const toggleItem = (key) => setOpenPerfItem(prev => prev === key ? null : key)
+
+  const allSections = [
+    {
+      key: 'outcomes',
+      heading: 'Outcomes',
+      summary: `${dna.winRate.toFixed(1)}% win rate · ${dna.wins}W ${dna.losses}L · form: ${(dna.currentForm||[]).slice(0,5).join(' ')}`,
+      items: [
+        { key: 'winrate',        label: 'Win Rate',            northStar: true, narrative: nsNarrative('winrate', dna.winRate), desc: `${dna.wins}W · ${dna.losses}L · ${dna.matchCount} matches`,        value: `${dna.winRate.toFixed(1)}%`,                                    accent: dna.winRate >= 50 ? '#10b981' : '#f87171', matches: [] },
+        { key: 'avgptdiff',      label: 'Avg Point Diff',      desc: 'Average point margin per game',                                                                                                        value: `${dna.avgPtDiff >= 0 ? '+' : ''}${dna.avgPtDiff.toFixed(2)}`,  accent: dna.avgPtDiff >= 0 ? '#10b981' : '#f87171', matches: [] },
+        { key: 'ppg',            label: 'Points Per Game',     desc: 'Avg points scored per game (attack volume)',                                                                                            value: dna.pointsPerGame !== null ? dna.pointsPerGame.toFixed(1) : '—', accent: '#6366f1', matches: [] },
+        { key: 'straightWins',   label: 'Straight-Set Wins',   desc: 'Won without dropping a game — dominant victories',                                                                                     value: `${dna.straightSetsWins}`,   sub: dna.wins > 0 ? `${((dna.straightSetsWins/dna.wins)*100).toFixed(0)}% of wins` : null,     accent: '#10b981', matches: dna.dnaGroups.straightWins },
+        { key: 'straightLosses', label: 'Straight-Set Losses', desc: 'Lost without winning a game — complete capitulations',                                                                                 value: `${dna.straightSetsLosses}`, sub: dna.losses > 0 ? `${((dna.straightSetsLosses/dna.losses)*100).toFixed(0)}% of losses` : null, accent: '#f87171', matches: dna.dnaGroups.straightLosses },
+        { key: 'form',           label: 'Current Form',        desc: `Last ${(dna.currentForm||[]).length} matches`,                                                                                          value: (() => { const f = dna.currentForm||[]; const w = f.filter(r=>r==='W').length; return `${w}W ${f.length-w}L` })(), sub: (dna.currentForm||[]).join(' '), accent: (() => { const f = dna.currentForm||[]; const w = f.filter(r=>r==='W').length; return w/Math.max(f.length,1) >= 0.5 ? '#10b981' : '#f87171' })(), matches: [] },
+      ],
+    },
+    ...(rc ? [{
+      key: 'ambition',
+      heading: 'Ambition — Playing Up',
+      summary: `Upset Rate ${rc.upsetRate !== null ? rc.upsetRate.toFixed(0)+'%' : '—'} · Upset Yield ${dna.upsetYield.toFixed(0)}% · Best scalp ${rc.biggestScalpRank ? '#'+rc.biggestScalpRank : '—'}`,
+      items: [
+        { key: 'ambitionzone',  label: 'Ambition Zone Win Rate', desc: `Win % vs opponents ranked 20+ above at match time · ${rc.ambitionMatches.length} matches`,  value: rc.ambitionWinRate !== null ? `${rc.ambitionWinRate.toFixed(1)}%` : '—',  accent: rc.ambitionWinRate !== null && rc.ambitionWinRate >= 25 ? '#10b981' : '#94a3b8', matches: rc.ambitionMatches },
+        { key: 'upsetrate',     label: 'Upset Rate',             northStar: true, narrative: nsNarrative('upsetrate', rc.upsetRate), desc: `Win % vs higher-ranked opponents · ${rc.vsHigherCount} matches`, value: rc.upsetRate !== null ? `${rc.upsetRate.toFixed(1)}%` : '—',             accent: rc.upsetRate !== null && rc.upsetRate >= 30 ? '#10b981' : '#94a3b8',             matches: rc.vsHigherMatches },
+        { key: 'upsetyield',    label: 'Upset Yield',            desc: '% of total wins that came against higher-ranked opponents',                                   value: `${dna.upsetYield.toFixed(1)}%`,                                           accent: dna.upsetYield >= 25 ? '#10b981' : '#94a3b8',                                    matches: dna.allMatches.filter(m => m.isUpset) },
+        { key: 'biggestscalp',  label: 'Best Single Upset Win',  desc: 'Highest-ranked opponent beaten',                                                               value: rc.biggestScalpRank ? `#${rc.biggestScalpRank}` : '—',                    accent: '#8b5cf6',                                                                        matches: rc.biggestScalpMatch },
+      ],
+    }] : []),
+    ...(rc ? [{
+      key: 'consistency',
+      heading: 'Consistency — Holding Ground',
+      summary: `Win Rate ±20 ranks ${rc.peerWinRate !== null ? rc.peerWinRate.toFixed(0)+'%' : '—'} · Game 1 Win % ${rc.leadProtectionRate !== null ? rc.leadProtectionRate.toFixed(0)+'%' : '—'} · Loss vs Lower ${rc.bananaSkinRate.toFixed(0)}%`,
+      items: [
+        { key: 'dominance',   label: 'Dominance Rate',        desc: `Win % as favourite vs lower-ranked · ${rc.vsLowerCount} matches`,                                      value: rc.dominanceRate !== null ? `${rc.dominanceRate.toFixed(1)}%` : '—',         accent: rc.dominanceRate !== null && rc.dominanceRate >= 70 ? '#10b981' : '#f59e0b',          matches: rc.vsLowerMatches },
+        { key: 'hold',        label: 'Hold Rate',             desc: 'Win % vs players ranked 20+ below — must-win territory',                                                value: rc.holdRate !== null ? `${rc.holdRate.toFixed(1)}%` : '—',                   accent: rc.holdRate !== null && rc.holdRate >= 80 ? '#10b981' : '#f59e0b',                    matches: rc.holdMatches },
+        { key: 'bananaskin',  label: 'Loss Rate vs Lower',    desc: `Shock losses to lower-ranked · ${rc.bananaSkinMatches.length} of ${dna.losses} losses`,               value: `${rc.bananaSkinRate.toFixed(1)}%`,                                           accent: rc.bananaSkinRate > 30 ? '#f87171' : '#94a3b8',                                      matches: rc.bananaSkinMatches },
+        { key: 'peerzone',    label: 'Win Rate ±20 ranks',    northStar: true, narrative: nsNarrative('peerzone', rc.peerWinRate), desc: `Win % vs opponents within ±20 ranks · ${rc.peerMatches.length} matches`, value: rc.peerWinRate !== null ? `${rc.peerWinRate.toFixed(1)}%` : '—',           accent: rc.peerWinRate !== null && rc.peerWinRate >= 50 ? '#10b981' : '#f87171',             matches: rc.peerMatches },
+        { key: 'leadprotect', label: 'Win % when Game 1 won', desc: `Win % in matches where game 1 was won · ${rc.wonGame1Matches.length} such matches`,                   value: rc.leadProtectionRate !== null ? `${rc.leadProtectionRate.toFixed(1)}%` : '—', accent: rc.leadProtectionRate !== null && rc.leadProtectionRate >= 75 ? '#10b981' : '#f59e0b', matches: rc.wonGame1Matches.filter(m => m.result === 'W') },
+      ],
+    }] : []),
+    {
+      key: 'mental',
+      heading: 'Mental Game — Under Pressure',
+      summary: `Clutch ${dna.clutchIndex != null ? dna.clutchIndex.toFixed(0)+'%' : '—'} · Deciding game ${rc?.decidingWinRate != null ? rc.decidingWinRate.toFixed(0)+'%' : '—'} · ${dna.comebackWins} comebacks`,
+      items: [
+        { key: 'clutch',    label: 'Clutch Index',    northStar: true, narrative: nsNarrative('clutch', dna.clutchIndex), desc: 'Win rate in deciding-game matches (3-2 or 4-3)', value: dna.clutchIndex != null ? `${dna.clutchIndex.toFixed(1)}%` : '—', sub: `${dna.dnaGroups.clutch.length} deciding matches`, accent: '#f59e0b', matches: dna.dnaGroups.clutch },
+        { key: 'comebacks', label: 'Comeback Wins',   desc: 'Won after losing game 1 — mental resilience',                                                                    value: `${dna.comebackWins}`, sub: dna.wins > 0 ? `${((dna.comebackWins/dna.wins)*100).toFixed(0)}% of wins` : null, accent: '#38bdf8', matches: dna.dnaGroups.comebacks },
+        ...(rc ? [
+          { key: 'deciding',      label: 'Deciding Game Win Rate', desc: `Win % in matches going to game 5 or 7 · ${rc.decidingMatches.length} matches`,          value: rc.decidingWinRate !== null ? `${rc.decidingWinRate.toFixed(1)}%` : '—',  accent: rc.decidingWinRate !== null && rc.decidingWinRate >= 50 ? '#10b981' : '#f87171', matches: rc.decidingMatches },
+          { key: 'deuce',         label: 'Deuce Win Rate',         desc: `Win % in games reaching 10–10 · ${rc.deuceTotal} deuce games`,                          value: rc.deuceWinRate !== null ? `${rc.deuceWinRate.toFixed(1)}%` : '—',        accent: rc.deuceWinRate !== null && rc.deuceWinRate >= 50 ? '#10b981' : '#f87171',     matches: rc.deuceMatches || [] },
+          { key: 'momentum-hot',  label: 'Momentum — Hot Streak',  desc: `Win % entering match on a 3-win streak · ${rc.hotTotal >= 3 ? rc.hotTotal+' situations' : 'insufficient data'}`,  value: rc.momentumHotRate !== null ? `${rc.momentumHotRate.toFixed(1)}%` : '—',  accent: rc.momentumHotRate !== null && rc.momentumHotRate >= 60 ? '#10b981' : '#94a3b8', matches: rc.hotMatches },
+          { key: 'momentum-cold', label: 'Momentum — Cold Streak', desc: `Win % entering match on a 3-loss streak · ${rc.coldTotal >= 3 ? rc.coldTotal+' situations' : 'insufficient data'}`, value: rc.momentumColdRate !== null ? `${rc.momentumColdRate.toFixed(1)}%` : '—', accent: rc.momentumColdRate !== null && rc.momentumColdRate >= 40 ? '#38bdf8' : '#f87171', matches: rc.coldMatches },
+        ] : []),
+      ],
+    },
+    ...(rc ? [{
+      key: 'tournament',
+      heading: 'Tournament Depth',
+      summary: `Early rounds ${rc.groupWinRate !== null ? rc.groupWinRate.toFixed(0)+'%' : '—'} · QF/SF ${rc.knockoutWinRate !== null ? rc.knockoutWinRate.toFixed(0)+'%' : '—'} · Finals ${rc.finalsWinRate !== null ? rc.finalsWinRate.toFixed(0)+'%' : '—'}`,
+      items: [
+        { key: 'groupstage', label: 'Early Rounds Win Rate', desc: `Win % in group stage & rounds before QF · ${rc.groupMatches.length} matches`,       value: rc.groupWinRate !== null ? `${rc.groupWinRate.toFixed(1)}%` : '—',    accent: rc.groupWinRate !== null && rc.groupWinRate >= 60 ? '#10b981' : '#f59e0b',    matches: rc.groupMatches },
+        { key: 'knockout',   label: 'QF / SF Win Rate',      northStar: true, narrative: nsNarrative('knockout', rc.knockoutWinRate), desc: `Win % in quarter-finals and semi-finals · ${rc.knockoutMatches.length} matches`, value: rc.knockoutWinRate !== null ? `${rc.knockoutWinRate.toFixed(1)}%` : '—', accent: rc.knockoutWinRate !== null && rc.knockoutWinRate >= 50 ? '#10b981' : '#f59e0b', matches: rc.knockoutMatches },
+        { key: 'finals',     label: 'Finals Win Rate',        desc: `Win % when reaching a final · ${rc.finalsMatches.length} finals`,                   value: rc.finalsWinRate !== null ? `${rc.finalsWinRate.toFixed(1)}%` : '—',   accent: rc.finalsWinRate !== null && rc.finalsWinRate >= 50 ? '#10b981' : '#f87171',  matches: rc.finalsMatches },
+        { key: 'avground',   label: 'Avg Round Reached',      desc: 'Average deepest stage reached per tournament',                                       value: rc.avgRoundLabel || '—',                                                accent: '#6366f1',                                                                       matches: [], customContent: rc.avgRoundByGrade?.length > 0 ? rc.avgRoundByGrade : null },
+      ],
+    }] : []),
+  ]
+
+  return (
+    <div className="p-5 space-y-3">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-xs text-slate-500 font-medium uppercase tracking-widest">Performance Insights</p>
+        <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5">
+          {['6M', '12M', '18M'].map(w => (
+            <button key={w} onClick={() => setPerfWindow(w)}
+              className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${perfWindow === w ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+              {w}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {allSections.map(section => {
+        const isOpen = openPerfSections.has(section.key)
+        return (
+          <div key={section.key} className="border border-slate-200 rounded-xl overflow-hidden">
+            <button
+              onClick={() => toggleSection(section.key)}
+              className={`w-full flex items-center justify-between px-4 py-3.5 text-left transition-colors ${isOpen ? 'bg-slate-50 border-b border-slate-100' : 'hover:bg-slate-50/60'}`}>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-slate-800">{section.heading}</p>
+                {!isOpen && <p className="text-xs text-slate-400 mt-0.5">{section.summary}</p>}
+              </div>
+              {!isOpen && (() => {
+                const ns = section.items.find(it => it.northStar)
+                if (!ns || ns.value === '—') return null
+                return <span style={{ fontSize: 22, fontWeight: 800, color: ns.accent, marginRight: 10, lineHeight: 1 }}>{ns.value}</span>
+              })()}
+              {isOpen ? <ChevronUp size={15} className="text-slate-400 shrink-0" /> : <ChevronDown size={15} className="text-slate-400 shrink-0" />}
+            </button>
+
+            {isOpen && (
+              <div className="divide-y divide-slate-100">
+                {section.items.map(item => {
+                  const hasContent = (item.matches && item.matches.length > 0) || !!item.customContent
+                  const isItemOpen = openPerfItem === item.key
+
+                  if (item.northStar) {
+                    return (
+                      <div key={item.key} style={{ borderBottom: '1px solid #e8edf4' }}>
+                        <button
+                          onClick={() => hasContent && toggleItem(item.key)}
+                          style={{ width: '100%', textAlign: 'left', border: 'none', cursor: hasContent ? 'pointer' : 'default', background: `${item.accent}09`, display: 'block', padding: '16px 16px 14px' }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <span style={{ display: 'inline-block', fontSize: 9, fontWeight: 800, color: item.accent, textTransform: 'uppercase', letterSpacing: '0.1em', background: `${item.accent}1a`, padding: '2px 7px', borderRadius: 4, marginBottom: 6 }}>North Star</span>
+                              <p style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', marginBottom: 3 }}>{item.label}</p>
+                              {item.narrative && <p style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic', marginBottom: 3 }}>{item.narrative}</p>}
+                              <p style={{ fontSize: 11, color: '#94a3b8' }}>{item.desc}</p>
+                            </div>
+                            <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                              <div>
+                                <p style={{ fontSize: 32, fontWeight: 800, lineHeight: 1, color: item.accent }}>{item.value}</p>
+                                {item.sub && <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{item.sub}</p>}
+                              </div>
+                              {hasContent && (isItemOpen ? <ChevronUp size={13} style={{ color: '#94a3b8', flexShrink: 0 }} /> : <ChevronDown size={13} style={{ color: '#94a3b8', flexShrink: 0 }} />)}
+                            </div>
+                          </div>
+                        </button>
+                        {isItemOpen && item.matches.length > 0 && (
+                          <div className="border-t border-slate-100 bg-slate-50/40 p-3">
+                            {item.matches.slice(0, 15).map((m, i) => (
+                              <MatchMiniRow key={i} match={{ player_result: m.result, opp_name: m.opponent, game_scores: m.score, round: m.round }} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <div key={item.key}>
+                      <button
+                        onClick={() => hasContent && toggleItem(item.key)}
+                        className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${isItemOpen ? 'bg-blue-50/30' : hasContent ? 'hover:bg-slate-50/70' : ''}`}>
+                        <span style={{ width: 3, alignSelf: 'stretch', borderRadius: 99, background: item.accent, flexShrink: 0 }} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-800">{item.label}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">{item.desc}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-base font-bold" style={{ color: item.accent }}>{item.value}</p>
+                          {item.sub && <p className="text-[11px] text-slate-400 mt-0.5">{item.sub}</p>}
+                        </div>
+                        {hasContent
+                          ? isItemOpen ? <ChevronUp size={13} className="text-slate-400 shrink-0" /> : <ChevronDown size={13} className="text-slate-400 shrink-0" />
+                          : <span className="w-[13px] shrink-0" />}
+                      </button>
+                      {isItemOpen && item.customContent && (
+                        <div className="border-t border-slate-100 bg-slate-50/40 px-4 py-2">
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr>
+                                <td style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', paddingBottom: 6, paddingRight: 12 }}>Grade</td>
+                                <td style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', paddingBottom: 6 }}>Events</td>
+                                <td style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', paddingBottom: 6, textAlign: 'right' }}>Avg Round</td>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {item.customContent.map(g => (
+                                <tr key={g.grade} style={{ borderTop: '0.5px solid #f1f5f9' }}>
+                                  <td style={{ padding: '6px 12px 6px 0', fontSize: 12, fontWeight: 600, color: '#6366f1', whiteSpace: 'nowrap' }}>G{g.grade}</td>
+                                  <td style={{ padding: '6px 12px 6px 0', fontSize: 11, color: '#64748b' }}>{GRADE_DESC[g.grade] || ''} <span style={{ color: '#94a3b8' }}>· {g.count} {g.count === 1 ? 'tourn' : 'tourneys'}</span></td>
+                                  <td style={{ padding: '6px 0', fontSize: 12, fontWeight: 600, color: '#334155', textAlign: 'right' }}>{g.label}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      {isItemOpen && !item.customContent && item.matches && item.matches.length > 0 && (
+                        <div className="border-t border-slate-100 bg-slate-50/40 p-3">
+                          {item.matches.slice(0, 15).map((m, i) => (
+                            <MatchMiniRow key={i} match={{ player_result: m.result, opp_name: m.opponent, game_scores: m.score, round: m.round }} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function PlayerPage() {
@@ -163,6 +391,11 @@ export default function PlayerPage() {
   const [wlFilter,    setWlFilter]    = useState('round')
   const [openRow,     setOpenRow]     = useState(null)
   const [openPerfSec, setOpenPerfSec] = useState(null)
+  // Senior OKR-grade performance
+  const [seniorMetrics,     setSeniorMetrics]     = useState(null)
+  const [perfWindow,        setPerfWindow]        = useState('6M')
+  const [openPerfSections,  setOpenPerfSections]  = useState(new Set())
+  const [openPerfItem,      setOpenPerfItem]      = useState(null)
 
   useEffect(() => {
     if (!numId) return
@@ -170,6 +403,7 @@ export default function PlayerPage() {
     setLoading(true)
     setRankHistory([])
     setMatches([])
+    setSeniorMetrics(null)
 
     async function load() {
       // 1. Player info
@@ -316,6 +550,74 @@ export default function PlayerPage() {
           }
         })
         if (!cancelled) setEvents(evtMap)
+
+        // Senior OKR-grade ledger + window metrics
+        if (isSenior && !cancelled) {
+          // Fetch event tiers for senior events
+          let evtGradeMap = {}
+          const eventIds2 = [...new Set(matchData.map(m => m.event_id).filter(Boolean))]
+          if (eventIds2.length) {
+            const { data: graded } = await supabase
+              .from('wtt_events_graded')
+              .select('event_id, event_name, event_tier, tops_grade')
+              .in('event_id', eventIds2)
+            for (const e of graded || []) evtGradeMap[e.event_id] = e
+          }
+
+          // Rankings in desc order for computeWindowData's rankAtStart lookup
+          const rankingsDesc = (hist || []).slice().reverse().map(r => ({
+            ranking_date: r.publish_date,
+            rank: r.current_rank,
+          }))
+          const playerCurrentRank = rankingsDesc[0]?.rank || 999
+
+          const seniorLedger = matchData.map(m => {
+            const isComp1 = m.comp1_id === numId
+            const oppId   = isComp1 ? m.comp2_id : m.comp1_id
+            const opp     = oppMap[oppId]
+            const matchDate = new Date(m.event_date)
+            const oppH      = oppRankMap[oppId] || []
+            const opponentRank        = oppH.find(r => new Date(r.date) <= matchDate)?.rank ?? 999
+            const opponentCurrentRank = oppH[0]?.rank ?? 999
+            const playerRankAtMatch   = rankingsDesc.find(r => new Date(r.ranking_date) <= matchDate)?.rank ?? playerCurrentRank
+            const won = isComp1 ? m.result === 'W' : m.result === 'L'
+            const { gamesWon, gamesLost, pointsWon, pointsLost, totalGames } =
+              parseScoresForPlayer(m.game_scores, isComp1)
+            const pointDiff  = totalGames > 0 ? (pointsWon - pointsLost) / totalGames : null
+            const eventInfo  = evtGradeMap[m.event_id]
+            return {
+              rawDate: matchDate,
+              opponent: opp?.player_name || `Player ${oppId}`,
+              opponentCountry: opp?.country_code || null,
+              opponentRank, opponentCurrentRank, playerRankAtMatch,
+              tournament:    eventInfo?.event_name || evtMap[m.event_id] || 'Unknown',
+              tournamentKey: String(m.event_id),
+              eventTier:     eventInfo?.tops_grade ?? null,
+              eventTierStr:  eventInfo?.event_tier ?? null,
+              round:  m.round_phase || 'N/A',
+              score:  m.game_scores || 'N/A',
+              result: won ? 'W' : 'L',
+              isComp1,
+              isUpset:        won && opponentRank < playerRankAtMatch,
+              isStraightWin:  won && gamesLost === 0 && totalGames >= 3,
+              isStraightLoss: !won && gamesWon  === 0 && totalGames >= 3,
+              isComeback: checkComeback(m.game_scores, isComp1, won),
+              gamesWon, gamesLost, totalGames, pointsWon, pointDiff,
+              wonGame1:   parseGame1Won(m.game_scores, isComp1),
+              deuceGames: countDeuceGames(m.game_scores, isComp1),
+              isDomestic: false,
+            }
+          })
+
+          setSeniorMetrics({
+            wttLedger: seniorLedger,
+            wttWindows: {
+              '6M':  computeWindowData(seniorLedger, rankingsDesc, 6,  playerCurrentRank),
+              '12M': computeWindowData(seniorLedger, rankingsDesc, 12, playerCurrentRank),
+              '18M': computeWindowData(seniorLedger, rankingsDesc, 18, playerCurrentRank),
+            },
+          })
+        }
       } else {
         // Doubles
         const { data: dbm } = await supabase
@@ -796,7 +1098,19 @@ export default function PlayerPage() {
                 )}
 
                 {/* ── PERFORMANCE TAB ── */}
-                {activeTab === 'performance' && (
+                {activeTab === 'performance' && isSenior && (
+                  <SeniorPerformanceTab
+                    metrics={seniorMetrics}
+                    perfWindow={perfWindow}
+                    setPerfWindow={v => { setPerfWindow(v); setOpenPerfSections(new Set()); setOpenPerfItem(null) }}
+                    openPerfSections={openPerfSections}
+                    setOpenPerfSections={setOpenPerfSections}
+                    openPerfItem={openPerfItem}
+                    setOpenPerfItem={setOpenPerfItem}
+                  />
+                )}
+
+                {activeTab === 'performance' && !isSenior && (
                   <div className="p-5 space-y-3">
                     {!perfMetrics ? (
                       <p style={{ textAlign: 'center', color: '#94a3b8', padding: '40px 0', fontSize: 13 }}>No match data to compute metrics.</p>
@@ -818,7 +1132,7 @@ export default function PlayerPage() {
                         ...(perfMetrics.hasRankContext ? [{
                           key: 'ambition',
                           heading: 'Ambition — Playing Up',
-                          summary: `Upset Rate ${perfMetrics.upsetRate != null ? perfMetrics.upsetRate.toFixed(0) + '%' : '—'} · Best scalp ${perfMetrics.biggestScalpRank ? '#' + perfMetrics.biggestScalpRank : '—'} ${perfMetrics.biggestScalpName ? '(' + perfMetrics.biggestScalpName + ')' : ''}`,
+                          summary: `Upset Rate ${perfMetrics.upsetRate != null ? perfMetrics.upsetRate.toFixed(0) + '%' : '—'} · Best scalp ${perfMetrics.biggestScalpRank ? '#' + perfMetrics.biggestScalpRank : '—'}`,
                           items: [
                             { label: 'Upset Rate',       value: perfMetrics.upsetRate != null ? `${perfMetrics.upsetRate.toFixed(1)}%` : '—',   accent: perfMetrics.upsetRate != null && perfMetrics.upsetRate >= 30 ? '#10b981' : '#94a3b8', desc: `Win % vs higher-ranked opponents · ${perfMetrics.vsHigherCount} matches` },
                             { label: 'Best Single Upset',value: perfMetrics.biggestScalpRank ? `#${perfMetrics.biggestScalpRank}` : '—',         accent: '#8b5cf6', desc: perfMetrics.biggestScalpName ? `Beat ${perfMetrics.biggestScalpName}` : 'Highest-ranked opponent beaten' },
@@ -838,8 +1152,8 @@ export default function PlayerPage() {
                           heading: 'Mental Game — Under Pressure',
                           summary: `Clutch ${perfMetrics.clutchIndex != null ? perfMetrics.clutchIndex.toFixed(0) + '%' : '—'} · ${perfMetrics.comebacks} comebacks`,
                           items: [
-                            { label: 'Clutch Index',         value: perfMetrics.clutchIndex != null ? `${perfMetrics.clutchIndex.toFixed(1)}%` : '—', sub: perfMetrics.clutchTotal >= 3 ? `${perfMetrics.clutchWins}/${perfMetrics.clutchTotal} deciding matches` : `Only ${perfMetrics.clutchTotal} deciding matches`, accent: '#f59e0b', desc: 'Win rate in 5-game matches (3-2 / 2-3)' },
-                            { label: 'Comeback Wins',        value: `${perfMetrics.comebacks}`, sub: wins.length > 0 ? `${((perfMetrics.comebacks / wins.length) * 100).toFixed(0)}% of wins` : null, accent: '#38bdf8', desc: 'Won after losing game 1 — mental resilience' },
+                            { label: 'Clutch Index',  value: perfMetrics.clutchIndex != null ? `${perfMetrics.clutchIndex.toFixed(1)}%` : '—', sub: perfMetrics.clutchTotal >= 3 ? `${perfMetrics.clutchWins}/${perfMetrics.clutchTotal} deciding matches` : `Only ${perfMetrics.clutchTotal} deciding matches`, accent: '#f59e0b', desc: 'Win rate in 5-game matches (3-2 / 2-3)' },
+                            { label: 'Comeback Wins', value: `${perfMetrics.comebacks}`, sub: wins.length > 0 ? `${((perfMetrics.comebacks / wins.length) * 100).toFixed(0)}% of wins` : null, accent: '#38bdf8', desc: 'Won after losing game 1 — mental resilience' },
                           ],
                         },
                         {
