@@ -179,14 +179,16 @@ export default function PlayerPage() {
       // 2. Ranking history
       const rankTable  = isDoubles ? 'youth_rankings_doubles' : 'youth_rankings_singles'
       const rankIdCol  = isDoubles ? 'ittf_id1' : 'ittf_id'
-      let rankQ = supabase.from(rankTable)
-        .select('ranking_year, ranking_week, publish_date, age_cat_rank, current_rank, points, rank_diff, age_category, ittf_id2')
+      const rankCols   = isDoubles
+        ? 'ranking_year, ranking_week, publish_date, current_rank, points, rank_diff, age_category, ittf_id2'
+        : 'ranking_year, ranking_week, publish_date, age_cat_rank, current_rank, points_ytd, rank_diff, age_category'
+      const { data: hist } = await supabase.from(rankTable)
+        .select(rankCols)
         .eq(rankIdCol, numId)
         .eq('sub_event', subEvent)
         .order('ranking_year', { ascending: true })
         .order('ranking_week', { ascending: true })
         .limit(300)
-      const { data: hist } = await rankQ
 
       // Partner info for doubles
       let partner = null
