@@ -7,7 +7,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -31,8 +31,9 @@ const ROUND_DEPTH = {
 }
 
 const WL_FILTERS = [
-  { id: 'round',   label: 'By Round'   },
-  { id: 'country', label: 'By Country' },
+  { id: 'round',      label: 'By Round'    },
+  { id: 'country',   label: 'By Country'  },
+  { id: 'competitor', label: 'By Opponent' },
 ]
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -159,6 +160,7 @@ export default function PlayerPage() {
   const [rankWindow,  setRankWindow]  = useState('All')
   const [wlFilter,    setWlFilter]    = useState('round')
   const [openRow,     setOpenRow]     = useState(null)
+  const [openPerfSec, setOpenPerfSec] = useState(null)
 
   useEffect(() => {
     if (!numId) return
@@ -377,6 +379,70 @@ export default function PlayerPage() {
     return Object.entries(map).sort(([, a], [, b]) => (b.w + b.l) - (a.w + a.l))
   }, [matches])
 
+  const byCompetitor = useMemo(() => {
+    const map = {}
+    for (const m of matches) {
+      const n = m.opp_name || 'Unknown'
+      if (!map[n]) map[n] = { w: 0, l: 0, matches: [] }
+      if (m.player_result === 'W') map[n].w++
+      else if (m.player_result === 'L') map[n].l++
+      map[n].matches.push(m)
+    }
+    return Object.entries(map).sort(([, a], [, b]) => (b.w + b.l) - (a.w + a.l))
+  }, [matches])
+
+  const perfMetrics = useMemo(() => {
+    if (!matches.length) return null
+    let straightWins = 0, straightLosses = 0, comebacks = 0
+    let clutchWins = 0, clutchTotal = 0
+    let totalPlayerPts = 0, totalOppPts = 0, totalGames = 0
+    const depthMap = {
+      early:  { label: 'Early Rounds', rounds: new Set(['Group Stage', 'Round of 128', 'Round of 64', 'Round of 32', 'Qualifying']), w: 0, l: 0 },
+      qfsf:   { label: 'QF / SF',      rounds: new Set(['Quarter-Final', 'Semi-Final']), w: 0, l: 0 },
+      finals: { label: 'Finals',       rounds: new Set(['Final']), w: 0, l: 0 },
+    }
+    for (const m of matches) {
+      const onComp1 = m.comp1_id === numId
+      const parts = m.match_score?.split('-').map(Number)
+      if (parts?.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        const pg = onComp1 ? parts[0] : parts[1]
+        const og = onComp1 ? parts[1] : parts[0]
+        if (m.player_result === 'W' && og === 0) straightWins++
+        if (m.player_result === 'L' && pg === 0) straightLosses++
+        if (pg + og === 5) { clutchTotal++; if (m.player_result === 'W') clutchWins++ }
+      }
+      const games = (m.game_scores || '').split(',')
+        .map(s => s.trim().split('-').map(Number))
+        .filter(g => g.length === 2 && !isNaN(g[0]) && !isNaN(g[1]) && g[0] + g[1] > 0)
+      for (const g of games) {
+        const pp = onComp1 ? g[0] : g[1]
+        const op = onComp1 ? g[1] : g[0]
+        totalPlayerPts += pp; totalOppPts += op; totalGames++
+      }
+      if (m.player_result === 'W' && games.length >= 2) {
+        const g1p = onComp1 ? games[0][0] : games[0][1]
+        const g1o = onComp1 ? games[0][1] : games[0][0]
+        if (g1p < g1o) comebacks++
+      }
+      if (m.round) {
+        for (const bucket of Object.values(depthMap)) {
+          if (bucket.rounds.has(m.round)) {
+            if (m.player_result === 'W') bucket.w++; else bucket.l++
+          }
+        }
+      }
+    }
+    return {
+      straightWins, straightLosses, comebacks,
+      clutchIndex: clutchTotal >= 3 ? (clutchWins / clutchTotal) * 100 : null,
+      clutchWins, clutchTotal,
+      currentForm: matches.slice(0, 10).map(m => m.player_result),
+      avgPtDiff: totalGames > 0 ? (totalPlayerPts - totalOppPts) / totalGames : null,
+      ppg: totalGames > 0 ? totalPlayerPts / totalGames : null,
+      tournamentDepth: Object.values(depthMap),
+    }
+  }, [matches, numId])
+
   // Matches grouped by event
   const matchGroups = useMemo(() => {
     const map = {}
@@ -389,9 +455,10 @@ export default function PlayerPage() {
   }, [matches])
 
   const TABS = [
-    { id: 'rank',    label: 'Rank'      },
-    { id: 'winloss', label: 'Win / Loss'},
-    { id: 'matches', label: 'Matches'   },
+    { id: 'rank',        label: 'Rank'        },
+    { id: 'winloss',     label: 'Win / Loss'  },
+    { id: 'performance', label: 'Performance' },
+    { id: 'form',        label: 'Form'        },
   ]
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -639,14 +706,101 @@ export default function PlayerPage() {
                               {cm.slice(0, 10).map((m, i) => <MatchMiniRow key={i} match={m} />)}
                             </WLRow>
                           ))}
+
+                          {/* By Opponent */}
+                          {wlFilter === 'competitor' && byCompetitor.map(([name, { w, l, matches: cm }]) => (
+                            <WLRow key={name} label={name} wins={w} losses={l}
+                              isOpen={openRow === name}
+                              onToggle={() => setOpenRow(openRow === name ? null : name)}>
+                              {cm.slice(0, 10).map((m, i) => <MatchMiniRow key={i} match={m} />)}
+                            </WLRow>
+                          ))}
                         </tbody>
                       </table>
                     </div>
                   </div>
                 )}
 
-                {/* ── MATCHES TAB ── */}
-                {activeTab === 'matches' && (
+                {/* ── PERFORMANCE TAB ── */}
+                {activeTab === 'performance' && (
+                  <div className="p-5 space-y-3">
+                    {!perfMetrics ? (
+                      <p style={{ textAlign: 'center', color: '#94a3b8', padding: '40px 0', fontSize: 13 }}>No match data to compute metrics.</p>
+                    ) : (() => {
+                      const sections = [
+                        {
+                          key: 'outcomes',
+                          heading: 'Outcomes',
+                          summary: `${Math.round(wins.length / matches.length * 100)}% win rate · Form: ${perfMetrics.currentForm.join(' ')}`,
+                          items: [
+                            { label: 'Win Rate',           value: `${Math.round(wins.length / matches.length * 100)}%`,    accent: wins.length / matches.length >= 0.5 ? '#10b981' : '#f87171', desc: `${wins.length}W · ${losses.length}L · ${matches.length} matches` },
+                            { label: 'Avg Point Diff',     value: perfMetrics.avgPtDiff != null ? `${perfMetrics.avgPtDiff >= 0 ? '+' : ''}${perfMetrics.avgPtDiff.toFixed(1)}` : '—', accent: perfMetrics.avgPtDiff != null && perfMetrics.avgPtDiff >= 0 ? '#10b981' : '#f87171', desc: 'Average point margin per game' },
+                            { label: 'Points Per Game',    value: perfMetrics.ppg != null ? perfMetrics.ppg.toFixed(1) : '—', accent: '#6366f1', desc: 'Avg points scored per game (attack volume)' },
+                            { label: 'Current Form',       value: (() => { const w = perfMetrics.currentForm.filter(r => r === 'W').length; return `${w}W ${perfMetrics.currentForm.length - w}L` })(), sub: perfMetrics.currentForm.join(' '), accent: (() => { const w = perfMetrics.currentForm.filter(r => r === 'W').length; return w / Math.max(perfMetrics.currentForm.length, 1) >= 0.5 ? '#10b981' : '#f87171' })(), desc: `Last ${perfMetrics.currentForm.length} matches` },
+                            { label: 'Straight-Set Wins',  value: `${perfMetrics.straightWins}`,  sub: wins.length > 0 ? `${((perfMetrics.straightWins / wins.length) * 100).toFixed(0)}% of wins` : null,   accent: '#10b981', desc: 'Won without dropping a game — dominant victories' },
+                            { label: 'Straight-Set Losses',value: `${perfMetrics.straightLosses}`, sub: losses.length > 0 ? `${((perfMetrics.straightLosses / losses.length) * 100).toFixed(0)}% of losses` : null, accent: '#f87171', desc: 'Lost without winning a game — complete capitulations' },
+                          ],
+                        },
+                        {
+                          key: 'mental',
+                          heading: 'Mental Game — Under Pressure',
+                          summary: `Clutch ${perfMetrics.clutchIndex != null ? perfMetrics.clutchIndex.toFixed(0) + '%' : '—'} · ${perfMetrics.comebacks} comebacks`,
+                          items: [
+                            { label: 'Clutch Index',         value: perfMetrics.clutchIndex != null ? `${perfMetrics.clutchIndex.toFixed(1)}%` : '—', sub: perfMetrics.clutchTotal >= 3 ? `${perfMetrics.clutchWins}/${perfMetrics.clutchTotal} deciding matches` : `Only ${perfMetrics.clutchTotal} deciding matches`, accent: '#f59e0b', desc: 'Win rate in 5-game matches (3-2 / 2-3)' },
+                            { label: 'Comeback Wins',        value: `${perfMetrics.comebacks}`, sub: wins.length > 0 ? `${((perfMetrics.comebacks / wins.length) * 100).toFixed(0)}% of wins` : null, accent: '#38bdf8', desc: 'Won after losing game 1 — mental resilience' },
+                          ],
+                        },
+                        {
+                          key: 'depth',
+                          heading: 'Tournament Depth',
+                          summary: perfMetrics.tournamentDepth.map(b => { const t = b.w + b.l; return t ? `${b.label} ${((b.w/t)*100).toFixed(0)}%` : null }).filter(Boolean).join(' · ') || 'No round data',
+                          items: perfMetrics.tournamentDepth.map(b => ({
+                            label: b.label,
+                            value: b.w + b.l > 0 ? `${((b.w / (b.w + b.l)) * 100).toFixed(1)}%` : '—',
+                            sub: b.w + b.l > 0 ? `${b.w}W ${b.l}L` : 'No data',
+                            accent: b.w + b.l > 0 && b.w / (b.w + b.l) >= 0.5 ? '#10b981' : '#f59e0b',
+                            desc: `Win rate in ${b.label.toLowerCase()}`,
+                          })),
+                        },
+                      ]
+                      return sections.map(sec => {
+                        const isOpen = openPerfSec === sec.key
+                        return (
+                          <div key={sec.key} className="border border-slate-200 rounded-xl overflow-hidden">
+                            <button onClick={() => setOpenPerfSec(isOpen ? null : sec.key)}
+                              className={`w-full flex items-center justify-between px-4 py-3.5 text-left transition-colors ${isOpen ? 'bg-slate-50 border-b border-slate-100' : 'hover:bg-slate-50/60'}`}>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-slate-800">{sec.heading}</p>
+                                {!isOpen && <p className="text-xs text-slate-400 mt-0.5">{sec.summary}</p>}
+                              </div>
+                              {isOpen ? <ChevronUp size={15} className="text-slate-400 shrink-0" /> : <ChevronDown size={15} className="text-slate-400 shrink-0" />}
+                            </button>
+                            {isOpen && (
+                              <div className="divide-y divide-slate-100">
+                                {sec.items.map(item => (
+                                  <div key={item.label} className="flex items-center gap-3 px-4 py-3">
+                                    <span style={{ width: 3, alignSelf: 'stretch', borderRadius: 99, background: item.accent, flexShrink: 0 }} />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium text-slate-800">{item.label}</p>
+                                      <p className="text-xs text-slate-400 mt-0.5">{item.desc}</p>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      <p className="text-base font-bold" style={{ color: item.accent }}>{item.value}</p>
+                                      {item.sub && <p className="text-[11px] text-slate-400 mt-0.5">{item.sub}</p>}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })
+                    })()}
+                  </div>
+                )}
+
+                {/* ── FORM TAB ── */}
+                {activeTab === 'form' && (
                   <div>
                     {matchGroups.length === 0 ? (
                       <p style={{ textAlign: 'center', color: '#94a3b8', padding: '40px 0', fontSize: 13 }}>
