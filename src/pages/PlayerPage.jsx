@@ -391,7 +391,7 @@ export default function PlayerPage() {
   const [loading,     setLoading]     = useState(true)
   const [activeTab,   setActiveTab]   = useState('rank')
   const [rankWindow,  setRankWindow]  = useState('All')
-  const [wlFilter,    setWlFilter]    = useState('round')
+  const [wlFilter,    setWlFilter]    = useState(isSenior ? 'rank' : 'round')
   const [openRow,     setOpenRow]     = useState(null)
   const [openPerfSec, setOpenPerfSec] = useState(null)
   // Senior OKR-grade performance
