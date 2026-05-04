@@ -806,9 +806,14 @@ export default function YouthPipelinePage() {
                   All Indian youth players ranked internationally · U11 → U19
                 </p>
               </div>
-              <a href="/" style={{ fontSize: 12, color: '#2563eb', textDecoration: 'none', marginTop: 8, fontWeight: 600 }}>
-                ← Senior Dashboard
-              </a>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                <a href="/india" style={{ fontSize: 12, color: '#ea580c', textDecoration: 'none', fontWeight: 700 }}>
+                  🇮🇳 India Hub
+                </a>
+                <a href="/" style={{ fontSize: 12, color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}>
+                  ← Senior Dashboard
+                </a>
+              </div>
             </div>
 
             {/* Summary stats */}

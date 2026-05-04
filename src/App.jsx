@@ -7,6 +7,7 @@ import LivePage from './pages/LivePage.jsx'
 import TournamentPage from './pages/TournamentPage.jsx'
 import YouthPipelinePage from './pages/YouthPipelinePage.jsx'
 import PlayerPage from './pages/PlayerPage.jsx'
+import IndiaPage from './pages/IndiaPage.jsx'
 import PageBackground from './components/PageBackground.jsx'
 
 function ProtectedRoute({ children }) {
@@ -69,6 +70,11 @@ export default function App() {
       <Route path="/player/:ittf_id" element={
         <ProtectedRoute>
           <PlayerPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/india" element={
+        <ProtectedRoute>
+          <IndiaPage />
         </ProtectedRoute>
       } />
     </Routes>
