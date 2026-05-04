@@ -88,7 +88,7 @@ function WindowToggle({ value, onChange }) {
   )
 }
 
-function WLRow({ label, wins, losses, isOpen, onToggle, children }) {
+function WLRow({ label, sublabel, wins, losses, isOpen, onToggle, children }) {
   const total = wins + losses
   const winPct = total ? (wins / total) * 100 : 0
   return (
@@ -97,7 +97,10 @@ function WLRow({ label, wins, losses, isOpen, onToggle, children }) {
         onClick={() => total > 0 && onToggle()}
         style={{ cursor: total > 0 ? 'pointer' : 'default', borderBottom: '0.5px solid #f1f5f9' }}
         className="transition-colors hover:bg-slate-50/60">
-        <td style={{ padding: '10px 14px', fontSize: 13, fontWeight: 500, color: '#1e293b', whiteSpace: 'nowrap' }}>{label}</td>
+        <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+          <p style={{ fontSize: 13, fontWeight: 500, color: '#1e293b' }}>{label}</p>
+          {sublabel && <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>{sublabel}</p>}
+        </td>
         <td style={{ padding: '10px 14px' }}>
           <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', background: '#f1f5f9' }}>
             <div style={{ width: `${winPct}%`, background: '#3b82f6', transition: 'width 0.5s' }} />
@@ -396,6 +399,11 @@ export default function PlayerPage() {
   const [perfWindow,        setPerfWindow]        = useState('6M')
   const [openPerfSections,  setOpenPerfSections]  = useState(new Set())
   const [openPerfItem,      setOpenPerfItem]      = useState(null)
+  const [winWindow,         setWinWindow]         = useState('6M')
+  const [openRankBar,       setOpenRankBar]       = useState(null)
+  const [openTierBar,       setOpenTierBar]       = useState(null)
+  const [openCompBar,       setOpenCompBar]       = useState(null)
+  const [openNationBar,     setOpenNationBar]     = useState(null)
 
   useEffect(() => {
     if (!numId) return
@@ -1000,7 +1008,139 @@ export default function PlayerPage() {
                 )}
 
                 {/* ── WIN/LOSS TAB ── */}
-                {activeTab === 'winloss' && (
+
+                {/* Senior Win/Loss — uses computed window data from seniorMetrics */}
+                {activeTab === 'winloss' && isSenior && (() => {
+                  const SENIOR_WL_FILTERS = [
+                    { id: 'rank',       label: 'By opponent rank' },
+                    { id: 'tier',       label: 'By event tier'    },
+                    { id: 'competitor', label: 'Top opponents'    },
+                    { id: 'nation',     label: 'By nation'        },
+                  ]
+                  const TIER_DESC = {
+                    '1': 'Olympics, Worlds, Grand Smash', '2': 'Asian Games, WTT Champions, World Cup',
+                    '3': 'WTT Star Contender, Commonwealth', '4': 'WTT Contender, South Asian',
+                    '5': 'WTT Feeder', '6': 'TTFI Nationals, Ranking, Khelo India',
+                  }
+                  const win = seniorMetrics?.wttWindows[winWindow]
+                  return (
+                    <div className="p-5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-slate-500 font-medium">Where are they winning and losing?</p>
+                        <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5">
+                          {['6M', '12M', '18M'].map(w => (
+                            <button key={w} onClick={() => { setWinWindow(w); setOpenRankBar(null); setOpenTierBar(null); setOpenCompBar(null); setOpenNationBar(null) }}
+                              className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${winWindow === w ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                              {w}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 flex-wrap">
+                        {SENIOR_WL_FILTERS.map(f => (
+                          <button key={f.id} onClick={() => { setWlFilter(f.id); setOpenRankBar(null); setOpenTierBar(null); setOpenCompBar(null); setOpenNationBar(null) }}
+                            className={`text-xs font-medium px-3 py-1 rounded-full border transition-all ${
+                              wlFilter === f.id
+                                ? 'border-slate-700 bg-slate-800 text-white'
+                                : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'}`}>
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {!win ? (
+                        <p style={{ textAlign: 'center', color: '#94a3b8', padding: '30px 0', fontSize: 13 }}>Loading…</p>
+                      ) : (
+                        <div className="border border-slate-200 rounded-xl overflow-hidden">
+                          <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
+                            <colgroup>
+                              <col style={{ width: '28%' }} /><col style={{ width: '40%' }} /><col style={{ width: '32%' }} />
+                            </colgroup>
+                            <tbody>
+                              <tr style={{ borderBottom: '0.5px solid #e2e8f0', background: '#f8fafc' }}>
+                                <td style={{ padding: '10px 14px', verticalAlign: 'top' }}>
+                                  <p style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Overall</p>
+                                  <p style={{ fontSize: 13, fontWeight: 600 }}>
+                                    <span style={{ color: '#059669' }}>{win.wins}W</span>
+                                    <span style={{ color: '#94a3b8' }}> / </span>
+                                    <span style={{ color: '#f87171' }}>{win.losses}L</span>
+                                    <span style={{ color: '#64748b', marginLeft: 4 }}>· {win.winRate.toFixed(1)}%</span>
+                                  </p>
+                                </td>
+                                <td style={{ padding: '10px 14px', verticalAlign: 'top', textAlign: 'center' }}>
+                                  <p style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Upset yield</p>
+                                  <p style={{ fontSize: 13, fontWeight: 600 }}>
+                                    {win.upsetYield.toFixed(1)}%
+                                    <span style={{ fontSize: 11, fontWeight: 400, color: '#94a3b8', marginLeft: 4 }}>of wins vs higher-ranked</span>
+                                  </p>
+                                </td>
+                                <td style={{ padding: '10px 14px', verticalAlign: 'top', textAlign: 'right' }}>
+                                  <p style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Avg opp rank beaten</p>
+                                  <p style={{ fontSize: 13, fontWeight: 600 }}>{win.avgOppRankBeaten ? `#${win.avgOppRankBeaten}` : '—'}</p>
+                                </td>
+                              </tr>
+
+                              {wlFilter === 'rank' && win.rankBuckets.map(b => (
+                                <WLRow key={b.label} label={b.label} wins={b.wins} losses={b.losses}
+                                  isOpen={openRankBar === b.label}
+                                  onToggle={() => setOpenRankBar(openRankBar === b.label ? null : b.label)}>
+                                  {b.matches.slice(0, 10).map((m, i) => (
+                                    <MatchMiniRow key={i} match={{ player_result: m.result, opp_name: m.opponent, game_scores: m.score, round: m.round }} />
+                                  ))}
+                                </WLRow>
+                              ))}
+
+                              {wlFilter === 'tier' && (
+                                win.tierBuckets.length === 0
+                                  ? <tr><td colSpan={3} style={{ padding: 16, fontSize: 13, color: '#94a3b8' }}>No tier data.</td></tr>
+                                  : win.tierBuckets.map(b => (
+                                    <WLRow key={b.tier} label={b.label} sublabel={TIER_DESC[b.tier]} wins={b.wins} losses={b.losses}
+                                      isOpen={openTierBar === b.tier}
+                                      onToggle={() => setOpenTierBar(openTierBar === b.tier ? null : b.tier)}>
+                                      {b.matches.slice(0, 10).map((m, i) => (
+                                        <MatchMiniRow key={i} match={{ player_result: m.result, opp_name: m.opponent, game_scores: m.score, round: m.round }} />
+                                      ))}
+                                    </WLRow>
+                                  ))
+                              )}
+
+                              {wlFilter === 'competitor' && (
+                                win.topCompetitors.length === 0
+                                  ? <tr><td colSpan={3} style={{ padding: 16, fontSize: 13, color: '#94a3b8' }}>No data.</td></tr>
+                                  : win.topCompetitors.map(c => (
+                                    <WLRow key={c.name} label={`${c.name}${c.currentRank < 999 ? ` · #${c.currentRank}` : ''}`} wins={c.wins} losses={c.losses}
+                                      isOpen={openCompBar === c.name}
+                                      onToggle={() => setOpenCompBar(openCompBar === c.name ? null : c.name)}>
+                                      {c.matches.slice(0, 10).map((m, i) => (
+                                        <MatchMiniRow key={i} match={{ player_result: m.result, opp_name: m.opponent, game_scores: m.score, round: m.round }} />
+                                      ))}
+                                    </WLRow>
+                                  ))
+                              )}
+
+                              {wlFilter === 'nation' && (
+                                win.topNations.length === 0
+                                  ? <tr><td colSpan={3} style={{ padding: 16, fontSize: 13, color: '#94a3b8' }}>No nation data.</td></tr>
+                                  : win.topNations.map(n => (
+                                    <WLRow key={n.country} label={n.country.toUpperCase()} wins={n.wins} losses={n.losses}
+                                      isOpen={openNationBar === n.country}
+                                      onToggle={() => setOpenNationBar(openNationBar === n.country ? null : n.country)}>
+                                      {n.matches.slice(0, 10).map((m, i) => (
+                                        <MatchMiniRow key={i} match={{ player_result: m.result, opp_name: m.opponent, game_scores: m.score, round: m.round }} />
+                                      ))}
+                                    </WLRow>
+                                  ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* Youth Win/Loss — existing round/country/opponent breakdown */}
+                {activeTab === 'winloss' && !isSenior && (
                   <div className="p-5 space-y-4">
                     <p className="text-xs text-slate-500 font-medium">Where are they winning and losing?</p>
 
