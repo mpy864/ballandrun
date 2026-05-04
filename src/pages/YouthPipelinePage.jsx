@@ -811,7 +811,7 @@ export default function YouthPipelinePage() {
                   🇮🇳 India Hub
                 </a>
                 <a href="/" style={{ fontSize: 12, color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}>
-                  ← Senior Dashboard
+                  ← India Dashboard
                 </a>
               </div>
             </div>

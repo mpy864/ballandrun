@@ -1625,7 +1625,7 @@ export default function DynamicOKRDashboard() {
               {selectedPlayer && playerMetrics && (
                 <DataSourceToggle value={dataSource} onChange={changeDataSource} showDomestic={isIndian} />
               )}
-              <a href="/india" className="text-xs font-medium text-orange-600 hover:text-orange-800 flex items-center gap-1">
+              <a href="/" className="text-xs font-medium text-orange-600 hover:text-orange-800 flex items-center gap-1">
                 India Hub <ArrowRight size={11} />
               </a>
               <a href="/youth" className="text-xs font-medium text-emerald-600 hover:text-emerald-800 flex items-center gap-1">

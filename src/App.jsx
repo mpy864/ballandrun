@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import DynamicOKRDashboard from './components/DynamicOKRDashboard.jsx'
+import IndiaDashboard from './pages/IndiaDashboard.jsx'
 import H2HDashboard from './components/H2HDashboard.jsx'
 import LivePage from './pages/LivePage.jsx'
 import TournamentPage from './pages/TournamentPage.jsx'
@@ -47,6 +48,11 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<RedirectIfAuthed><LoginPage /></RedirectIfAuthed>} />
       <Route path="/" element={
+        <ProtectedRoute>
+          <IndiaDashboard />
+        </ProtectedRoute>
+      } />
+      <Route path="/okr" element={
         <ProtectedRoute>
           <DynamicOKRDashboard />
         </ProtectedRoute>

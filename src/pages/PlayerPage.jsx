@@ -12,11 +12,12 @@ import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react'
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const PIPELINE_BADGE = {
-  U19: { label: 'LA 2028 Ready',    color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
-  U17: { label: 'LA 2028 Pipeline', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
-  U15: { label: 'LA 2032 Pipeline', color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
-  U13: { label: 'Emerging',         color: '#7c3aed', bg: '#faf5ff', border: '#e9d5ff' },
-  U11: { label: 'Grassroots',       color: '#64748b', bg: '#f8fafc', border: '#e2e8f0' },
+  Senior: { label: 'Senior National',   color: '#0f172a', bg: '#f1f5f9', border: '#cbd5e1' },
+  U19:    { label: 'LA 2028 Ready',     color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
+  U17:    { label: 'LA 2028 Pipeline',  color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
+  U15:    { label: 'LA 2032 Pipeline',  color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+  U13:    { label: 'Emerging',          color: '#7c3aed', bg: '#faf5ff', border: '#e9d5ff' },
+  U11:    { label: 'Grassroots',        color: '#64748b', bg: '#f8fafc', border: '#e2e8f0' },
 }
 
 const DISC_LABEL = {
@@ -148,6 +149,7 @@ export default function PlayerPage() {
   const subEvent    = searchParams.get('sub') || 'MS'
   const ageCategory = searchParams.get('age') || null
   const isDoubles   = ['MD', 'WD', 'XD', 'MDI', 'WDI', 'XDI'].includes(subEvent)
+  const isSenior    = ageCategory === 'Senior'
   const numId       = parseInt(ittf_id)
 
   const [playerInfo,  setPlayerInfo]  = useState(null)
@@ -179,18 +181,36 @@ export default function PlayerPage() {
       const info = pls?.[0] || null
 
       // 2. Ranking history
-      const rankTable  = isDoubles ? 'youth_rankings_doubles' : 'youth_rankings_singles'
-      const rankIdCol  = isDoubles ? 'ittf_id1' : 'ittf_id'
-      const rankCols   = isDoubles
-        ? 'ranking_year, ranking_week, publish_date, current_rank, points, rank_diff, age_category, ittf_id2'
-        : 'ranking_year, ranking_week, publish_date, age_cat_rank, current_rank, points_ytd, rank_diff, age_category'
-      const { data: hist } = await supabase.from(rankTable)
-        .select(rankCols)
-        .eq(rankIdCol, numId)
-        .eq('sub_event', subEvent)
-        .order('ranking_year', { ascending: true })
-        .order('ranking_week', { ascending: true })
-        .limit(300)
+      let hist = null
+      if (isSenior) {
+        const { data: seniorHist } = await supabase
+          .from('rankings_singles_normalized')
+          .select('ranking_date, rank, rank_change')
+          .eq('player_id', numId)
+          .order('ranking_date', { ascending: true })
+          .limit(300)
+        hist = (seniorHist || []).map(r => ({
+          publish_date: r.ranking_date,
+          current_rank: r.rank,
+          age_cat_rank: null,
+          rank_diff:    r.rank_change,
+          age_category: 'Senior',
+        }))
+      } else {
+        const rankTable = isDoubles ? 'youth_rankings_doubles' : 'youth_rankings_singles'
+        const rankIdCol = isDoubles ? 'ittf_id1' : 'ittf_id'
+        const rankCols  = isDoubles
+          ? 'ranking_year, ranking_week, publish_date, current_rank, points, rank_diff, age_category, ittf_id2'
+          : 'ranking_year, ranking_week, publish_date, age_cat_rank, current_rank, points_ytd, rank_diff, age_category'
+        const { data: youthHist } = await supabase.from(rankTable)
+          .select(rankCols)
+          .eq(rankIdCol, numId)
+          .eq('sub_event', subEvent)
+          .order('ranking_year', { ascending: true })
+          .order('ranking_week', { ascending: true })
+          .limit(300)
+        hist = youthHist
+      }
 
       // Partner info for doubles
       let partner = null
@@ -209,19 +229,17 @@ export default function PlayerPage() {
       // 3. Match history
       let matchData = []
       if (!isDoubles) {
+        const matchQ = supabase.from('wtt_matches_singles')
+          .select('match_id, comp1_id, comp2_id, result, game_scores, match_score, event_date, event_id, round_phase, age_group')
         const [{ data: asComp1 }, { data: asComp2 }] = await Promise.all([
-          supabase.from('wtt_matches_singles')
-            .select('match_id, comp1_id, comp2_id, result, game_scores, match_score, event_date, event_id, round_phase, age_group')
-            .eq('comp1_id', numId)
-            .not('age_group', 'is', null)
-            .order('event_date', { ascending: false })
-            .limit(60),
-          supabase.from('wtt_matches_singles')
-            .select('match_id, comp1_id, comp2_id, result, game_scores, match_score, event_date, event_id, round_phase, age_group')
-            .eq('comp2_id', numId)
-            .not('age_group', 'is', null)
-            .order('event_date', { ascending: false })
-            .limit(60),
+          (isSenior
+            ? matchQ.eq('comp1_id', numId).is('age_group', null)
+            : matchQ.eq('comp1_id', numId).not('age_group', 'is', null))
+            .order('event_date', { ascending: false }).limit(60),
+          (isSenior
+            ? supabase.from('wtt_matches_singles').select('match_id, comp1_id, comp2_id, result, game_scores, match_score, event_date, event_id, round_phase, age_group').eq('comp2_id', numId).is('age_group', null)
+            : supabase.from('wtt_matches_singles').select('match_id, comp1_id, comp2_id, result, game_scores, match_score, event_date, event_id, round_phase, age_group').eq('comp2_id', numId).not('age_group', 'is', null))
+            .order('event_date', { ascending: false }).limit(60),
         ])
         matchData = [...(asComp1 || []), ...(asComp2 || [])]
           .sort((a, b) => new Date(b.event_date) - new Date(a.event_date))
@@ -251,15 +269,27 @@ export default function PlayerPage() {
         const singlesOppIds = [...new Set(matchData.map(m => m.comp1_id === numId ? m.comp2_id : m.comp1_id).filter(Boolean))]
         let oppRankMap = {}
         if (singlesOppIds.length) {
-          const { data: oppRanks } = await supabase
-            .from('youth_rankings_singles')
-            .select('ittf_id, current_rank, publish_date')
-            .in('ittf_id', singlesOppIds.map(String))
-            .eq('sub_event', subEvent)
-            .order('publish_date', { ascending: false })
-          for (const r of oppRanks || []) {
-            if (!oppRankMap[r.ittf_id]) oppRankMap[r.ittf_id] = []
-            oppRankMap[r.ittf_id].push({ rank: r.current_rank, date: r.publish_date })
+          if (isSenior) {
+            const { data: oppRanks } = await supabase
+              .from('rankings_singles_normalized')
+              .select('player_id, rank, ranking_date')
+              .in('player_id', singlesOppIds)
+              .order('ranking_date', { ascending: false })
+            for (const r of oppRanks || []) {
+              if (!oppRankMap[r.player_id]) oppRankMap[r.player_id] = []
+              oppRankMap[r.player_id].push({ rank: r.rank, date: r.ranking_date })
+            }
+          } else {
+            const { data: oppRanks } = await supabase
+              .from('youth_rankings_singles')
+              .select('ittf_id, current_rank, publish_date')
+              .in('ittf_id', singlesOppIds.map(String))
+              .eq('sub_event', subEvent)
+              .order('publish_date', { ascending: false })
+            for (const r of oppRanks || []) {
+              if (!oppRankMap[r.ittf_id]) oppRankMap[r.ittf_id] = []
+              oppRankMap[r.ittf_id].push({ rank: r.current_rank, date: r.publish_date })
+            }
           }
         }
 
@@ -271,7 +301,7 @@ export default function PlayerPage() {
           const oppId = onComp1 ? m.comp2_id : m.comp1_id
           const opp = oppMap[oppId]
           const matchDate = new Date(m.event_date)
-          const oppH = oppRankMap[String(oppId)] || []
+          const oppH = oppRankMap[isSenior ? oppId : String(oppId)] || []
           const opponentRank = oppH.find(r => new Date(r.date) <= matchDate)?.rank ?? 999
           const playerRankAtMatch = histDesc.find(r => new Date(r.publish_date) <= matchDate)?.current_rank ?? 999
           return {
@@ -523,8 +553,8 @@ export default function PlayerPage() {
             border: '1px solid rgba(30,70,160,0.08)',
             borderRadius: 12, padding: '10px 16px',
           }}>
-            <a href="/youth" style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#64748b', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>
-              <ArrowLeft size={14} /> Youth Pipeline
+            <a href={isSenior ? '/' : '/youth'} style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#64748b', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>
+              <ArrowLeft size={14} /> {isSenior ? 'India Dashboard' : 'Youth Pipeline'}
             </a>
             <span style={{ color: '#e2e8f0' }}>·</span>
             <span style={{ fontSize: 13, color: '#94a3b8' }}>{name}</span>
@@ -557,7 +587,7 @@ export default function PlayerPage() {
                   </div>
                   <div className="flex items-center gap-6 flex-wrap">
                     {[
-                      { label: 'Age Cat Rank', value: currentRank ? `#${currentRank}` : '—' },
+                      ...(!isSenior ? [{ label: 'Age Cat Rank', value: currentRank ? `#${currentRank}` : '—' }] : []),
                       { label: 'World Rank',   value: worldRank   ? `#${worldRank}`   : '—' },
                       { label: 'Win Rate',     value: matches.length ? `${Math.round(wins.length / matches.length * 100)}%` : '—' },
                       { label: 'Matches',      value: matches.length || '—' },
@@ -606,7 +636,7 @@ export default function PlayerPage() {
                       <span style={{ fontSize: 20, color: rankChange > 0 ? '#10b981' : rankChange < 0 ? '#f87171' : '#e2e8f0' }}>→</span>
                       <div className="text-center">
                         <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-0.5">Today</p>
-                        <p className="text-xl font-bold text-slate-800">{currentRank ? `#${currentRank}` : '—'}</p>
+                        <p className="text-xl font-bold text-slate-800">{(isSenior ? worldRank : currentRank) ? `#${isSenior ? worldRank : currentRank}` : '—'}</p>
                       </div>
                       {peakRank && (
                         <div className="text-center ml-2">
@@ -646,7 +676,7 @@ export default function PlayerPage() {
                               cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '3 3' }}
                               contentStyle={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12, padding: '6px 10px' }}
                               labelFormatter={(_l, p) => p?.[0]?.payload?.label ? `Week of ${p[0].payload.label}` : ''}
-                              formatter={v => [`#${v}`, 'Age Cat Rank']}
+                              formatter={v => [`#${v}`, isSenior ? 'World Rank' : 'Age Cat Rank']}
                             />
                             {peakRank && (
                               <ReferenceLine y={peakRank} stroke="#10b981" strokeDasharray="4 4" strokeWidth={1.5}
