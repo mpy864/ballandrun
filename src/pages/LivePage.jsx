@@ -47,10 +47,10 @@ export default function LivePage() {
             margin: '0 0 5px', letterSpacing: -0.5, lineHeight: 1.2,
             textShadow: '0 1px 8px rgba(255,255,255,0.6)',
           }}>
-            World Team Table Tennis Championships
+            Live Match Probability
           </h1>
           <div style={{ color: 'rgba(15,42,94,0.62)', fontSize: 13, fontWeight: 500 }}>
-            London 2026 &nbsp;·&nbsp; OVO Arena Wembley
+            Table Tennis &nbsp;·&nbsp; All Competitions
           </div>
         </div>
 

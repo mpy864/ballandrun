@@ -471,11 +471,28 @@ def _write_match_result(db, match_id: str, match_p0_by_id: dict, last_state: dic
         print(f"  [DB] match_results error: {e}")
 
 
-def poll_points(mp: MatchPredictor, event_id: int, gender_label: str,
-                interval: float = 2.0, db=None):
+def get_active_event_ids(lookback_days: int = 7) -> list[int]:
+    """
+    Return event IDs from WTT_2026_EVENT_IDS whose scheduled end date falls within
+    [today - lookback_days, today + 2 days], covering events in progress or just starting.
+    """
+    from fetch_matches import WTT_2026_EVENT_IDS
+    from datetime import date, timedelta
+    today  = date.today()
+    past   = today - timedelta(days=lookback_days)
+    future = today + timedelta(days=lookback_days)
+    return [
+        eid for eid, (_, end_str) in WTT_2026_EVENT_IDS.items()
+        if past <= date.fromisoformat(end_str) <= future
+    ]
+
+
+def poll_points(mp, event_ids: list[int], gender_label: str,
+                interval: float = 2.0, db=None, auto: bool = False):
     """
     Continuously poll GetLiveResult every `interval` seconds.
-    Prints a new line each time a point is scored (seq_num changes).
+    Polls all event IDs in the list simultaneously.
+    When auto=True, re-discovers active events from WTT_2026_EVENT_IDS every ~60s.
     Press Ctrl+C to stop.
     """
     print(f"  Polling every {interval}s — press Ctrl+C to stop.\n")
@@ -485,7 +502,8 @@ def poll_points(mp: MatchPredictor, event_id: int, gender_label: str,
     last_games:      dict[str, int]   = {}  # match_id → last total games completed
     last_state:      dict[str, dict]  = {}  # match_id → last known live state
     seen_matches:    set              = set()
-    missing_counts:  dict[str, int]  = {}  # match_id → consecutive absent polls
+    missing_counts:  dict[str, int]   = {}  # match_id → consecutive absent polls
+    poll_count:      int              = 0
 
     # Seed seen_matches + last_state + match_p0_by_id from DB on startup.
     # Without seeding last_state, _write_match_result returns early for any
@@ -516,16 +534,30 @@ def poll_points(mp: MatchPredictor, event_id: int, gender_label: str,
 
     try:
         while True:
-            matches  = fetch_live(event_id)
-            target   = matches if gender_label == "all" else [m for m in matches if m["round"].startswith(gender_label)]
-            now_ids  = set()
+            # Auto-refresh event list every 20 cycles (~60s at 3s interval)
+            if auto and poll_count > 0 and poll_count % 20 == 0:
+                from fetch_matches import WTT_2026_EVENT_IDS
+                refreshed = get_active_event_ids()
+                added = set(refreshed) - set(event_ids)
+                if added:
+                    for eid in added:
+                        print(f"\n  [Auto] New event: {WTT_2026_EVENT_IDS.get(eid, (str(eid),))[0]} ({eid})")
+                event_ids = refreshed
+            poll_count += 1
+
+            all_matches = []
+            for eid in event_ids:
+                all_matches.extend(fetch_live(eid))
+            target  = all_matches if gender_label == "all" else [m for m in all_matches if m["round"].startswith(gender_label)]
+            now_ids = set()
 
             if not target:
                 print(f"\r  Waiting for live matches...  ", end="", flush=True)
             else:
                 for m in target:
-                    doc      = str(m["event_id"]) + m["round"]
-                    match_id = f"{event_id}_{m['id1']}_{m['id2']}"
+                    eid      = m["event_id"]
+                    doc      = str(eid) + m["round"]
+                    match_id = f"{eid}_{m['id1']}_{m['id2']}"
                     seq      = m["seq_num"]
                     id1, id2 = m["id1"], m["id2"]
                     sh1      = m["name1"].split()[-1]
@@ -568,12 +600,12 @@ def poll_points(mp: MatchPredictor, event_id: int, gender_label: str,
                         print(f"  {ts:<8} {ga}-{gb:<6} {pts_str:<9} {p*100:>7.1f}%  {bar}{delta}")
 
                         if db:
-                            _upsert_live_state(db, match_id, event_id, m,
+                            _upsert_live_state(db, match_id, eid, m,
                                                ga, gb, pts_a, pts_b, p, p0, seq)
-                            _maybe_write_game_log(db, match_id, event_id, m,
+                            _maybe_write_game_log(db, match_id, eid, m,
                                                   ga, gb, p, done_games, last_games)
                         last_state[match_id] = {
-                            "event_id":   event_id,
+                            "event_id":   eid,
                             "comp1_id":   m["id1"],
                             "comp2_id":   m["id2"],
                             "comp1_name": m["name1"],
@@ -611,7 +643,12 @@ def poll_points(mp: MatchPredictor, event_id: int, gender_label: str,
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--event",     type=int, required=True)
+    parser.add_argument("--event",     type=int, default=None,
+                        help="Specific event ID to track (required unless --auto)")
+    parser.add_argument("--auto",      action="store_true",
+                        help="Auto-discover active events from schedule — no --event needed")
+    parser.add_argument("--lookback",  type=int, default=7,
+                        help="Days to look back when auto-discovering events (default 7)")
     parser.add_argument("--gender",    choices=["M", "W", "all"], default="all")
     parser.add_argument("--completed", action="store_true",
                         help="Game-by-game journey for completed matches")
@@ -625,6 +662,9 @@ def main():
                         help="Write live state to Supabase (requires SUPABASE_URL + SUPABASE_SERVICE_KEY)")
     args = parser.parse_args()
 
+    if not args.auto and args.event is None:
+        parser.error("provide --event <id>  or  --auto")
+
     if not args.live and not args.points and not args.completed:
         args.live = True   # default
 
@@ -635,9 +675,20 @@ def main():
                     else "Women" if args.gender == "W"
                     else "All disciplines")
 
-    print(f"\n{'='*64}")
-    print(f"  Live Probability Updater — Event {args.event}  ({gender_word})")
-    print(f"{'='*64}")
+    if args.auto:
+        from fetch_matches import WTT_2026_EVENT_IDS
+        event_ids = get_active_event_ids(args.lookback)
+        print(f"\n{'='*64}")
+        print(f"  Live Probability Updater — AUTO mode  ({gender_word})")
+        print(f"  Active events ({len(event_ids)}):")
+        for eid in event_ids:
+            print(f"    · {WTT_2026_EVENT_IDS.get(eid, (str(eid),))[0]}  ({eid})")
+        print(f"{'='*64}")
+    else:
+        event_ids = [args.event]
+        print(f"\n{'='*64}")
+        print(f"  Live Probability Updater — Event {args.event}  ({gender_word})")
+        print(f"{'='*64}")
 
     print("\nLoading model...")
     if args.gender == "all":
@@ -662,14 +713,17 @@ def main():
 
     if args.completed:
         print("  COMPLETED MATCHES — Game-by-Game Journey")
-        matches = fetch_official(args.event)
-        show_completed(mp, matches, gender_label)
+        for eid in event_ids:
+            matches = fetch_official(eid)
+            show_completed(mp, matches, gender_label)
 
     if args.live:
         print("  IN-PROGRESS MATCHES — Current Point-Level Probability")
-        matches = fetch_live(args.event)
-        print(f"  {len(matches)} live match(es) found.\n")
-        show_live_snapshot(mp, matches, gender_label)
+        all_matches = []
+        for eid in event_ids:
+            all_matches.extend(fetch_live(eid))
+        print(f"  {len(all_matches)} live match(es) found.\n")
+        show_live_snapshot(mp, all_matches, gender_label)
 
     if args.points:
         print("  POINT-BY-POINT LIVE POLLING")
@@ -686,7 +740,8 @@ def main():
                     print("  [DB] Connected — writing to wtt_live_state + wtt_game_log")
                 except KeyError as e:
                     print(f"  [!] Missing env var {e} — DB writes disabled")
-        poll_points(mp, args.event, gender_label, interval=args.interval, db=db)
+        poll_points(mp, event_ids, gender_label, interval=args.interval, db=db,
+                    auto=args.auto)
 
 
 if __name__ == "__main__":

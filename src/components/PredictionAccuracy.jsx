@@ -137,7 +137,7 @@ export default function PredictionAccuracy() {
             Prediction Accuracy
           </div>
           <div style={{ fontSize: 12, color: '#64748b' }}>
-            World Team TT Championships 2026
+            All Competitions
           </div>
         </div>
         <div style={{
