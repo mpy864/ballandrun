@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from supabase import create_client, Client
 
 # ── Config ─────────────────────────────────────────────────────────────────
+CDN        = "https://wtt-web-frontdoor-withoutcache-cqakg0andqf5hchn.a01.azurefd.net/ranking"
 PAIRS_URL  = "https://wttcmsapigateway-new.azure-api.net/internalttu/Rankings/GetRankingPairs"
 HEADERS = {
     "apikey":     "2bf8b222-532c-4c60-8ebe-eb6fdfebe84a",
@@ -75,25 +76,23 @@ def fetch_paginated(url: str, params: dict) -> list:
     return rows
 
 
-def get_singles_weeks(supabase: Client, from_year: int, from_week: int) -> list[dict]:
-    """Return all (year, week) pairs present in youth_rankings_singles."""
-    res = (supabase.table("youth_rankings_singles")
-           .select("ranking_year, ranking_week, publish_date")
-           .eq("sub_event", "MS")
-           .gte("ranking_year", from_year)
-           .order("ranking_year").order("ranking_week")
-           .execute())
-    seen = {}
-    for r in (res.data or []):
-        key = (r["ranking_year"], r["ranking_week"])
-        if key not in seen:
-            seen[key] = r["publish_date"]
-    # Filter from_week for the from_year
-    return [
-        {"year": yr, "week": wk, "publish_date": dt}
-        for (yr, wk), dt in sorted(seen.items())
-        if (yr, wk) >= (from_year, from_week)
-    ]
+def get_published_weeks(from_year: int, from_week: int) -> list[dict]:
+    """Fetch all published ranking weeks from CDN, filtered to requested range."""
+    r = requests.get(
+        f"{CDN}/PUBLISH_DATE.json",
+        params={"CategoryCode": "SEN", "q": 1},
+        headers=HEADERS, timeout=TIMEOUT,
+    )
+    r.raise_for_status()
+    rows = r.json().get("Result", [])
+    weeks = []
+    for row in rows:
+        yr = int(row["RankingYear"])
+        wk = int(row["RankingWeek"])
+        if (yr, wk) >= (from_year, from_week):
+            weeks.append({"year": yr, "week": wk, "publish_date": row.get("RankingStatusDate", "")})
+    weeks.sort(key=lambda x: (x["year"], x["week"]))
+    return weeks
 
 
 def doubles_week_exists(supabase: Client, year: int, week: int) -> bool:
@@ -213,9 +212,9 @@ def main():
 
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-    print(f"Finding weeks with singles data (from {args.from_year} W{args.from_week}) ...")
-    weeks = get_singles_weeks(supabase, args.from_year, args.from_week)
-    print(f"  {len(weeks)} singles weeks found\n")
+    print(f"Fetching published weeks from CDN (from {args.from_year} W{args.from_week}) ...")
+    weeks = get_published_weeks(args.from_year, args.from_week)
+    print(f"  {len(weeks)} published weeks found\n")
 
     to_fetch = []
     for w in weeks:

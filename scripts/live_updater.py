@@ -23,7 +23,7 @@ import sys
 import time
 import argparse
 import requests
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 try:
     from supabase import create_client as _sb_create
@@ -32,6 +32,43 @@ except ImportError:
 
 sys.path.insert(0, os.path.dirname(__file__))
 from feature_model import MatchPredictor, p_win_from_state, p_win_current_game, p_win_live
+
+# ── Sent-results deduplication tracker ───────────────────────────────────────
+
+_PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_LOGS_DIR    = os.path.join(_PROJECT_DIR, "logs")
+
+
+def _sent_key(event_id: int, id1: int, id2: int) -> str:
+    return f"{event_id}_{min(id1, id2)}_{max(id1, id2)}"
+
+
+def _tracker_path() -> str:
+    return os.path.join(_LOGS_DIR, f"sent_results_{date.today().isoformat()}.txt")
+
+
+def _mark_sent(key: str):
+    os.makedirs(_LOGS_DIR, exist_ok=True)
+    with open(_tracker_path(), "a") as f:
+        f.write(key + "\n")
+
+
+# ── Telegram notifier ─────────────────────────────────────────────────────────
+
+class TelegramNotifier:
+    def __init__(self, token: str, channel: str):
+        self.url     = f"https://api.telegram.org/bot{token}/sendMessage"
+        self.channel = channel
+
+    def send(self, text: str):
+        try:
+            requests.post(self.url, json={
+                "chat_id":    self.channel,
+                "text":       text,
+                "parse_mode": "HTML",
+            }, timeout=5)
+        except Exception as e:
+            print(f"  [TG] send error: {e}")
 
 # ── WTT API ───────────────────────────────────────────────────────────────────
 LIVE_URL = (
@@ -412,7 +449,7 @@ def _upsert_live_state(db, match_id, event_id, m, ga, gb, pts_a, pts_b,
 
 
 def _maybe_write_game_log(db, match_id, event_id, m, ga, gb, p_win,
-                          done_games, last_games):
+                          done_games, last_games, tg=None):
     total = ga + gb
     prev  = last_games.get(match_id, 0)
     if total <= prev or not done_games:
@@ -436,7 +473,160 @@ def _maybe_write_game_log(db, match_id, event_id, m, ga, gb, p_win,
         print(f"  [DB] game_log error: {e}")
 
 
-def _write_match_result(db, match_id: str, match_p0_by_id: dict, last_state: dict):
+def _extract_venue(event_name: str) -> str:
+    """Extract city from WTT event name, e.g. 'WTT Contender Skopje 2026' → 'Skopje'."""
+    import re
+    skip = {"wtt","grand","star","contender","smash","series","youth","championships",
+            "team","world","table","tennis","junior","cadet","open","cup"}
+    name = re.sub(r'\b\d{4}\b', '', event_name).strip()
+    words = [w for w in name.split() if w.lower() not in skip]
+    return words[-1] if words else ""
+
+
+def _parse_discipline_round(round_name: str) -> tuple[str, str]:
+    """Split 'Men\'s Singles Round of 16' → ('Men\'s Singles', 'Round of 16')."""
+    for d in ["Women's Singles", "Men's Singles", "Mixed Doubles", "Women's Doubles", "Men's Doubles"]:
+        if d.lower() in round_name.lower():
+            rest = round_name[round_name.lower().find(d.lower()) + len(d):].strip(" -·|")
+            return d, rest or round_name
+    return "Singles", round_name
+
+
+def _build_result_message(db, match_id: str, state: dict, p_pre: float,
+                           result: str, correct) -> str | None:
+    """Build the formatted Telegram result message."""
+    try:
+        # Game scores from wtt_game_log
+        game_rows = []
+        if db:
+            gr = db.table("wtt_game_log").select("game_number,score_a,score_b") \
+                   .eq("match_id", match_id).order("game_number").execute()
+            game_rows = gr.data or []
+
+        # Player country + ranking
+        c1_country = c2_country = ""
+        c1_rank = c2_rank = None
+        if db:
+            ids = [state["comp1_id"], state["comp2_id"]]
+            pr  = db.table("wtt_players").select("ittf_id,country_code") \
+                    .in_("ittf_id", ids).execute()
+            rr  = db.table("rankings_singles_normalized") \
+                    .select("player_id,rank,ranking_date") \
+                    .in_("player_id", ids) \
+                    .order("ranking_date", desc=True).execute()
+            cmap = {r["ittf_id"]: r["country_code"] for r in (pr.data or [])}
+            rmap: dict[int, int] = {}
+            for r in (rr.data or []):
+                if r["player_id"] not in rmap:
+                    rmap[r["player_id"]] = r["rank"]
+            c1_country = cmap.get(state["comp1_id"], "")
+            c2_country = cmap.get(state["comp2_id"], "")
+            c1_rank    = rmap.get(state["comp1_id"])
+            c2_rank    = rmap.get(state["comp2_id"])
+
+        # Competition name + venue
+        comp_name = venue = ""
+        if db and state.get("event_id"):
+            er = db.table("wtt_events").select("event_name") \
+                   .eq("event_id", state["event_id"]).execute()
+            if er.data:
+                comp_name = er.data[0]["event_name"]
+                venue     = _extract_venue(comp_name)
+
+        # Orient: Indian player is always shown first
+        if c2_country == "IND" and c1_country != "IND":
+            p1_name, p1_c, p1_r = state["comp2_name"], c2_country, c2_rank
+            p2_name, p2_c, p2_r = state["comp1_name"], c1_country, c1_rank
+            result_p1  = "W" if result == "L" else "L"
+            ga1, gb1   = state["games_b"], state["games_a"]
+            game_scores = [(r["score_b"], r["score_a"]) for r in game_rows]
+        else:
+            p1_name, p1_c, p1_r = state["comp1_name"], c1_country, c1_rank
+            p2_name, p2_c, p2_r = state["comp2_name"], c2_country, c2_rank
+            result_p1  = result
+            ga1, gb1   = state["games_a"], state["games_b"]
+            game_scores = [(r["score_a"], r["score_b"]) for r in game_rows]
+
+        # For non-India matches: winner shown first
+        p1_ind = (p1_c == "IND")
+        p2_ind = (p2_c == "IND")
+        if not p1_ind and not p2_ind and result_p1 == "L":
+            p1_name, p2_name = p2_name, p1_name
+            p1_c, p2_c       = p2_c, p1_c
+            p1_r, p2_r       = p2_r, p1_r
+            result_p1        = "W"
+            ga1, gb1         = gb1, ga1
+            game_scores      = [(b, a) for a, b in game_scores]
+
+        def fmt(name, country, rank, is_india):
+            r_str = f"#{rank}" if rank else ""
+            if is_india:
+                return f"<i>{name}</i>" + (f" (<i>{r_str}</i>)" if r_str else "")
+            extras = ([country] if country else []) + ([r_str] if r_str else [])
+            return name + (f" ({','.join(extras)})" if extras else "")
+
+        p1_str = fmt(p1_name, p1_c, p1_r, p1_ind)
+        p2_str = fmt(p2_name, p2_c, p2_r, p2_ind)
+        verb   = "defeated" if result_p1 == "W" else "lost to"
+        scores = ", ".join(f"{a}-{b}" for a, b in game_scores) if game_scores else "–"
+        discipline, round_display = _parse_discipline_round(state.get("round_name", ""))
+        import re as _re
+        round_display = _re.sub(r'\s*-\s*Match\s*\d+$', '', round_display, flags=_re.IGNORECASE).strip()
+        predicted = state["comp1_name"] if p_pre >= 0.5 else state["comp2_name"]
+        pred_mark = "✅" if correct else ("❌" if correct is False else "–")
+        header = f"<b>{comp_name}</b>"
+
+        return (
+            f"{header}\n"
+            f"{discipline}  |  {round_display}\n\n"
+            f"{p1_str} {verb} {p2_str} by\n"
+            f"<b>{ga1}–{gb1}</b>  ({scores})\n"
+            f"Predicted: {predicted}  {pred_mark}"
+        )
+    except Exception as e:
+        print(f"  [TG] message build error: {e}")
+        return None
+
+
+def _fetch_official_result(event_id, id1: int, id2: int):
+    """Fallback: look up the official final result from GetOfficialResult API."""
+    try:
+        r = requests.get(
+            OFFICIAL_URL,
+            params={"EventId": event_id, "include_match_card": "true", "take": 500},
+            headers=HEADERS, timeout=15,
+        )
+        data = r.json() if r.status_code == 200 else []
+        if not isinstance(data, list):
+            data = data.get("Data") or []
+        for entry in data:
+            mc = entry.get("match_card") or entry
+            if mc.get("resultStatus") != "OFFICIAL":
+                continue
+            comps = mc.get("competitiors") or []
+            if len(comps) < 2:
+                continue
+            try:
+                e1 = int(comps[0].get("competitiorId") or 0)
+                e2 = int(comps[1].get("competitiorId") or 0)
+            except (ValueError, TypeError):
+                continue
+            if {e1, e2} != {id1, id2}:
+                continue
+            overall = str(mc.get("resultOverallScores") or mc.get("overallScores") or "")
+            if "-" in overall:
+                w1, w2 = [int(x.strip()) for x in overall.split("-")[:2]]
+                # result is from comp1's perspective; check if id1 matches comp1
+                if e1 == id1:
+                    return ("W" if w1 > w2 else "L"), w1, w2
+                else:
+                    return ("W" if w2 > w1 else "L"), w2, w1
+    except Exception as e:
+        print(f"  [TG] official fallback error: {e}")
+    return None, None, None
+
+
+def _write_match_result(db, match_id: str, match_p0_by_id: dict, last_state: dict, tg=None):
     """Write final prediction outcome to wtt_match_results when a match completes."""
     state = last_state.get(match_id)
     p_pre = match_p0_by_id.get(match_id)
@@ -448,7 +638,14 @@ def _write_match_result(db, match_id: str, match_p0_by_id: dict, last_state: dic
     elif gb >= 3:
         result = "L"
     else:
-        result = None  # insufficient data — skip
+        # Incomplete state — query Official API for the actual result
+        res, ga_off, gb_off = _fetch_official_result(
+            state.get("event_id"), state["comp1_id"], state["comp2_id"])
+        if res:
+            result, ga, gb = res, ga_off, gb_off
+            state = {**state, "games_a": ga, "games_b": gb}
+        else:
+            result = None  # truly insufficient data
     correct = ((p_pre > 0.5) == (result == "W")) if result else None
     try:
         db.table("wtt_match_results").upsert({
@@ -467,6 +664,25 @@ def _write_match_result(db, match_id: str, match_p0_by_id: dict, last_state: dic
             "correct":    correct,
         }).execute()
         print(f"  [DB] result saved: {match_id} → {result}, correct={correct}")
+        if tg and result:
+            round_low = state.get("round_name", "").lower()
+            is_key_round = any(k in round_low for k in ["quarter", "semi", "final"])
+            is_india = False
+            if db:
+                try:
+                    ids = [state["comp1_id"], state["comp2_id"]]
+                    cr  = db.table("wtt_players").select("ittf_id,country_code") \
+                            .in_("ittf_id", ids).execute()
+                    is_india = any(r.get("country_code") == "IND" for r in (cr.data or []))
+                except Exception:
+                    pass
+            if is_india or is_key_round:
+                msg = _build_result_message(db, match_id, state, p_pre, result, correct)
+                if msg:
+                    tg.send(msg)
+                    _mark_sent(_sent_key(
+                        state["event_id"], state["comp1_id"], state["comp2_id"]
+                    ))
     except Exception as e:
         print(f"  [DB] match_results error: {e}")
 
@@ -488,7 +704,7 @@ def get_active_event_ids(lookback_days: int = 7) -> list[int]:
 
 
 def poll_points(mp, event_ids: list[int], gender_label: str,
-                interval: float = 2.0, db=None, auto: bool = False):
+                interval: float = 2.0, db=None, auto: bool = False, tg=None):
     """
     Continuously poll GetLiveResult every `interval` seconds.
     Polls all event IDs in the list simultaneously.
@@ -603,7 +819,7 @@ def poll_points(mp, event_ids: list[int], gender_label: str,
                             _upsert_live_state(db, match_id, eid, m,
                                                ga, gb, pts_a, pts_b, p, p0, seq)
                             _maybe_write_game_log(db, match_id, eid, m,
-                                                  ga, gb, p, done_games, last_games)
+                                                  ga, gb, p, done_games, last_games, tg=tg)
                         last_state[match_id] = {
                             "event_id":   eid,
                             "comp1_id":   m["id1"],
@@ -628,7 +844,7 @@ def poll_points(mp, event_ids: list[int], gender_label: str,
                           .eq("match_id", mid).execute()
                     except Exception:
                         pass
-                    _write_match_result(db, mid, match_p0_by_id, last_state)
+                    _write_match_result(db, mid, match_p0_by_id, last_state, tg=tg)
             for mid in now_ids:
                 missing_counts.pop(mid, None)  # reset counter when match reappears
             seen_matches = now_ids
@@ -740,8 +956,16 @@ def main():
                     print("  [DB] Connected — writing to wtt_live_state + wtt_game_log")
                 except KeyError as e:
                     print(f"  [!] Missing env var {e} — DB writes disabled")
+        tg = None
+        tg_token   = os.environ.get("TELEGRAM_BOT_TOKEN")
+        tg_channel = os.environ.get("TELEGRAM_CHANNEL_ID")
+        if tg_token and tg_channel:
+            tg = TelegramNotifier(tg_token, tg_channel)
+            print(f"  [TG] Telegram enabled → {tg_channel}")
+        else:
+            print("  [TG] Telegram not configured (set TELEGRAM_BOT_TOKEN + TELEGRAM_CHANNEL_ID in .env)")
         poll_points(mp, event_ids, gender_label, interval=args.interval, db=db,
-                    auto=args.auto)
+                    auto=args.auto, tg=tg)
 
 
 if __name__ == "__main__":

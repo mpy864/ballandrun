@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(source ~/.zshrc)",
+      "Bash(npx vite:*)",
+      "Bash(PATH=$PATH:$HOME/.nvm/versions/node/v22.19.0/bin npm run build)",
+      "mcp__claude_ai_Supabase__apply_migration"
+    ]
+  }
+}
