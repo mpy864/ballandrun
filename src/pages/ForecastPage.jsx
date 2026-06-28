@@ -80,10 +80,9 @@ export default function ForecastPage() {
   }, [events])
 
   const card = {
-    background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(22px)',
-    WebkitBackdropFilter: 'blur(22px)',
-    border: '1px solid rgba(30,70,160,0.10)', borderRadius: 14,
-    boxShadow: '0 8px 30px rgba(15,42,94,0.16)',
+    background: '#ffffff',
+    border: '1px solid rgba(30,70,160,0.12)', borderRadius: 14,
+    boxShadow: '0 10px 34px rgba(15,42,94,0.22)',
   }
 
   if (loading) return <Shell><div style={{ color: '#0f2a5e' }}>Loading…</div></Shell>
@@ -214,9 +213,13 @@ export default function ForecastPage() {
 // ── small bits ───────────────────────────────────────────────────────────────
 function Shell({ children }) {
   return (
-    <div style={{ minHeight: '100vh', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ minHeight: '100vh', fontFamily: 'system-ui, sans-serif', position: 'relative' }}>
       <style>{`@keyframes live-pulse {0%,100%{opacity:1}50%{opacity:0.25}}`}</style>
-      <div style={{ maxWidth: 960, margin: '0 auto', padding: '36px 16px 48px' }}>
+      {/* soft scrim so the busy page background doesn't fight the content */}
+      <div style={{ position: 'fixed', inset: 0,
+                    background: 'rgba(238,242,250,0.78)', pointerEvents: 'none' }} />
+      <div style={{ position: 'relative', maxWidth: 960, margin: '0 auto',
+                    padding: '36px 16px 48px' }}>
         {children}
       </div>
     </div>
