@@ -19,7 +19,7 @@ const STATUS = {
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString(undefined,
   { day: 'numeric', month: 'short' }) : ''
 const pct = (x) => (x == null ? '—' : `${(x * 100).toFixed(1)}%`)
-const REACH_COLS = ['R16', 'QF', 'SF', 'F']
+const REACH_COLS = ['R32', 'R16', 'QF', 'SF', 'F']
 const MEDAL = ['🥇', '🥈', '🥉']
 
 // ── component ────────────────────────────────────────────────────────────────
@@ -161,7 +161,7 @@ export default function ForecastPage() {
             <tr style={{ color: 'rgba(15,42,94,0.6)' }}>
               <th style={{ textAlign: 'left', padding: '11px 14px' }}>#</th>
               <th style={{ textAlign: 'left', padding: '11px 14px' }}>Player</th>
-              <th style={{ textAlign: 'left', padding: '11px 14px', width: '34%' }}>Title chance</th>
+              <th style={{ textAlign: 'left', padding: '11px 14px', width: '26%' }}>Title chance</th>
               {REACH_COLS.map(c => (
                 <th key={c} style={{ textAlign: 'right', padding: '11px 14px' }}>{c}</th>
               ))}
