@@ -80,8 +80,10 @@ export default function ForecastPage() {
   }, [events])
 
   const card = {
-    background: 'rgba(255,255,255,0.82)', backdropFilter: 'blur(18px)',
-    border: '1px solid rgba(30,70,160,0.08)', borderRadius: 14,
+    background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(22px)',
+    WebkitBackdropFilter: 'blur(22px)',
+    border: '1px solid rgba(30,70,160,0.10)', borderRadius: 14,
+    boxShadow: '0 8px 30px rgba(15,42,94,0.16)',
   }
 
   if (loading) return <Shell><div style={{ color: '#0f2a5e' }}>Loading…</div></Shell>
