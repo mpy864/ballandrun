@@ -9,6 +9,7 @@ import TournamentPage from './pages/TournamentPage.jsx'
 import YouthPipelinePage from './pages/YouthPipelinePage.jsx'
 import PlayerPage from './pages/PlayerPage.jsx'
 import IndiaPage from './pages/IndiaPage.jsx'
+import ForecastPage from './pages/ForecastPage.jsx'
 import PageBackground from './components/PageBackground.jsx'
 
 function ProtectedRoute({ children }) {
@@ -81,6 +82,11 @@ export default function App() {
       <Route path="/india" element={
         <ProtectedRoute>
           <IndiaPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/forecast" element={
+        <ProtectedRoute>
+          <ForecastPage />
         </ProtectedRoute>
       } />
     </Routes>

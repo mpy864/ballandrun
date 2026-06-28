@@ -381,6 +381,7 @@ export default function IndiaDashboard() {
                 { href: '/h2h',        label: 'H2H / Compare' },
                 { href: '/live',       label: 'Live'          },
                 { href: '/tournament', label: 'Tournament'    },
+                { href: '/forecast',   label: 'Forecast'      },
               ].map(l => (
                 <a key={l.href} href={l.href} style={{
                   fontSize: 12, fontWeight: 600, color: '#475569',

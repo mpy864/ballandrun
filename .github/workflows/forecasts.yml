@@ -1,0 +1,34 @@
+name: WTT Tournament Forecasts
+
+on:
+  schedule:
+    # 01:00 UTC daily — after the daily data sync (00:30 UTC)
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+    inputs:
+      events:
+        description: 'Comma-separated event ids (blank = auto upcoming)'
+        required: false
+        default: ''
+
+jobs:
+  forecast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests supabase brotli scikit-learn scipy numpy joblib
+
+      - name: Run forecasts
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python scripts/run_forecasts.py --events "${{ github.event.inputs.events }}"
