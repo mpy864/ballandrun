@@ -215,10 +215,11 @@ function Shell({ children }) {
   return (
     <div style={{ minHeight: '100vh', fontFamily: 'system-ui, sans-serif', position: 'relative' }}>
       <style>{`@keyframes live-pulse {0%,100%{opacity:1}50%{opacity:0.25}}`}</style>
-      {/* soft scrim so the busy page background doesn't fight the content */}
-      <div style={{ position: 'fixed', inset: 0,
-                    background: 'rgba(238,242,250,0.78)', pointerEvents: 'none' }} />
-      <div style={{ position: 'relative', maxWidth: 960, margin: '0 auto',
+      {/* solid background ABOVE the global photo layers (z 0-3), below content */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: 4,
+                    background: 'linear-gradient(180deg,#eef2fb 0%,#e3e9f5 100%)',
+                    pointerEvents: 'none' }} />
+      <div style={{ position: 'relative', zIndex: 5, maxWidth: 960, margin: '0 auto',
                     padding: '36px 16px 48px' }}>
         {children}
       </div>
