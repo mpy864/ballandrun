@@ -37,6 +37,122 @@ HEADERS = {
     "Referer":    "https://www.worldtabletennis.com/",
 }
 
+OFFICIAL_RESULT_URL = (
+    "https://wtt-website-live-events-api-prod-cmfzgabgbzhphabb.eastasia-01"
+    ".azurewebsites.net/api/cms/GetOfficialResult"
+)
+
+
+# ── Timezone: venue-local schedule -> IST ──────────────────────────────────────
+
+def derive_utc_offset(event_id: int, schedule_data: list) -> int | None:
+    """
+    The schedule feed gives venue-LOCAL times with no timezone. Derive the venue's
+    UTC offset (hours, utc - local) by matching completed matches to the results
+    API, which carries matchStartTimeUTC. Returns a whole-hour offset, or None if
+    it can't be derived (too few completed matches).
+    """
+    import statistics
+
+    def _naive(s: str):
+        s = s.replace("Z", "").split(".")[0].split("+")[0]
+        try:
+            return datetime.fromisoformat(s)
+        except ValueError:
+            return None
+
+    # UTC start keyed by the set of athlete IDs in the match
+    try:
+        r = requests.get(OFFICIAL_RESULT_URL,
+                         params={"EventId": event_id, "include_match_card": "true", "take": 500},
+                         headers=HEADERS, timeout=20)
+        rows = r.json() if r.status_code == 200 else []
+        if not isinstance(rows, list):
+            rows = rows.get("Data") or rows.get("Result") or []
+    except Exception:
+        return None
+
+    utc_by_ids: dict[frozenset, str] = {}
+    for e in rows:
+        mc = e.get("match_card") or e
+        u  = mc.get("matchStartTimeUTC") or ""
+        if not u:
+            continue
+        ids = {int(p["playerId"]) for c in (mc.get("competitiors") or [])
+               for p in (c.get("players") or []) if str(p.get("playerId", "")).isdigit()}
+        if ids:
+            utc_by_ids[frozenset(ids)] = u
+
+    raw = []
+    for day in schedule_data:
+        for u in (day.get("Competition") or {}).get("Unit", []):
+            sd = u.get("ActualStartDate") or ""
+            if not sd:
+                continue
+            ids = {int(a["Code"]) for s in (u.get("StartList", {}).get("Start") or [])
+                   for a in ((s.get("Competitor") or {}).get("Composition") or {}).get("Athlete", [])
+                   if str(a.get("Code", "")).isdigit()}
+            key = frozenset(ids)
+            if key in utc_by_ids:
+                loc, utc = _naive(sd), _naive(utc_by_ids[key])
+                if loc and utc:
+                    raw.append((utc - loc).total_seconds() / 3600)
+
+    if len(raw) < 3:
+        return None
+    med   = statistics.median(raw)
+    clean = [x for x in raw if abs(x - med) <= 2]      # drop mismatched-id outliers
+    return round(sum(clean) / len(clean)) if clean else None
+
+
+def _to_ist(local_str: str, utc_offset: int | None):
+    """Convert a venue-local 'YYYY-MM-DDTHH:MM:SS' string to an IST datetime."""
+    if utc_offset is None or len(local_str) < 16:
+        return None
+    try:
+        dt = datetime.fromisoformat(local_str[:19])
+    except ValueError:
+        return None
+    return dt + timedelta(hours=utc_offset) + timedelta(hours=5, minutes=30)
+
+
+# ── Discipline / round / name shorthands ───────────────────────────────────────
+
+_DISC_SHORT = {
+    "Men's Singles": "MS", "Women's Singles": "WS", "Men's Doubles": "MD",
+    "Women's Doubles": "WD", "Mixed Doubles": "XD",
+}
+
+
+def _disc_short(disc: str) -> str:
+    return _DISC_SHORT.get(disc, disc)
+
+
+def _round_short(rnd: str) -> str:
+    txt = re.sub(r'\s*-\s*Match\s*\d+$', '', rnd, flags=re.IGNORECASE).strip()
+    low = txt.lower()
+    if "qualif" in low:
+        m = re.search(r'(\d+)', low)
+        return f"Qual R{m.group(1)}" if m else "Qual"
+    if "final" in low and "semi" not in low and "quarter" not in low:
+        return "Final"
+    if "semi" in low:    return "SF"
+    if "quarter" in low: return "QF"
+    if "round of 16" in low: return "R16"
+    if "round of 32" in low: return "R32"
+    if "round of 64" in low: return "R64"
+    if "round of 128" in low: return "R128"
+    return txt or "—"
+
+
+def _pretty_name(team_name: str, is_doubles: bool) -> str:
+    """De-shout WTT names ('GHORPADE Yashaswini' -> 'Ghorpade Yashaswini'),
+    keeping the feed's surname-first order. Doubles -> surnames only."""
+    if is_doubles:
+        sides = [s.strip() for s in team_name.split("/") if s.strip()]
+        return " / ".join((s.split()[0].title() if s.split() else s) for s in sides)
+    return " ".join(p.title() for p in team_name.split())
+
 # ── Schedule fetching ─────────────────────────────────────────────────────────
 
 def fetch_schedule(event_id: int) -> list:
@@ -190,28 +306,40 @@ def _fmt(name: str, org: str, rank: int | None, is_india: bool) -> str:
 
 # ── Message assembly ──────────────────────────────────────────────────────────
 
-def build_messages(event_name: str, matches: list[dict],
-                   mp: dict, rank_map: dict[int, int], db=None) -> list[str]:
-    today_fmt = datetime.now().strftime("%a %d %b %Y")
-    venue     = next((m["venue"] for m in matches if m["venue"]), "")
+def _fmt2(pretty: str, org: str, rank: int | None, is_india: bool) -> str:
+    r = f" #{rank}" if rank else ""
+    if is_india:
+        return f"<i>{pretty} (IND{r})</i>"
+    extras = (org or "") + r
+    return f"{pretty} ({extras.strip()})" if extras.strip() else pretty
+
+
+def build_messages(event_name: str, matches: list[dict], mp: dict,
+                   rank_map: dict[int, int], utc_offset: int | None, db=None) -> list[str]:
+    venue = next((m["venue"] for m in matches if m["venue"]), "")
+
+    # Header date in IST (from earliest convertible match), else today.
+    ist_times = [(_to_ist(m["start_time"], utc_offset)) for m in matches]
+    first_ist = next((x for x in ist_times if x), None)
+    if utc_offset is not None and first_ist:
+        date_label, tz_label = first_ist.strftime("%a %d %b"), "times in IST"
+    else:
+        date_label, tz_label = datetime.now().strftime("%a %d %b"), "times in venue local time"
 
     header = (
-        f"<b>{event_name}</b>" + (f"  |  {venue}" if venue else "") + "\n"
-        f"Today's Schedule — {today_fmt}\n"
-        f"({len(matches)} match{'es' if len(matches) != 1 else ''})"
+        f"\U0001F1EE\U0001F1F3 <b>{event_name}</b> — India Today\n"
+        f"{date_label} · {tz_label} · {len(matches)} "
+        f"match{'es' if len(matches) != 1 else ''}"
     )
 
     blocks: list[str] = []
-    prev_time = None
-
-    for m in matches:
+    for m, ist in zip(matches, ist_times):
         sub, rnd = _parse_disc_round(m["description"])
-        t = m["start_time"][11:16] if len(m["start_time"]) > 10 else "–"
+        t = ist.strftime("%H:%M") if ist else (
+            m["start_time"][11:16] if len(m["start_time"]) > 10 else "—")
 
         ind1, ind2 = _india(m["org1"]), _india(m["org2"])
-
-        # India player always displayed first
-        if ind2 and not ind1:
+        if ind2 and not ind1:   # India player first
             n1, o1, ids1, n2, o2, ids2 = (m["name2"], m["org2"], m["id2s"],
                                            m["name1"], m["org1"], m["id1s"])
             ind1, ind2 = True, False
@@ -227,49 +355,39 @@ def build_messages(event_name: str, matches: list[dict],
             r1 = rank_map.get(ids1[0]) if len(ids1) == 1 else None
             r2 = rank_map.get(ids2[0]) if len(ids2) == 1 else None
 
-        p1_str = _fmt(n1, o1, r1, ind1)
-        p2_str = _fmt(n2, o2, r2, ind2)
+        p1 = _fmt2(_pretty_name(n1, m["is_doubles"]), o1, r1, ind1)
+        p2 = _fmt2(_pretty_name(n2, m["is_doubles"]), o2, r2, ind2)
 
-        time_sep = f"\n{'─'*28} {t}" if t != prev_time else ""
-        prev_time = t
-
-        # Prediction for singles only
+        # Prediction (singles only)
         pred_line = ""
         if not m["is_doubles"] and ids1 and ids2:
             try:
                 key       = "W" if "Women" in m["sub_event"] else "M"
                 predictor = mp.get(key) or next(iter(mp.values()))
-                sc        = predictor.predict_score(ids1[0], ids2[0])
-                p         = sc["p_match"]
+                p         = predictor.predict_score(ids1[0], ids2[0])["p_match"]
                 conf      = max(p, 1 - p)
-                win_name  = n1 if p >= 0.5 else n2
-                win_india = ind1 if p >= 0.5 else ind2
-                win_fmt   = f"<i>{win_name}</i>" if win_india else win_name
-                pred_line = f"\n⚡ Prediction: {win_fmt} ({conf*100:.0f}%)"
+                win_pretty = _pretty_name(n1 if p >= 0.5 else n2, False)
+                win_india  = ind1 if p >= 0.5 else ind2
+                win_fmt    = f"<i>{win_pretty}</i>" if win_india else win_pretty
+                pred_line  = f"\nPick: {win_fmt} {conf*100:.0f}%"
             except Exception:
                 pass
 
-        block = (
-            f"{time_sep}\n"
-            f"{sub}  |  {rnd}\n"
-            f"{p1_str}  vs  {p2_str}"
-            f"{pred_line}"
+        blocks.append(
+            f"<b>{t}</b>  {_disc_short(sub)} · {_round_short(rnd)}\n"
+            f"{p1}  v  {p2}{pred_line}"
         )
-        blocks.append(block.strip())
 
-    # Pack blocks into ≤ 4000 char messages
-    messages = [header]
-    chunk = ""
+    # Pack header + blocks into ≤ ~3800 char messages
+    messages, chunk = [], header
     for block in blocks:
         addition = "\n\n" + block
         if len(chunk) + len(addition) > 3800:
-            messages.append(chunk.strip())
-            chunk = block
+            messages.append(chunk)
+            chunk = header + " (cont.)\n\n" + block
         else:
             chunk += addition
-    if chunk.strip():
-        messages.append(chunk.strip())
-
+    messages.append(chunk)
     return messages
 
 
@@ -371,7 +489,13 @@ def main():
         all_ids  = list({i for m in matches for i in m["id1s"] + m["id2s"]})
         rank_map = fetch_ranks(db, all_ids)
 
-        messages = build_messages(ename, matches, mp, rank_map, db=db)
+        utc_offset = derive_utc_offset(eid, data)
+        if utc_offset is None:
+            print("  [tz] Could not derive venue offset — showing venue-local time.")
+        else:
+            print(f"  [tz] Venue UTC offset {utc_offset:+d}h → converting to IST.")
+
+        messages = build_messages(ename, matches, mp, rank_map, utc_offset, db=db)
 
         for idx, msg in enumerate(messages, 1):
             if args.dry_run:
