@@ -112,21 +112,22 @@ def tg_send(token: str, channel: str, text: str):
         print(f"  [TG] error: {e}")
 
 
-def _send_chunked(token, channel, header, blocks, footer, dry_run):
-    """Join blocks under one header; split into multiple messages if too long."""
+def _send_chunked(token, channel, blocks, footer, dry_run):
+    """Send self-headed blocks; split into multiple messages if too long."""
     LIMIT = 3500
-    chunks, cur = [], header
+    chunks, cur = [], ""
     for b in blocks:
-        if len(cur) + len(b) + 2 > LIMIT:
+        if cur and len(cur) + len(b) + 2 > LIMIT:
             chunks.append(cur)
-            cur = header + "\n(continued)\n\n" + b
+            cur = b
         else:
-            cur += "\n\n" + b
+            cur = (cur + "\n\n" + b) if cur else b
     chunks.append(cur)
     if footer:
         chunks[-1] += "\n\n" + footer
 
     for c in chunks:
+        c = c.strip()
         if dry_run:
             print("\n" + c + "\n" + "─" * 50)
         else:
@@ -225,13 +226,13 @@ def main():
         print("  No Indian or key-round results today — nothing to recap.")
         return
 
-    # Build the message
-    ist_date = (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).strftime("%d %b %Y")
-    header   = f"\U0001F3D3 <b>WTT Day Recap</b> · {ist_date}"
+    # Build the message — each event block carries its own heading,
+    # matching the morning schedule's heading shape.
+    date_label = date.today().strftime("%a %d %b")
 
     blocks = []
     for ename, by_disc in grouped.items():
-        lines = [f"<b>{ename}</b>"]
+        lines = [f"<b>{ename} — India — {date_label} — Recap</b>"]
         for disc, items in by_disc.items():
             lines.append(f"<u>{disc}</u>")
             for m, info_map in items:
@@ -240,7 +241,7 @@ def main():
 
     footer = f"Model called <b>{correct}/{total}</b> correct today." if total else ""
 
-    _send_chunked(tg_token, tg_channel, header, blocks, footer, args.dry_run)
+    _send_chunked(tg_token, tg_channel, blocks, footer, args.dry_run)
     print(f"\nDone. Recap for {len(grouped)} event(s), tally {correct}/{total}.")
 
 

@@ -318,9 +318,8 @@ def build_messages(event_name: str, matches: list[dict], mp: dict,
         date_label, tz_label = datetime.now().strftime("%a %d %b"), "times in venue local time"
 
     header = (
-        f"\U0001F1EE\U0001F1F3 <b>{event_name}</b> — India Today\n"
-        f"{date_label} · {tz_label} · {len(matches)} "
-        f"match{'es' if len(matches) != 1 else ''}"
+        f"<b>{event_name} — India — {date_label} — Schedule</b>\n"
+        f"{tz_label} · {len(matches)} match{'es' if len(matches) != 1 else ''}"
     )
 
     blocks: list[str] = []
