@@ -1,0 +1,29 @@
+name: Catch-up Results Sweep
+
+on:
+  schedule:
+    - cron: '0 23 * * *'   # 23:00 UTC — end-of-day sweep for any missed results
+  workflow_dispatch:          # manual trigger from GitHub UI
+
+jobs:
+  catchup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt brotli
+
+      - name: Send today's completed results
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+        run: python scripts/send_todays_results.py --auto --db
