@@ -252,12 +252,21 @@ def _parse_game_scores(scores_str: str) -> list[tuple[int, int]]:
     return out
 
 
+def pretty_name(team_name: str) -> str:
+    """De-shout WTT names ('GHORPADE Yashaswini' -> 'Ghorpade Yashaswini'),
+    keeping the feed's surname-first order. Doubles ('A/B') -> surnames only."""
+    if "/" in team_name:
+        sides = [s.strip() for s in team_name.split("/") if s.strip()]
+        return " / ".join((s.split()[0].title() if s.split() else s) for s in sides)
+    return " ".join(p.title() for p in team_name.split())
+
+
 def _fmt(name: str, country: str, rank, is_india: bool) -> str:
-    r_str = f"#{rank}" if rank else ""
-    if is_india:
-        return f"<i>{name}</i>" + (f" (<i>{r_str}</i>)" if r_str else "")
-    extras = ([country] if country else []) + ([r_str] if r_str else [])
-    return name + (f" ({','.join(extras)})" if extras else "")
+    o    = "IND" if is_india else (country or "")
+    bits = ([o] if o else []) + ([str(rank)] if rank else [])
+    paren = f" ({', '.join(bits)})" if bits else ""
+    pretty = pretty_name(name)
+    return f"<i>{pretty}{paren}</i>" if is_india else f"{pretty}{paren}"
 
 
 # ── Sent-results deduplication tracker ───────────────────────────────────────

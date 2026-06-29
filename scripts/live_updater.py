@@ -558,12 +558,18 @@ def _build_result_message(db, match_id: str, state: dict, p_pre: float,
             ga1, gb1         = gb1, ga1
             game_scores      = [(b, a) for a, b in game_scores]
 
+        def _pretty(team_name):
+            if "/" in team_name:
+                sides = [s.strip() for s in team_name.split("/") if s.strip()]
+                return " / ".join((s.split()[0].title() if s.split() else s) for s in sides)
+            return " ".join(p.title() for p in team_name.split())
+
         def fmt(name, country, rank, is_india):
-            r_str = f"#{rank}" if rank else ""
-            if is_india:
-                return f"<i>{name}</i>" + (f" (<i>{r_str}</i>)" if r_str else "")
-            extras = ([country] if country else []) + ([r_str] if r_str else [])
-            return name + (f" ({','.join(extras)})" if extras else "")
+            o     = "IND" if is_india else (country or "")
+            bits  = ([o] if o else []) + ([str(rank)] if rank else [])
+            paren = f" ({', '.join(bits)})" if bits else ""
+            pretty = _pretty(name)
+            return f"<i>{pretty}{paren}</i>" if is_india else f"{pretty}{paren}"
 
         p1_str = fmt(p1_name, p1_c, p1_r, p1_ind)
         p2_str = fmt(p2_name, p2_c, p2_r, p2_ind)

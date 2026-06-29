@@ -296,22 +296,13 @@ def _india(org: str) -> bool:
     return "IND" in (org or "").upper()
 
 
-def _fmt(name: str, org: str, rank: int | None, is_india: bool) -> str:
-    r_str = f"#{rank}" if rank else ""
-    if is_india:
-        return f"<i>{name}</i>" + (f" (<i>{r_str}</i>)" if r_str else "")
-    extras = ([org] if org else []) + ([r_str] if r_str else [])
-    return name + (f" ({','.join(extras)})" if extras else "")
-
-
 # ── Message assembly ──────────────────────────────────────────────────────────
 
 def _fmt2(pretty: str, org: str, rank: int | None, is_india: bool) -> str:
-    r = f" #{rank}" if rank else ""
-    if is_india:
-        return f"<i>{pretty} (IND{r})</i>"
-    extras = (org or "") + r
-    return f"{pretty} ({extras.strip()})" if extras.strip() else pretty
+    o    = "IND" if is_india else (org or "")
+    bits = ([o] if o else []) + ([str(rank)] if rank else [])
+    paren = f" ({', '.join(bits)})" if bits else ""
+    return f"<i>{pretty}{paren}</i>" if is_india else f"{pretty}{paren}"
 
 
 def build_messages(event_name: str, matches: list[dict], mp: dict,

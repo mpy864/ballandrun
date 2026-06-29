@@ -31,7 +31,7 @@ except Exception:
 from feature_model import MatchPredictor
 from send_todays_results import (
     fetch_todays_results, _is_key_round, fetch_player_info,
-    fetch_event_name, _parse_disc_round,
+    fetch_event_name, _parse_disc_round, pretty_name,
 )
 
 try:
@@ -85,11 +85,12 @@ def _recap_line(m: dict, info_map: dict) -> str:
 
     def tag(name, org, ittf_id):
         is_ind = (org == "IND")
-        rank = (info_map.get(ittf_id) or {}).get("rank")
-        r = f" #{rank}" if rank else ""
-        if is_ind:
-            return f"<i>{name} (IND{r})</i>"
-        return f"{name}" + (f" ({org}{r})" if org else "")
+        rank   = (info_map.get(ittf_id) or {}).get("rank")
+        o      = "IND" if is_ind else (org or "")
+        bits   = ([o] if o else []) + ([str(rank)] if rank else [])
+        paren  = f" ({', '.join(bits)})" if bits else ""
+        pretty = pretty_name(name)
+        return f"<i>{pretty}{paren}</i>" if is_ind else f"{pretty}{paren}"
 
     rnd = _round_abbr(_parse_disc_round(m["round"])[1])
     return f"• {rnd}  {tag(w_name, w_org, w_id)} def. {tag(l_name, l_org, l_id)}  {score}"
