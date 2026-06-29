@@ -38,7 +38,7 @@ ITTF_2026_EVENTS = {
     3378: ("ITTF Mixed Team World Cup Chengdu 2026",    "2026-11-29", "2026-12-06", None),
     # ── Asian Events ──────────────────────────────────────────────
     3471: ("ITTF-ATTU Asian Cup Haikou 2026",                        "2026-02-04", "2026-02-08", None),
-    3472: ("ITTF-ATTU Asian Youth Championships Muscat 2026",        "2026-06-22", "2026-06-28", None),
+    3472: ("ITTF-ATTU Asian Youth Championships Bangkok 2026",       "2026-06-28", "2026-07-04", None),
     3473: ("Asian Games Nagoya 2026",                                "2026-09-20", "2026-09-28", None),
     3474: ("ITTF-ATTU Asian Championships Tashkent 2026",            "2026-10-12", "2026-10-25", None),
     3475: ("ITTF-ATTU South East Asian Youth Championships 2026",    "2026-04-14", "2026-04-19", None),

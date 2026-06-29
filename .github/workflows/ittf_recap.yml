@@ -1,0 +1,27 @@
+name: ITTF Daily Recap
+
+on:
+  schedule:
+    - cron: '45 23 * * *'   # 23:45 UTC — after the day's ITTF/ATTU play
+  workflow_dispatch:          # manual trigger from GitHub UI
+
+jobs:
+  recap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Post ITTF/ATTU India recap
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+        run: python scripts/ittf_feed.py --auto
