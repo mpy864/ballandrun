@@ -1,5 +1,6 @@
 import LiveProbability from '../components/LiveProbability.jsx'
 import PredictionAccuracy from '../components/PredictionAccuracy.jsx'
+import AuthBar from '../components/AuthBar.jsx'
 
 export default function LivePage() {
   return (
@@ -9,6 +10,7 @@ export default function LivePage() {
       position: 'relative',
       zIndex: 4,
     }}>
+      <AuthBar />
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '36px 16px 48px' }}>
 
         {/* Header */}

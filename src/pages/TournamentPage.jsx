@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import TournamentSimulator from '../components/TournamentSimulator.jsx'
 import GroupDecisionTree from '../components/GroupDecisionTree.jsx'
+import AuthBar from '../components/AuthBar.jsx'
 
 export default function TournamentPage() {
   const [gender, setGender] = useState('M')
@@ -9,11 +10,11 @@ export default function TournamentPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      padding: '24px 16px',
       fontFamily: 'system-ui, -apple-system, sans-serif',
       position: 'relative', zIndex: 4,
     }}>
-      <div style={{ maxWidth: 960, margin: '0 auto' }}>
+      <AuthBar />
+      <div style={{ maxWidth: 960, margin: '0 auto', padding: '24px 16px' }}>
 
         {/* Header */}
         <div style={{ marginBottom: 24 }}>

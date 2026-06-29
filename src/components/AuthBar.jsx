@@ -8,16 +8,33 @@ export default function AuthBar() {
   const { session, profile, signOut } = useAuth()
   const navigate = useNavigate()
 
-  if (!session) return null
-  if (!profile) return null
-
-  const role  = profile.role
-  const email = session.user.email
-
   async function handleSignOut() {
     await signOut()
     navigate('/login')
   }
+
+  const homeLink = (
+    <a href="/" style={{
+      fontSize: 12, fontWeight: 600, color: '#64748b',
+      textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4,
+    }}>
+      🏠 Home
+    </a>
+  )
+
+  if (!session || !profile) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', padding: '8px 16px',
+        background: 'white', borderBottom: '1px solid #e2e8f0', fontSize: 12,
+      }}>
+        {homeLink}
+      </div>
+    )
+  }
+
+  const role  = profile.role
+  const email = session.user.email
 
   return (
     <div style={{
@@ -30,6 +47,8 @@ export default function AuthBar() {
       fontSize: 12,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {homeLink}
+        <span style={{ color: '#e2e8f0' }}>|</span>
         <span style={{
           fontSize: 10,
           fontWeight: 700,
