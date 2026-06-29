@@ -15,17 +15,16 @@ export default function AuthBar() {
 
   const homeLink = (
     <a href="/" style={{
-      fontSize: 12, fontWeight: 600, color: '#64748b',
-      textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4,
+      fontSize: 12, fontWeight: 600, color: '#64748b', textDecoration: 'none',
     }}>
-      🏠 Home
+      Home
     </a>
   )
 
   if (!session || !profile) {
     return (
       <div style={{
-        display: 'flex', alignItems: 'center', padding: '8px 16px',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 16px',
         background: 'white', borderBottom: '1px solid #e2e8f0', fontSize: 12,
       }}>
         {homeLink}
@@ -38,17 +37,15 @@ export default function AuthBar() {
 
   return (
     <div style={{
-      display: 'flex',
+      display: 'grid',
+      gridTemplateColumns: '1fr auto 1fr',
       alignItems: 'center',
-      justifyContent: 'space-between',
       padding: '8px 16px',
       background: 'white',
       borderBottom: '1px solid #e2e8f0',
       fontSize: 12,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {homeLink}
-        <span style={{ color: '#e2e8f0' }}>|</span>
         <span style={{
           fontSize: 10,
           fontWeight: 700,
@@ -68,9 +65,13 @@ export default function AuthBar() {
           </span>
         )}
       </div>
+      <div style={{ textAlign: 'center' }}>
+        {homeLink}
+      </div>
       <button
         onClick={handleSignOut}
         style={{
+          justifySelf: 'end',
           fontSize: 11,
           fontWeight: 600,
           color: '#64748b',
