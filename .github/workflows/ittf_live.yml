@@ -1,0 +1,24 @@
+name: ITTF Live Results
+
+on:
+  schedule:
+    - cron: '0 */5 * * *'   # restart every 5 hours (job polls up to ~5h)
+  workflow_dispatch:
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 305
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install requests
+      - name: Poll ITTF/ATTU live India results
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+        run: python scripts/ittf_feed.py --auto --mode live --interval 60 --duration 300

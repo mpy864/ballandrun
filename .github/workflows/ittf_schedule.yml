@@ -1,0 +1,24 @@
+name: ITTF Daily Schedule
+
+on:
+  schedule:
+    - cron: '0 0 * * *'    # 00:00 UTC = 05:30 IST — morning, before play
+  workflow_dispatch:
+
+jobs:
+  schedule:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install requests
+      - name: Post ITTF/ATTU India schedule
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+        run: python scripts/ittf_feed.py --auto --mode schedule

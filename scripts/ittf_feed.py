@@ -1,43 +1,47 @@
 #!/usr/bin/env python3
 """
-ittf_feed.py — Telegram recap for ITTF / ATTU events (results.ittf.com).
+ittf_feed.py — Telegram feed for ITTF / ATTU events (results.ittf.com).
 
 These continental / ITTF events are NOT on the WTT API, so the WTT bots can't
 see them. This reads the open ITTF results JSON (Bornan/Azure) directly:
 
-  champ.json                  -> config: sub-events, dates, live status
-  match/d<YYYY-MM-DD>.json     -> a day's matches (scheduled / live / finished)
-  match/live.json              -> currently-live matches
+  champ.json                   -> config: sub-events, dates, live status
+  match/d<YYYY-MM-DD>.json      -> a day's matches (scheduled / live / finished)
+  match/live.json               -> currently-live matches
 
-It posts ONE India-focused recap message per event for the most recent
-completed day. TEAM ties are expanded into their individual rubbers
-(SubMatches). No model predictions (youth players aren't in the model).
+Three modes (India-focused, no model predictions — youth players aren't in the
+model). TEAM ties are expanded into their individual rubbers (SubMatches):
+
+  recap     (default) ONE message: today's completed Indian results.
+  schedule            ONE message: today's upcoming Indian matches, times in IST.
+  live                long-running poll: posts each Indian result as it finishes.
 
 Usage
 -----
-  python scripts/ittf_feed.py --auto --dry-run
-  python scripts/ittf_feed.py --event 3472
+  python scripts/ittf_feed.py --auto --mode recap    --dry-run
+  python scripts/ittf_feed.py --auto --mode schedule --dry-run
+  python scripts/ittf_feed.py --auto --mode live --interval 60
   python scripts/ittf_feed.py --event 3472 --date 2026-06-29 --dry-run
 """
 
-import os, sys, argparse, requests
+import os, sys, time, argparse, requests
 from datetime import date, datetime, timedelta
 
-# ── ITTF / ATTU events (self-contained so this script needs no DB) ─────────────
-# id: (name, start, end).  Mirror of the Asian/ITTF block in fetch_ittf_matches.py.
+# ── ITTF / ATTU events: id -> (name, start, end, venue_utc_offset|None) ────────
+# venue_utc_offset converts the feed's local match times to IST for --mode schedule.
 ITTF_EVENTS = {
-    3379: ("ITTF World Cup Macao 2026",                              "2026-03-30", "2026-04-05"),
-    3216: ("ITTF World Team Championships London 2026",              "2026-04-28", "2026-05-10"),
-    3377: ("ITTF World Youth Championships 2026",                    "2026-11-21", "2026-11-28"),
-    3378: ("ITTF Mixed Team World Cup Chengdu 2026",                 "2026-11-29", "2026-12-06"),
-    3471: ("ITTF-ATTU Asian Cup Haikou 2026",                        "2026-02-04", "2026-02-08"),
-    3472: ("ITTF-ATTU Asian Youth Championships Bangkok 2026",       "2026-06-28", "2026-07-04"),
-    3473: ("Asian Games Nagoya 2026",                                "2026-09-20", "2026-09-28"),
-    3474: ("ITTF-ATTU Asian Championships Tashkent 2026",            "2026-10-12", "2026-10-25"),
-    3475: ("ITTF-ATTU South East Asian Youth Championships 2026",    "2026-04-14", "2026-04-19"),
-    3498: ("ITTF-ATTU Central Asia Youth Championships Almaty 2026", "2026-04-03", "2026-04-05"),
-    3499: ("ITTF-ATTU West Asia Youth Championships Amman 2026",     "2026-06-01", "2026-06-01"),
-    3500: ("ITTF-ATTU South Asia Youth Championships Shimla 2026",   "2026-04-08", "2026-04-11"),
+    3379: ("ITTF World Cup Macao 2026",                              "2026-03-30", "2026-04-05",  8),
+    3216: ("ITTF World Team Championships London 2026",              "2026-04-28", "2026-05-10",  1),
+    3377: ("ITTF World Youth Championships 2026",                    "2026-11-21", "2026-11-28",  None),
+    3378: ("ITTF Mixed Team World Cup Chengdu 2026",                 "2026-11-29", "2026-12-06",  8),
+    3471: ("ITTF-ATTU Asian Cup Haikou 2026",                        "2026-02-04", "2026-02-08",  8),
+    3472: ("ITTF-ATTU Asian Youth Championships Bangkok 2026",       "2026-06-28", "2026-07-04",  7),
+    3473: ("Asian Games Nagoya 2026",                                "2026-09-20", "2026-09-28",  9),
+    3474: ("ITTF-ATTU Asian Championships Tashkent 2026",            "2026-10-12", "2026-10-25",  5),
+    3475: ("ITTF-ATTU South East Asian Youth Championships 2026",    "2026-04-14", "2026-04-19",  None),
+    3498: ("ITTF-ATTU Central Asia Youth Championships Almaty 2026", "2026-04-03", "2026-04-05",  5),
+    3499: ("ITTF-ATTU West Asia Youth Championships Amman 2026",     "2026-06-01", "2026-06-01",  3),
+    3500: ("ITTF-ATTU South Asia Youth Championships Shimla 2026",   "2026-04-08", "2026-04-11",  5.5),
 }
 
 RESULTS_BASE = "https://results.ittf.com/ittf-web-results/html"
@@ -59,7 +63,6 @@ def _get_json(url):
         r = requests.get(url, headers=HEADERS, timeout=20)
         if r.status_code != 200:
             return None
-        # ITTF blobs are UTF-8 with BOM
         return r.json() if r.content[:1] != b"\xef" else \
             __import__("json").loads(r.content.decode("utf-8-sig"))
     except Exception as e:
@@ -78,8 +81,13 @@ def get_day(event_id, date_raw):
 # ── Formatting helpers ───────────────────────────────────────────────────────
 
 def pretty_name(name: str) -> str:
-    """De-shout 'CHATTOPADHAYAY Rishaan' -> 'Chattopadhayay Rishaan'."""
-    return " ".join(p.title() if p.isupper() else p for p in (name or "").split())
+    """De-shout 'CHATTOPADHAYAY Rishaan' -> 'Chattopadhayay Rishaan'.
+    Handles doubles pairs 'A SURNAME/B SURNAME' across the slash."""
+    def fix(part):
+        return " ".join(w.title() if w.isupper() else w for w in part.split())
+    if "/" in (name or ""):
+        return "/".join(fix(p.strip()) for p in name.split("/"))
+    return fix(name or "")
 
 
 def _round_short(round_txt: str) -> str:
@@ -111,11 +119,8 @@ def _is_india(side: dict) -> bool:
     return (side.get("Org") or "") == "IND"
 
 
-def _played(side_a: dict, side_b: dict) -> bool:
-    if side_a.get("Win") or side_b.get("Win"):
-        return True
-    return str(side_a.get("Res") or "0") not in ("", "0") or \
-           str(side_b.get("Res") or "0") not in ("", "0")
+def _involves_india(m: dict) -> bool:
+    return _is_india(m.get("Home") or {}) or _is_india(m.get("Away") or {})
 
 
 def _games(side: dict) -> int:
@@ -125,29 +130,47 @@ def _games(side: dict) -> int:
         return 0
 
 
-def _verb(winner_side: dict, loser_side: dict) -> str:
-    """Verb from the first side's perspective, decided by games won (the
+def _played(side_a: dict, side_b: dict) -> bool:
+    if side_a.get("Win") or side_b.get("Win"):
+        return True
+    return _games(side_a) > 0 or _games(side_b) > 0
+
+
+def _verb(first: dict, second: dict) -> str:
+    """Result verb from the first side's perspective, by games won (the
     rubber-level Win flag is unreliable)."""
-    a, b = _games(winner_side), _games(loser_side)
+    a, b = _games(first), _games(second)
     return "def." if a > b else ("lost to" if b > a else "drew")
 
 
-# ── Build one match's recap text ───────────────────────────────────────────────
+def _ist_clock(m: dict, tz_offset) -> str:
+    """Convert the feed's local match time to an IST HH:MM, or '' if unknown."""
+    if tz_offset is None:
+        return ""
+    hhmm = (m.get("RTime") or "").strip()
+    if not hhmm and "," in (m.get("Time") or ""):
+        hhmm = m["Time"].split(",")[-1].strip()
+    try:
+        h, mi = (int(x) for x in hhmm.split(":")[:2])
+    except (ValueError, AttributeError):
+        return ""
+    total = (h * 60 + mi - int(tz_offset * 60) + 330) % 1440   # local -> IST
+    return f"{total // 60:02d}:{total % 60:02d}"
+
+
+# ── Result block (recap / live) ─────────────────────────────────────────────────
 
 def _rubber_line(sm: dict) -> str | None:
     h, a = sm.get("Home") or {}, sm.get("Away") or {}
     if not _played(h, a):
         return None
-    # India player first
     if _is_india(a) and not _is_india(h):
         ind, opp = a, h
     else:
         ind, opp = h, a
-    verb  = _verb(ind, opp)
-    score = f"{ind.get('Res')}–{opp.get('Res')}"
     ind_s = f"<i>{pretty_name(ind.get('Desc'))}</i>" if _is_india(ind) else pretty_name(ind.get("Desc"))
     opp_s = f"<i>{pretty_name(opp.get('Desc'))}</i>" if _is_india(opp) else pretty_name(opp.get("Desc"))
-    return f"   • {ind_s} {verb} {opp_s} {score}"
+    return f"   • {ind_s} {_verb(ind, opp)} {opp_s} {ind.get('Res')}–{opp.get('Res')}"
 
 
 def _match_block(m: dict) -> str:
@@ -155,32 +178,35 @@ def _match_block(m: dict) -> str:
     _, rnd = _parse_desc(m.get("Desc", ""))
 
     if m.get("IsTeam"):
-        # India-first team headline
-        if _is_india(home):
-            ind_t, opp_t = home, away
-        else:
-            ind_t, opp_t = away, home
+        ind_t, opp_t = (home, away) if _is_india(home) else (away, home)
         head = (f"{rnd}  <i>{ind_t.get('Desc')}</i> "
                 f"{ind_t.get('Res')}–{opp_t.get('Res')} {opp_t.get('Desc')}")
-        lines = [head]
-        for sm in (m.get("SubMatches") or []):
-            ln = _rubber_line(sm)
-            if ln:
-                lines.append(ln)
+        lines = [head] + [ln for sm in (m.get("SubMatches") or [])
+                          if (ln := _rubber_line(sm))]
         return "\n".join(lines)
 
-    # Singles / doubles
-    if _is_india(away) and not _is_india(home):
-        ind, opp = away, home
-    else:
-        ind, opp = home, away
-    verb  = _verb(ind, opp)
-    score = f"{ind.get('Res')}–{opp.get('Res')}"
+    ind, opp = (away, home) if (_is_india(away) and not _is_india(home)) else (home, away)
     ind_s = f"<i>{pretty_name(ind.get('Desc'))} (IND)</i>" if _is_india(ind) else \
             f"{pretty_name(ind.get('Desc'))} ({ind.get('Org')})"
     opp_s = f"<i>{pretty_name(opp.get('Desc'))} (IND)</i>" if _is_india(opp) else \
             f"{pretty_name(opp.get('Desc'))} ({opp.get('Org')})"
-    return f"{rnd}  {ind_s} {verb} {opp_s} {score}"
+    return f"{rnd}  {ind_s} {_verb(ind, opp)} {opp_s} {ind.get('Res')}–{opp.get('Res')}"
+
+
+def _schedule_line(m: dict, tz_offset) -> str:
+    home, away = m.get("Home") or {}, m.get("Away") or {}
+    _, rnd = _parse_desc(m.get("Desc", ""))
+    t = _ist_clock(m, tz_offset)
+    tcol = f"<b>{t}</b>  " if t else ""
+    if m.get("IsTeam"):
+        ind_t, opp_t = (home, away) if _is_india(home) else (away, home)
+        return f"{tcol}{rnd}  <i>{ind_t.get('Desc')}</i> vs {opp_t.get('Desc')}"
+    ind, opp = (away, home) if (_is_india(away) and not _is_india(home)) else (home, away)
+    ind_s = f"<i>{pretty_name(ind.get('Desc'))} (IND)</i>" if _is_india(ind) else \
+            f"{pretty_name(ind.get('Desc'))} ({ind.get('Org')})"
+    opp_s = f"<i>{pretty_name(opp.get('Desc'))} (IND)</i>" if _is_india(opp) else \
+            f"{pretty_name(opp.get('Desc'))} ({opp.get('Org')})"
+    return f"{tcol}{rnd}  {ind_s} vs {opp_s}"
 
 
 # ── Telegram ──────────────────────────────────────────────────────────────────
@@ -212,52 +238,102 @@ def _send_chunked(token, channel, blocks, dry_run):
             tg_send(token, channel, c)
 
 
-# ── Recap for one event ─────────────────────────────────────────────────────────
+# ── Per-event builders ──────────────────────────────────────────────────────────
 
-def build_event_recap(event_id, target_date=None):
-    """Return (message_blocks, date_label) for the most recent completed day
-    with Indian results, or (None, None) if nothing."""
+def _event_name(event_id, champ=None):
+    return (champ or {}).get("champDesc") or ITTF_EVENTS.get(event_id, (f"Event {event_id}",))[0]
+
+
+def build_recap(event_id, target_date=None):
+    """ONE message: completed Indian results for a single day (today by default)."""
     champ = get_champ(event_id)
-    if not champ:
-        return None, None
-    name = champ.get("champDesc") or ITTF_EVENTS.get(event_id, (f"Event {event_id}",))[0]
+    name  = _event_name(event_id, champ)
+    day_raw = target_date or date.today().isoformat()
+    matches = get_day(event_id, day_raw)
+    india = [m for m in matches if m.get("Status") == ST_FINISHED and _involves_india(m)]
+    if not india:
+        return None
+    return _grouped_message(name, day_raw, india, "Recap", _match_block)
 
-    # Recap exactly one day: explicit --date, else today (UTC). Locking to a
-    # single day avoids re-posting an older day on rest days / after the event.
-    candidates = [target_date or date.today().isoformat()]
 
-    for day_raw in candidates:
-        matches = get_day(event_id, day_raw)
-        india = [m for m in matches
-                 if m.get("Status") == ST_FINISHED
-                 and (_is_india(m.get("Home") or {}) or _is_india(m.get("Away") or {}))]
-        if not india:
-            continue
+def build_schedule(event_id, target_date=None):
+    """ONE message: today's upcoming/live Indian matches, times in IST."""
+    champ = get_champ(event_id)
+    name  = _event_name(event_id, champ)
+    tz    = ITTF_EVENTS.get(event_id, (None, None, None, None))[3]
+    day_raw = target_date or date.today().isoformat()
+    matches = get_day(event_id, day_raw)
+    india = [m for m in matches if m.get("Status") in (ST_LIVE, ST_UPCOMING) and _involves_india(m)]
+    if not india:
+        return None
+    tz_note = "times in IST" if tz is not None else "times in venue local time"
+    return _grouped_message(name, day_raw, india, "Schedule",
+                            lambda m: _schedule_line(m, tz), subtitle=tz_note)
 
-        # Group by sub-event
-        grouped = {}
-        for m in india:
-            sub, _ = _parse_desc(m.get("Desc", ""))
-            grouped.setdefault(sub, []).append(m)
 
-        date_label = datetime.fromisoformat(day_raw).strftime("%a %d %b")
-        head = f"<b>{name} — India — {date_label} — Recap</b>"
-        body = []
-        for sub, ms in grouped.items():
-            seg = [f"<u>{sub}</u>"] + [_match_block(m) for m in ms]
-            body.append("\n".join(seg))
-        return [head + "\n\n" + body[0]] + body[1:], date_label
+def _grouped_message(name, day_raw, india_matches, label, line_fn, subtitle=None):
+    grouped = {}
+    for m in india_matches:
+        sub, _ = _parse_desc(m.get("Desc", ""))
+        grouped.setdefault(sub, []).append(m)
+    date_label = datetime.fromisoformat(day_raw).strftime("%a %d %b")
+    head = f"<b>{name} — India — {date_label} — {label}</b>"
+    if subtitle:
+        head += f"\n{subtitle} · {len(india_matches)} match{'es' if len(india_matches) != 1 else ''}"
+    body = []
+    for sub, ms in grouped.items():
+        body.append("\n".join([f"<u>{sub}</u>"] + [line_fn(m) for m in ms]))
+    return [head + "\n\n" + body[0]] + body[1:]
 
-    return None, None
 
+# ── Live poll ────────────────────────────────────────────────────────────────
+
+def run_live(event_ids, token, channel, interval, duration_min, dry_run):
+    """Poll each event's day feed; post each Indian result the first time it is
+    seen finished after start. Baselining already-finished ties on start prevents
+    re-posting after a workflow restart."""
+    deadline = time.time() + duration_min * 60
+    today = date.today().isoformat()
+    posted = {eid: {m.get("Key") for m in get_day(eid, today)
+                    if m.get("Status") == ST_FINISHED and _involves_india(m)}
+              for eid in event_ids}
+    print(f"  [live] baseline finished India ties: "
+          + ", ".join(f"{eid}:{len(v)}" for eid, v in posted.items()))
+
+    while time.time() < deadline:
+        for eid in event_ids:
+            name = _event_name(eid)
+            for m in get_day(eid, today):
+                if m.get("Status") != ST_FINISHED or not _involves_india(m):
+                    continue
+                key = m.get("Key")
+                if key in posted[eid]:
+                    continue
+                _, rnd = _parse_desc(m.get("Desc", ""))
+                date_label = datetime.now().strftime("%a %d %b")
+                msg = f"<b>{name} — {date_label} — Live</b>\n\n{_match_block(m)}"
+                if dry_run:
+                    print("\n" + msg + "\n" + "─" * 50)
+                else:
+                    tg_send(token, channel, msg)
+                posted[eid].add(key)
+                time.sleep(0.4)
+        time.sleep(interval)
+    print("  [live] window ended.")
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--event",   type=int, default=None)
-    ap.add_argument("--auto",    action="store_true")
-    ap.add_argument("--date",    default=None, help="YYYY-MM-DD (override recap day)")
-    ap.add_argument("--window",  type=int, default=2, help="±days around today for --auto")
-    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--event",    type=int, default=None)
+    ap.add_argument("--auto",     action="store_true")
+    ap.add_argument("--mode",     choices=["recap", "schedule", "live"], default="recap")
+    ap.add_argument("--date",     default=None, help="YYYY-MM-DD (recap/schedule day)")
+    ap.add_argument("--window",   type=int, default=2, help="±days around event for --auto")
+    ap.add_argument("--interval", type=float, default=60, help="live poll seconds")
+    ap.add_argument("--duration", type=int, default=300, help="live run minutes")
+    ap.add_argument("--dry-run",  action="store_true")
     args = ap.parse_args()
 
     if not args.auto and args.event is None:
@@ -265,7 +341,7 @@ def main():
 
     if args.auto:
         today = date.today()
-        event_ids = [eid for eid, (_, s, e) in ITTF_EVENTS.items()
+        event_ids = [eid for eid, (_, s, e, _tz) in ITTF_EVENTS.items()
                      if date.fromisoformat(s) - timedelta(days=args.window) <= today
                      <= date.fromisoformat(e) + timedelta(days=args.window)]
     else:
@@ -281,16 +357,20 @@ def main():
         print("  No active ITTF/ATTU events in window.")
         return
 
-    for eid in event_ids:
-        name = ITTF_EVENTS.get(eid, (f"Event {eid}",))[0]
-        print(f"{'='*56}\n  {name}  ({eid})\n{'='*56}")
-        blocks, day = build_event_recap(eid, args.date)
-        if not blocks:
-            print("  No Indian results found for a recent day.")
-            continue
-        print(f"  Recap for {day}: {len(blocks)} message block(s).")
-        _send_chunked(tg_token, tg_channel, blocks, args.dry_run)
+    if args.mode == "live":
+        print(f"  Live mode for events: {event_ids}")
+        run_live(event_ids, tg_token, tg_channel, args.interval, args.duration, args.dry_run)
+        return
 
+    builder = build_recap if args.mode == "recap" else build_schedule
+    for eid in event_ids:
+        print(f"{'='*56}\n  {_event_name(eid)}  ({eid})\n{'='*56}")
+        blocks = builder(eid, args.date)
+        if not blocks:
+            print(f"  No Indian {args.mode} items for the day.")
+            continue
+        print(f"  {len(blocks)} message block(s).")
+        _send_chunked(tg_token, tg_channel, blocks, args.dry_run)
     print("\nDone.")
 
 
