@@ -24,18 +24,24 @@ def _qkey(comp) -> str:
 
 
 def push_forecasts(event_id, sub_event, draw, stats, comp_by_uid, labels,
-                   tier, runs, provisional=True, status=None, client=None) -> int:
+                   tier, runs, provisional=True, status=None, initial=None,
+                   client=None) -> int:
     """Upsert one forecast row per competitor.  Returns rows written.
 
     `status`: optional {uid: ('out',round)|('champ',)|('alive',round)} — actual
     result so far; embedded in the reach JSON as _out / _champ (no new columns).
+    `initial`: optional {uid: pre_event_title} — pre-event prediction, stored as
+    reach._p0, so the page can show predicted-vs-actual.
     """
     sb = client or _client()
     status = status or {}
+    initial = initial or {}
     rows = []
     for uid, c in comp_by_uid.items():
         s = stats[uid]
         reach = {k: round(v, 6) for k, v in s["reach"].items()}
+        if uid in initial:
+            reach["_p0"] = round(initial[uid], 6)
         st = status.get(uid)
         if st:
             if st[0] == "out":

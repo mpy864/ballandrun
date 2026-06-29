@@ -191,8 +191,12 @@ def main():
         if args.push:
             from wtt_db import push_forecasts, push_entries
             status, _champ = actual_progress(draw.matches, res_sub, labels)
+            # pre-event prediction = same draw, ignoring results (for actual-vs-predicted)
+            init_stats, _ic, _il = simulate_draw(draw, model, tier,
+                                                 runs=args.runs, results=None)
+            initial = {uid: init_stats[uid]["title"] for uid in init_stats}
             n_f = push_forecasts(args.event, name, draw, stats, comp_by_uid,
-                                 labels, tier, args.runs, status=status)
+                                 labels, tier, args.runs, status=status, initial=initial)
             n_e = push_entries(args.event, name, draw)
             print(f"[push] {name}: {n_f} forecasts, {n_e} entries -> Supabase")
 

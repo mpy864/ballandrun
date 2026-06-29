@@ -161,7 +161,8 @@ export default function ForecastPage() {
             <tr style={{ color: 'rgba(15,42,94,0.6)' }}>
               <th style={{ textAlign: 'left', padding: '11px 14px' }}>#</th>
               <th style={{ textAlign: 'left', padding: '11px 14px' }}>Player</th>
-              <th style={{ textAlign: 'left', padding: '11px 14px', width: '26%' }}>Title chance</th>
+              <th style={{ textAlign: 'right', padding: '11px 14px' }} title="Prediction before the event started">Pre-event</th>
+              <th style={{ textAlign: 'left', padding: '11px 14px', width: '24%' }}>Title (live)</th>
               {REACH_COLS.map(c => (
                 <th key={c} style={{ textAlign: 'right', padding: '11px 14px' }}>{c}</th>
               ))}
@@ -191,6 +192,8 @@ export default function ForecastPage() {
                     color: '#047857', background: 'rgba(4,120,87,0.14)',
                     padding: '2px 6px', borderRadius: 4 }}>CHAMPION</span>}
                 </td>
+                <td style={{ padding: '9px 14px', textAlign: 'right',
+                             color: 'rgba(15,42,94,0.55)' }}>{pct(r.reach?._p0)}</td>
                 <td style={{ padding: '9px 14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ flex: 1, height: 8, borderRadius: 4,
@@ -200,6 +203,14 @@ export default function ForecastPage() {
                     </div>
                     <span style={{ width: 48, textAlign: 'right', fontWeight: 800,
                                    color: '#1e46a0' }}>{pct(r.p_title)}</span>
+                    {(() => {
+                      const p0 = r.reach?._p0
+                      if (p0 == null) return null
+                      const d = r.p_title - p0
+                      if (Math.abs(d) < 0.005) return null
+                      return <span style={{ width: 14, fontSize: 11,
+                        color: d > 0 ? '#047857' : '#b91c1c' }}>{d > 0 ? '▲' : '▼'}</span>
+                    })()}
                   </div>
                 </td>
                 {REACH_COLS.map(c => (
