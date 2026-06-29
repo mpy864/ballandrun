@@ -2,8 +2,8 @@ name: WTT Tournament Forecasts
 
 on:
   schedule:
-    # 01:00 UTC daily — after the daily data sync (00:30 UTC)
-    - cron: '0 1 * * *'
+    # hourly — keeps live events' odds fresh as matches are played
+    - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
       events:

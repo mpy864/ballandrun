@@ -24,12 +24,24 @@ def _qkey(comp) -> str:
 
 
 def push_forecasts(event_id, sub_event, draw, stats, comp_by_uid, labels,
-                   tier, runs, provisional=True, client=None) -> int:
-    """Upsert one forecast row per competitor.  Returns rows written."""
+                   tier, runs, provisional=True, status=None, client=None) -> int:
+    """Upsert one forecast row per competitor.  Returns rows written.
+
+    `status`: optional {uid: ('out',round)|('champ',)|('alive',round)} — actual
+    result so far; embedded in the reach JSON as _out / _champ (no new columns).
+    """
     sb = client or _client()
+    status = status or {}
     rows = []
     for uid, c in comp_by_uid.items():
         s = stats[uid]
+        reach = {k: round(v, 6) for k, v in s["reach"].items()}
+        st = status.get(uid)
+        if st:
+            if st[0] == "out":
+                reach["_out"] = st[1]
+            elif st[0] == "champ":
+                reach["_champ"] = True
         rows.append({
             "event_id": event_id,
             "sub_event": sub_event,
@@ -39,7 +51,7 @@ def push_forecasts(event_id, sub_event, draw, stats, comp_by_uid, labels,
             "label": " / ".join(c.names) if c.names else "TBD",
             "seed": int(c.seed or 0),
             "p_title": round(s["title"], 6),
-            "reach": {k: round(v, 6) for k, v in s["reach"].items()},
+            "reach": reach,
             "runs": runs,
             "is_provisional": provisional,
         })

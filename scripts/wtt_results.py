@@ -78,3 +78,53 @@ def get_results(event_id: int) -> dict:
             continue
         out[(sub, label, idx)] = wid
     return out
+
+
+def progress(draw_matches, res, labels):
+    """
+    Walk the bracket applying locked results to get each competitor's ACTUAL
+    status. Returns (status, champion_uid):
+      status[uid] = ('out', round)  | ('champ',) | ('alive', round)
+    """
+    def isbye(x):
+        return x is not None and x.is_placeholder and x.player_ids == [None] and not x.is_qualifier
+
+    status = {}
+    cur = [c for m in draw_matches for c in m]
+    for c in cur:
+        status[c.uid] = ('alive', labels[0])
+    champ = None
+
+    for lvl, label in enumerate(labels):
+        if len(cur) < 2:
+            break
+        nxt = [None] * (len(cur) // 2)
+        nextlbl = labels[lvl + 1] if lvl + 1 < len(labels) else label
+        for i in range(0, len(cur), 2):
+            a, b = cur[i], cur[i + 1]
+            idx = i // 2 + 1
+            if a is None or b is None:
+                continue
+            if isbye(b):
+                nxt[idx - 1] = a; status[a.uid] = ('alive', nextlbl); continue
+            if isbye(a):
+                nxt[idx - 1] = b; status[b.uid] = ('alive', nextlbl); continue
+            wid = res.get((label, idx))
+            if wid is None:                     # match pending -> both still alive here
+                status[a.uid] = ('alive', label); status[b.uid] = ('alive', label)
+                continue
+            win = a if (a.player_ids and a.player_ids[0] == wid) else \
+                  (b if (b.player_ids and b.player_ids[0] == wid) else None)
+            if win is None:
+                continue
+            lose = b if win is a else a
+            status[lose.uid] = ('out', label)
+            if label == labels[-1]:
+                status[win.uid] = ('champ',); champ = win.uid
+            else:
+                status[win.uid] = ('alive', nextlbl)
+            nxt[idx - 1] = win
+        cur = nxt
+        if all(x is None for x in cur):
+            break
+    return status, champ

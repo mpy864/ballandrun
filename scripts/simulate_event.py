@@ -25,7 +25,7 @@ from wtt_schedule import fetch_schedule, parse_event
 from wtt_rules import detect_tier, best_of, round_labels
 from wtt_models import make_model
 from wtt_qualifiers import resolve_qualifiers, fill_placeholder_qualifiers
-from wtt_results import get_results
+from wtt_results import get_results, progress as actual_progress
 
 
 # ── Bracket Monte-Carlo ─────────────────────────────────────────────────────
@@ -190,8 +190,9 @@ def main():
 
         if args.push:
             from wtt_db import push_forecasts, push_entries
+            status, _champ = actual_progress(draw.matches, res_sub, labels)
             n_f = push_forecasts(args.event, name, draw, stats, comp_by_uid,
-                                 labels, tier, args.runs)
+                                 labels, tier, args.runs, status=status)
             n_e = push_entries(args.event, name, draw)
             print(f"[push] {name}: {n_f} forecasts, {n_e} entries -> Supabase")
 

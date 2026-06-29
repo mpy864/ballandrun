@@ -168,17 +168,28 @@ export default function ForecastPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, i) => (
+            {rows.map((r, i) => {
+              const out = r.reach?._out
+              const champ = r.reach?._champ
+              return (
               <tr key={r.qkey} style={{
                 borderTop: '1px solid rgba(30,70,160,0.06)',
-                background: i % 2 ? 'rgba(30,70,160,0.02)' : 'transparent',
+                background: champ ? 'rgba(16,185,129,0.14)'
+                  : (i % 2 ? 'rgba(30,70,160,0.02)' : 'transparent'),
+                opacity: out ? 0.5 : 1,
               }}>
                 <td style={{ padding: '9px 14px', color: 'rgba(15,42,94,0.5)' }}>
-                  {MEDAL[i] || i + 1}
+                  {champ ? '🏆' : (out ? '✕' : (MEDAL[i] || i + 1))}
                 </td>
                 <td style={{ padding: '9px 14px', color: '#0f2a5e', fontWeight: 600 }}>
                   {r.seed ? <span style={{ color: 'rgba(15,42,94,0.4)' }}>[{r.seed}] </span> : null}
                   {r.label}
+                  {out && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700,
+                    color: '#b91c1c', background: 'rgba(185,28,28,0.10)',
+                    padding: '2px 6px', borderRadius: 4 }}>OUT · {out}</span>}
+                  {champ && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700,
+                    color: '#047857', background: 'rgba(4,120,87,0.14)',
+                    padding: '2px 6px', borderRadius: 4 }}>CHAMPION</span>}
                 </td>
                 <td style={{ padding: '9px 14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -196,7 +207,8 @@ export default function ForecastPage() {
                                        color: 'rgba(15,42,94,0.7)' }}>{pct(r.reach?.[c])}</td>
                 ))}
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
         <div style={{ padding: '10px 14px', fontSize: 11.5, color: 'rgba(15,42,94,0.5)' }}>
@@ -204,6 +216,8 @@ export default function ForecastPage() {
             ? 'Pre-tournament prediction (final snapshot).'
             : 'Provisional — updates as the draw firms up and results come in.'}
           {rows[0]?.runs ? ` · ${rows[0].runs.toLocaleString()} simulations` : ''}
+          {' · '}<span style={{ color: '#b91c1c' }}>✕ eliminated</span>
+          {' · '}<span style={{ color: '#047857' }}>🏆 champion</span>
         </div>
       </div>
     </Shell>
