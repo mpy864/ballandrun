@@ -492,6 +492,24 @@ def _parse_discipline_round(round_name: str) -> tuple[str, str]:
     return "Singles", round_name
 
 
+def _round_short(rnd: str) -> str:
+    import re as _re
+    txt = _re.sub(r'\s*-\s*Match\s*\d+$', '', rnd, flags=_re.IGNORECASE).strip()
+    low = txt.lower()
+    if "qualif" in low:
+        m = _re.search(r'(\d+)', low)
+        return f"Qual R{m.group(1)}" if m else "Qual"
+    if "final" in low and "semi" not in low and "quarter" not in low:
+        return "Final"
+    if "semi" in low:    return "SF"
+    if "quarter" in low: return "QF"
+    if "round of 16" in low: return "R16"
+    if "round of 32" in low: return "R32"
+    if "round of 64" in low: return "R64"
+    if "round of 128" in low: return "R128"
+    return txt or "—"
+
+
 def _build_result_message(db, match_id: str, state: dict, p_pre: float,
                            result: str, correct) -> str | None:
     """Build the formatted Telegram result message."""
@@ -576,16 +594,16 @@ def _build_result_message(db, match_id: str, state: dict, p_pre: float,
         verb   = "defeated" if result_p1 == "W" else "lost to"
         scores = ", ".join(f"{a}-{b}" for a, b in game_scores) if game_scores else "–"
         discipline, round_display = _parse_discipline_round(state.get("round_name", ""))
-        import re as _re
-        round_display = _re.sub(r'\s*-\s*Match\s*\d+$', '', round_display, flags=_re.IGNORECASE).strip()
-        predicted = state["comp1_name"] if p_pre >= 0.5 else state["comp2_name"]
+        round_short = _round_short(round_display)
+        predicted = _pretty(state["comp1_name"] if p_pre >= 0.5 else state["comp2_name"])
         pred_mark = "✅" if correct else ("❌" if correct is False else "–")
-        header = f"<b>{comp_name}</b>"
+        date_label = date.today().strftime("%a %d %b")
 
         return (
-            f"{header}\n"
-            f"{discipline}  |  {round_display}\n\n"
-            f"{p1_str} {verb} {p2_str} by\n"
+            f"<b>{comp_name} — {date_label} — Live</b>\n"
+            f"{discipline} · {round_short}\n\n"
+            f"{p1_str} {verb}\n"
+            f"{p2_str}\n"
             f"<b>{ga1}–{gb1}</b>  ({scores})\n"
             f"Predicted: {predicted}  {pred_mark}"
         )
