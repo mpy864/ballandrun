@@ -25,17 +25,22 @@ from wtt_schedule import fetch_schedule, parse_event
 from wtt_rules import detect_tier, best_of, round_labels
 from wtt_models import make_model
 from wtt_qualifiers import resolve_qualifiers, fill_placeholder_qualifiers
+from wtt_results import get_results
 
 
 # ── Bracket Monte-Carlo ─────────────────────────────────────────────────────
 
-def simulate_draw(draw, model, tier, runs=20000, seed=None):
+def simulate_draw(draw, model, tier, runs=20000, seed=None, results=None):
     """
     Returns:
       stats[uid] = {"reach": {round_label: prob}, "title": prob}
       comp_by_uid[uid] = Competitor
+
+    `results`: {(round_label, match_idx): winner_id} for matches already played;
+    those are locked (forced) instead of simulated -> live forecast.
     """
     rng = random.Random(seed)
+    results = results or {}
     round0 = []
     for a, b in draw.matches:
         round0.append(a); round0.append(b)
@@ -47,6 +52,16 @@ def simulate_draw(draw, model, tier, runs=20000, seed=None):
     reach = {c.uid: [0] * len(labels) for c in round0}
     title = {c.uid: 0 for c in round0}
 
+    def locked_winner(label, idx, a, b):
+        wid = results.get((label, idx))
+        if wid is None:
+            return None
+        if a.player_ids and a.player_ids[0] == wid:
+            return a
+        if b.player_ids and b.player_ids[0] == wid:
+            return b
+        return None
+
     for _ in range(runs):
         comps = round0
         lvl = 0
@@ -55,14 +70,21 @@ def simulate_draw(draw, model, tier, runs=20000, seed=None):
             reach[c.uid][0] += 1
         while len(comps) > 1:
             bo = bos[lvl]
+            label = labels[lvl]
             winners = []
             for i in range(0, len(comps), 2):
                 a, b = comps[i], comps[i + 1]
-                # bye: an empty TBD slot lets the real player through
+                idx = i // 2 + 1
+                # 1) result already happened -> lock it
+                w = locked_winner(label, idx, a, b)
+                if w is not None:
+                    winners.append(w); continue
+                # 2) bye: an empty TBD slot lets the real player through
                 if b.is_placeholder and b.player_ids == [None] and not b.is_qualifier:
                     winners.append(a); continue
                 if a.is_placeholder and a.player_ids == [None] and not a.is_qualifier:
                     winners.append(b); continue
+                # 3) otherwise simulate
                 p = model.match_prob(a, b, bo)
                 winners.append(a if rng.random() < p else b)
             comps = winners
@@ -137,6 +159,9 @@ def main():
         if d:
             qfill[name] = fill_placeholder_qualifiers(d, qmap.get(name, []), qrng)
 
+    # Decided main-draw results (for live forecasting): lock these matches.
+    all_results = get_results(args.event)
+
     lines = [f"WTT {args.name or args.event}  (EventID {args.event})",
              f"Generated: {datetime.now():%Y-%m-%d %H:%M}  |  tier={tier}  |  runs={args.runs}",
              "Draw is provisional until locked; qualifier slots modelled as generic players.",
@@ -151,11 +176,15 @@ def main():
         model = make_model(draw.discipline, tier,
                            predictor_m=gender_pred, predictor_w=mpW,
                            event_country=args.country, match_date=mdate)
-        stats, comp_by_uid, labels = simulate_draw(draw, model, tier, runs=args.runs)
+        res_sub = {(lbl, idx): wid for (s, lbl, idx), wid in all_results.items() if s == name}
+        stats, comp_by_uid, labels = simulate_draw(draw, model, tier,
+                                                   runs=args.runs, results=res_sub)
         block = format_forecast(draw, stats, comp_by_uid, labels, tier)
         nf = qfill.get(name, 0)
         if nf:
             block.insert(4, f"Qualifiers resolved: {nf} placeholder slot(s) filled with real players.")
+        if res_sub:
+            block.insert(4, f"Live: {len(res_sub)} completed match(es) locked in.")
         lines += block
         lines += [""]
 
