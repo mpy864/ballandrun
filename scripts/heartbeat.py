@@ -33,6 +33,26 @@ FEEDS = {
 }
 
 
+def _event_list_horizon():
+    """Latest end-date in each hand-maintained event list, so we can warn before
+    they run dry. Returns {'WTT': date|None, 'ITTF': date|None}."""
+    from datetime import date
+    out = {"WTT": None, "ITTF": None}
+    try:
+        from fetch_matches import WTT_2026_EVENT_IDS
+        ends = [date.fromisoformat(v[1]) for v in WTT_2026_EVENT_IDS.values()]
+        out["WTT"] = max(ends) if ends else None
+    except Exception as e:
+        print(f"  [heartbeat] WTT list check skipped: {e}")
+    try:
+        from ittf_feed import ITTF_EVENTS
+        ends = [date.fromisoformat(v[2]) for v in ITTF_EVENTS.values()]
+        out["ITTF"] = max(ends) if ends else None
+    except Exception as e:
+        print(f"  [heartbeat] ITTF list check skipped: {e}")
+    return out
+
+
 def _age_minutes(ts_str):
     if not ts_str:
         return None
@@ -67,6 +87,20 @@ def main():
         return
 
     problems = []   # (feed, kind, message)
+
+    # Staleness guard for the hand-maintained event lists (mitigates the lack of
+    # true calendar auto-discovery): warn before they run out so a feed never
+    # silently goes dark because the next batch of events wasn't added.
+    for kind_label, latest in _event_list_horizon().items():
+        if latest is None:
+            continue
+        days = (latest - datetime.now(timezone.utc).date()).days
+        if days < 21:
+            problems.append((f"eventlist-{kind_label}", "stale",
+                             f"🗓️ <b>{kind_label} event list</b> runs out in {days} day(s) "
+                             f"(last event ends {latest}). Add the upcoming events so the "
+                             f"feeds don't go silent."))
+
     for feed, (label, max_gap) in FEEDS.items():
         row = rows.get(feed)
         if not row:
