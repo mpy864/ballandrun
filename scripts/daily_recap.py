@@ -33,6 +33,7 @@ from send_todays_results import (
     fetch_todays_results, _is_key_round, fetch_player_info,
     fetch_event_name, _parse_disc_round, pretty_name,
 )
+from tg_common import already_sent, mark_sent, record_health
 
 try:
     from supabase import create_client as _sb_create
@@ -222,8 +223,17 @@ def main():
                 except Exception:
                     pass
 
+    # Dedup: post the day's recap at most once (safe to re-run).
+    feed = "wtt-recap"
+    day  = date.today().isoformat()
+    dkey = f"ALL:{day}"
     if not grouped:
         print("  No Indian or key-round results today — nothing to recap.")
+        record_health(db, feed, "noop", "nothing to recap")
+        return
+    if not args.dry_run and db and already_sent(db, feed, [dkey]):
+        print("  Recap already sent today — skipping.")
+        record_health(db, feed, "noop", "already sent today")
         return
 
     # Build the message — each event block carries its own heading,
@@ -241,8 +251,15 @@ def main():
 
     footer = f"Model called <b>{correct}/{total}</b> correct today." if total else ""
 
-    _send_chunked(tg_token, tg_channel, blocks, footer, args.dry_run)
-    print(f"\nDone. Recap for {len(grouped)} event(s), tally {correct}/{total}.")
+    try:
+        _send_chunked(tg_token, tg_channel, blocks, footer, args.dry_run)
+        if not args.dry_run and db:
+            mark_sent(db, feed, dkey)
+            record_health(db, feed, "ok", f"{len(grouped)} event(s)", posts=len(blocks))
+        print(f"\nDone. Recap for {len(grouped)} event(s), tally {correct}/{total}.")
+    except Exception as e:
+        record_health(db, feed, "error", str(e))
+        raise
 
 
 if __name__ == "__main__":
