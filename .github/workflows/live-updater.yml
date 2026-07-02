@@ -2,13 +2,19 @@ name: Live Updater
 
 on:
   schedule:
-    - cron: '0 */5 * * *'   # restart every 5 hours (job runs up to 6h)
+    - cron: '0 */5 * * *'   # a fresh 5h shift every 5 hours (back-to-back coverage)
   workflow_dispatch:          # manual trigger from GitHub UI
+
+# Only one live updater at a time; a new scheduled shift cancels the old one so
+# they never overlap (Supabase dedup would prevent dup posts anyway).
+concurrency:
+  group: live-updater
+  cancel-in-progress: true
 
 jobs:
   run-updater:
     runs-on: ubuntu-latest
-    timeout-minutes: 300      # 5 hours per run
+    timeout-minutes: 300      # hard cap; the script exits cleanly before this
 
     steps:
       - uses: actions/checkout@v4
@@ -26,4 +32,6 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
-        run: python scripts/live_updater.py --auto --gender all --points --db --interval 3
+        # --max-runtime 290: exit cleanly ~10min before the 300m timeout so the
+        # job ends in SUCCESS (not a timeout-kill), keeping failure signals real.
+        run: python scripts/live_updater.py --auto --gender all --points --db --interval 3 --max-runtime 290

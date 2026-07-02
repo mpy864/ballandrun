@@ -32,6 +32,8 @@ except ImportError:
 
 sys.path.insert(0, os.path.dirname(__file__))
 from feature_model import MatchPredictor, p_win_from_state, p_win_current_game, p_win_live
+from tg_common import (already_sent as _tc_already_sent, mark_sent as _tc_mark_sent,
+                       record_health as _tc_record_health)
 
 # ── Sent-results deduplication tracker ───────────────────────────────────────
 
@@ -701,12 +703,16 @@ def _write_match_result(db, match_id: str, match_p0_by_id: dict, last_state: dic
                 except Exception:
                     pass
             if is_india or is_key_round:
-                msg = _build_result_message(db, match_id, state, p_pre, result, correct)
-                if msg:
-                    tg.send(msg)
-                    _mark_sent(_sent_key(
-                        state["event_id"], state["comp1_id"], state["comp2_id"]
-                    ))
+                key = _sent_key(state["event_id"], state["comp1_id"], state["comp2_id"])
+                # Persistent dedup (survives the 5h restarts, unlike the old
+                # logs-file tracker which was write-only in the cloud).
+                if not (db and _tc_already_sent(db, "wtt-live", [key])):
+                    msg = _build_result_message(db, match_id, state, p_pre, result, correct)
+                    if msg:
+                        tg.send(msg)
+                        _mark_sent(key)
+                        if db:
+                            _tc_mark_sent(db, "wtt-live", key)
     except Exception as e:
         print(f"  [DB] match_results error: {e}")
 
@@ -728,14 +734,20 @@ def get_active_event_ids(lookback_days: int = 7) -> list[int]:
 
 
 def poll_points(mp, event_ids: list[int], gender_label: str,
-                interval: float = 2.0, db=None, auto: bool = False, tg=None):
+                interval: float = 2.0, db=None, auto: bool = False, tg=None,
+                max_runtime_min: float = 0):
     """
     Continuously poll GetLiveResult every `interval` seconds.
     Polls all event IDs in the list simultaneously.
     When auto=True, re-discovers active events from WTT_2026_EVENT_IDS every ~60s.
-    Press Ctrl+C to stop.
+    Exits cleanly after max_runtime_min (0 = unlimited) so the CI job ends in
+    success instead of being killed by the workflow timeout. Ctrl+C to stop.
     """
     print(f"  Polling every {interval}s — press Ctrl+C to stop.\n")
+    _deadline = (time.time() + max_runtime_min * 60) if max_runtime_min else None
+    _last_hb  = 0.0
+    if db:
+        _tc_record_health(db, "wtt-live", "ok", "poll started")
     last_seq:        dict[str, int]   = {}  # doc_code → last seen seq_num
     match_p0:        dict[str, float] = {}  # doc_code → pre-match probability
     match_p0_by_id:  dict[str, float] = {}  # match_id → pre-match probability
@@ -774,6 +786,12 @@ def poll_points(mp, event_ids: list[int], gender_label: str,
 
     try:
         while True:
+            if _deadline and time.time() > _deadline:
+                print("\n  Max runtime reached — exiting cleanly.")
+                break
+            if db and time.time() - _last_hb > 600:   # refresh health every ~10 min
+                _tc_record_health(db, "wtt-live", "ok", f"polling ({poll_count} cycles)")
+                _last_hb = time.time()
             # Auto-refresh event list every 20 cycles (~60s at 3s interval)
             if auto and poll_count > 0 and poll_count % 20 == 0:
                 from fetch_matches import WTT_2026_EVENT_IDS
@@ -900,6 +918,8 @@ def main():
                         help="Poll interval in seconds (default 2)")
     parser.add_argument("--db",        action="store_true",
                         help="Write live state to Supabase (requires SUPABASE_URL + SUPABASE_SERVICE_KEY)")
+    parser.add_argument("--max-runtime", type=float, default=0,
+                        help="Exit cleanly after N minutes (0 = unlimited). Set below the CI timeout.")
     args = parser.parse_args()
 
     if not args.auto and args.event is None:
@@ -989,7 +1009,7 @@ def main():
         else:
             print("  [TG] Telegram not configured (set TELEGRAM_BOT_TOKEN + TELEGRAM_CHANNEL_ID in .env)")
         poll_points(mp, event_ids, gender_label, interval=args.interval, db=db,
-                    auto=args.auto, tg=tg)
+                    auto=args.auto, tg=tg, max_runtime_min=args.max_runtime)
 
 
 if __name__ == "__main__":
