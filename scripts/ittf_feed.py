@@ -28,6 +28,10 @@ Usage
 import os, sys, argparse, requests
 from datetime import date, datetime, timedelta, timezone
 
+sys.path.insert(0, os.path.dirname(__file__))
+from tg_common import (get_db, already_sent, mark_sent, tg_send, record_health,
+                       pretty_name, round_short)
+
 # ── ITTF / ATTU events: id -> (name, start, end, venue_utc_offset|None) ────────
 ITTF_EVENTS = {
     3379: ("ITTF World Cup Macao 2026",                              "2026-03-30", "2026-04-05",  8),
@@ -90,74 +94,11 @@ def venue_today(event_id):
     return (datetime.now(timezone.utc) + timedelta(hours=off or 0)).date()
 
 
-# ── Supabase dedup (tg_sent: feed, item_key) ─────────────────────────────────────
-
-def get_db():
-    try:
-        from supabase import create_client
-        url, key = os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_SERVICE_KEY")
-        if url and key:
-            return create_client(url, key)
-    except Exception as e:
-        print(f"  [dedup] supabase unavailable: {e}")
-    return None
-
-
-def already_sent(db, feed, keys):
-    if not db or not keys:
-        return set()
-    try:
-        out = set()
-        keys = list(keys)
-        for i in range(0, len(keys), 100):
-            r = db.table("tg_sent").select("item_key").eq("feed", feed) \
-                  .in_("item_key", keys[i:i + 100]).execute()
-            out |= {row["item_key"] for row in (r.data or [])}
-        return out
-    except Exception as e:
-        print(f"  [dedup] read error: {e}")
-        return set()
-
-
-def mark_sent(db, feed, key):
-    if not db:
-        return
-    try:
-        db.table("tg_sent").upsert({"feed": feed, "item_key": key}).execute()
-    except Exception as e:
-        print(f"  [dedup] write error: {e}")
-
-
 # ── Formatting ─────────────────────────────────────────────────────────────────
-
-def pretty_name(name: str) -> str:
-    def fix(part):
-        return " ".join(w.title() if w.isupper() else w for w in part.split())
-    if "/" in (name or ""):
-        return "/".join(fix(p.strip()) for p in name.split("/"))
-    return fix(name or "")
-
-
-def _round_short(round_txt: str) -> str:
-    low = (round_txt or "").lower()
-    if "qualif" in low:
-        import re; m = re.search(r"(\d+)", low)
-        return f"Qual R{m.group(1)}" if m else "Qual"
-    if "final" in low and "semi" not in low and "quarter" not in low:
-        return "Final"
-    if "semi" in low:    return "SF"
-    if "quarter" in low: return "QF"
-    if "round of 16" in low:  return "R16"
-    if "round of 32" in low:  return "R32"
-    if "round of 64" in low:  return "R64"
-    if "round of 128" in low: return "R128"
-    if "group" in low:   return "Group"
-    return round_txt.strip() or "—"
-
 
 def _parse_desc(desc: str):
     parts = [p.strip() for p in (desc or "").split(" - ")]
-    return (parts[0] if parts else desc), (_round_short(parts[1]) if len(parts) >= 2 else "")
+    return (parts[0] if parts else desc), (round_short(parts[1]) if len(parts) >= 2 else "")
 
 
 def _is_india(side: dict) -> bool:
@@ -241,23 +182,7 @@ def _schedule_line(m: dict, off) -> str:
     return f"{tcol}{rnd}  {ind_s} vs {opp_s}"
 
 
-# ── Telegram ──────────────────────────────────────────────────────────────────
-
-def tg_send(token, channel, text, dry_run):
-    if dry_run:
-        print("\n" + text + "\n" + "─" * 50)
-        return
-    try:
-        r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
-                          json={"chat_id": channel, "text": text, "parse_mode": "HTML",
-                                "disable_web_page_preview": True}, timeout=10)
-        if r.status_code != 200:
-            print(f"  [TG] HTTP {r.status_code}: {r.text[:200]}")
-    except Exception as e:
-        print(f"  [TG] error: {e}")
-
-
-# ── Modes ──────────────────────────────────────────────────────────────────────
+# ── Modes (each returns the number of messages posted) ──────────────────────────
 
 def _india_matches(event_id, day_raw, statuses):
     return [m for m in get_day(event_id, day_raw)
@@ -265,9 +190,8 @@ def _india_matches(event_id, day_raw, statuses):
 
 
 def run_live(event_ids, token, channel, db, dry_run):
-    """Post each Indian result the first time it is seen finished (deduped).
-    Scans only the venue's yesterday+today so re-runs stay cheap."""
-    feed = "ittf-live"
+    """Post each Indian result the first time it is seen finished (deduped)."""
+    feed, posted = "ittf-live", 0
     for eid in event_ids:
         name = event_name(eid, get_champ(eid))
         vt = venue_today(eid)
@@ -280,14 +204,16 @@ def run_live(event_ids, token, channel, db, dry_run):
         print(f"  [{eid}] {name}: {len(items)} finished India, {len(new)} new")
         for day, m in sorted(new, key=lambda x: (x[0], x[1].get("Key") or "")):
             label = datetime.fromisoformat(day).strftime("%a %d %b")
-            tg_send(token, channel, f"<b>{name} — {label} — Live</b>\n\n{_match_block(m)}", dry_run)
-            if not dry_run:
-                mark_sent(db, feed, f"{eid}:{m.get('Key')}")
+            if tg_send(token, channel, f"<b>{name} — {label} — Live</b>\n\n{_match_block(m)}", dry_run):
+                posted += 1
+                if not dry_run:
+                    mark_sent(db, feed, f"{eid}:{m.get('Key')}")
+    return posted
 
 
 def run_recap(event_ids, token, channel, db, dry_run, target_date=None):
     """Post each COMPLETED venue-day's grouped summary once (deduped)."""
-    feed = "ittf-recap"
+    feed, posted = "ittf-recap", 0
     for eid in event_ids:
         champ = get_champ(eid)
         name  = event_name(eid, champ)
@@ -305,14 +231,16 @@ def run_recap(event_ids, token, channel, db, dry_run, target_date=None):
             blocks = _grouped(name, day, fin, "Recap", _match_block)
             print(f"  [{eid}] recap {day}: {len(fin)} India result(s)")
             for b in blocks:
-                tg_send(token, channel, b, dry_run)
+                if tg_send(token, channel, b, dry_run):
+                    posted += 1
             if not dry_run:
                 mark_sent(db, feed, key)
+    return posted
 
 
 def run_schedule(event_ids, token, channel, db, dry_run, target_date=None):
     """Post a venue-day's upcoming Indian matches once (deduped), times in IST."""
-    feed = "ittf-schedule"
+    feed, posted = "ittf-schedule", 0
     for eid in event_ids:
         champ = get_champ(eid)
         name  = event_name(eid, champ)
@@ -330,9 +258,11 @@ def run_schedule(event_ids, token, channel, db, dry_run, target_date=None):
         blocks = _grouped(name, day, upc, "Schedule",
                           lambda m: _schedule_line(m, off), subtitle=note)
         for b in blocks:
-            tg_send(token, channel, b, dry_run)
+            if tg_send(token, channel, b, dry_run):
+                posted += 1
         if not dry_run:
             mark_sent(db, feed, key)
+    return posted
 
 
 def _grouped(name, day_raw, matches, label, line_fn, subtitle=None):
@@ -380,28 +310,36 @@ def main():
     else:
         event_ids = [args.event]
 
+    feed = {"recap": "ittf-recap", "schedule": "ittf-schedule", "live": "ittf-live"}[args.mode]
     token   = os.environ.get("TELEGRAM_BOT_TOKEN")
     channel = os.environ.get("TELEGRAM_CHANNEL_ID")
+    db = None if args.dry_run else get_db()
+
     if not args.dry_run and (not token or not channel):
         print("  [!] Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL_ID")
+        record_health(db, feed, "error", "missing Telegram creds")
         return
-    if not event_ids:
-        print("  No active ITTF/ATTU events in window.")
-        return
-
-    db = None if args.dry_run else get_db()
     if not args.dry_run and db is None:
         print("  [!] No Supabase — dedup disabled; refusing to post to avoid duplicates.")
+        return   # no db => cannot record health either
+    if not event_ids:
+        print("  No active ITTF/ATTU events in window.")
+        record_health(db, feed, "noop", "no active event")
         return
 
     print(f"  Mode={args.mode}  events={event_ids}")
-    if args.mode == "recap":
-        run_recap(event_ids, token, channel, db, args.dry_run, args.date)
-    elif args.mode == "schedule":
-        run_schedule(event_ids, token, channel, db, args.dry_run, args.date)
-    else:
-        run_live(event_ids, token, channel, db, args.dry_run)
-    print("Done.")
+    try:
+        if args.mode == "recap":
+            posts = run_recap(event_ids, token, channel, db, args.dry_run, args.date)
+        elif args.mode == "schedule":
+            posts = run_schedule(event_ids, token, channel, db, args.dry_run, args.date)
+        else:
+            posts = run_live(event_ids, token, channel, db, args.dry_run)
+        record_health(db, feed, "ok" if posts else "noop", f"{posts} posted", posts)
+        print(f"Done. {posts} posted.")
+    except Exception as e:
+        record_health(db, feed, "error", str(e))
+        raise
 
 
 if __name__ == "__main__":
