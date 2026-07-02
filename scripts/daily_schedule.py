@@ -18,6 +18,7 @@ from datetime import datetime, date, timedelta
 
 sys.path.insert(0, os.path.dirname(__file__))
 from feature_model import MatchPredictor
+from tg_common import already_sent, mark_sent, record_health
 
 try:
     from supabase import create_client as _sb_create
@@ -458,11 +459,20 @@ def main():
         return
     print()
 
+    feed = "wtt-schedule"
+    today_iso = date.today().isoformat()
+    total_posted = 0
     for eid in event_ids:
         ename = event_names.get(eid, f"Event {eid}")
         print(f"{'='*56}")
         print(f"  {ename}  ({eid})")
         print(f"{'='*56}")
+
+        # Dedup: post a given event's schedule at most once per day.
+        skey = f"{eid}:SCHED:{today_iso}"
+        if not args.dry_run and db and already_sent(db, feed, [skey]):
+            print("  Schedule already sent today — skipping.")
+            continue
 
         data = fetch_schedule(eid)
         if not data:
@@ -493,9 +503,15 @@ def main():
                 print(msg)
             else:
                 send(tg_token, tg_channel, msg)
+                total_posted += 1
                 print(f"  [TG] Sent part {idx}/{len(messages)}")
                 time.sleep(0.5)
+        if not args.dry_run and db:
+            mark_sent(db, feed, skey)
 
+    if not args.dry_run and db:
+        record_health(db, feed, "ok" if total_posted else "noop",
+                      f"{total_posted} posted", total_posted)
     print("\nDone.")
 
 
