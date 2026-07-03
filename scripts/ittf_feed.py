@@ -184,9 +184,21 @@ def _schedule_line(m: dict, off) -> str:
 
 # ── Modes (each returns the number of messages posted) ──────────────────────────
 
+def _is_walkover(m):
+    """A finished match with no games on either side = walkover / bye / not
+    actually played. Shows up as 'drew 0–0' if not filtered."""
+    return _games(m.get("Home") or {}) == 0 and _games(m.get("Away") or {}) == 0
+
+
 def _india_matches(event_id, day_raw, statuses):
     return [m for m in get_day(event_id, day_raw)
             if m.get("Status") in statuses and _involves_india(m)]
+
+
+def _finished_india(event_id, day_raw):
+    """Finished Indian matches, excluding walkovers/unplayed."""
+    return [m for m in _india_matches(event_id, day_raw, {ST_FINISHED})
+            if not _is_walkover(m)]
 
 
 def run_live(event_ids, token, channel, db, dry_run):
@@ -197,7 +209,7 @@ def run_live(event_ids, token, channel, db, dry_run):
         vt = venue_today(eid)
         items = []  # (day_raw, match)
         for day in [(vt - timedelta(days=1)).isoformat(), vt.isoformat()]:
-            items += [(day, m) for m in _india_matches(eid, day, {ST_FINISHED})]
+            items += [(day, m) for m in _finished_india(eid, day)]
         keys = [f"{eid}:{m.get('Key')}" for _, m in items]
         sent = already_sent(db, feed, keys)
         new = [(d, m) for (d, m) in items if f"{eid}:{m.get('Key')}" not in sent]
@@ -221,7 +233,7 @@ def run_recap(event_ids, token, channel, db, dry_run, target_date=None):
         days  = [target_date] if target_date else \
                 [d["raw"] for d in (champ or {}).get("dates", []) if d["raw"] <= vt]
         for day in days:
-            fin     = _india_matches(eid, day, {ST_FINISHED})
+            fin     = _finished_india(eid, day)
             pending = _india_matches(eid, day, {ST_LIVE, ST_UPCOMING})
             if not fin or (pending and not target_date):
                 continue                      # nothing, or day not finished yet

@@ -22,14 +22,17 @@ from datetime import datetime, timezone, timedelta
 sys.path.insert(0, os.path.dirname(__file__))
 from tg_common import get_db, already_sent, mark_sent, tg_send, record_health
 
-# feed -> (label, max_gap_minutes)  — how stale "last run" may get before it's overdue
+# feed -> (label, max_gap_minutes) — how stale "last run" may get before overdue.
+# Gaps are generous because GitHub's scheduled crons are best-effort and often
+# run late (a */30 cron can realistically be 60-90 min apart), so tight windows
+# produce false alarms. We only want to hear about a *real* outage.
 FEEDS = {
-    "wtt-live":      ("WTT Live Updater",   360 + 30),   # cron every 5h
-    "wtt-schedule":  ("WTT Daily Schedule", 1440 + 120),  # daily
-    "wtt-recap":     ("WTT Daily Recap",    1440 + 120),  # daily
-    "ittf-live":     ("ITTF Live Results",  30 + 30),     # cron every 30m
-    "ittf-recap":    ("ITTF Daily Recap",   360 + 60),    # cron every 6h
-    "ittf-schedule": ("ITTF Daily Schedule", 1440 + 120), # daily
+    "wtt-live":      ("WTT Live Updater",   420),   # cron every 5h
+    "wtt-schedule":  ("WTT Daily Schedule", 1560),  # daily
+    "wtt-recap":     ("WTT Daily Recap",    1560),  # daily
+    "ittf-live":     ("ITTF Live Results",  150),   # cron every 30m (very lax)
+    "ittf-recap":    ("ITTF Daily Recap",   600),   # cron every 6h
+    "ittf-schedule": ("ITTF Daily Schedule", 1560), # daily
 }
 
 

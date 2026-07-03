@@ -17,6 +17,7 @@ from datetime import datetime, date, timedelta
 
 sys.path.insert(0, os.path.dirname(__file__))
 from feature_model import MatchPredictor
+from tg_common import (already_sent as _tc_already_sent, mark_sent as _tc_mark_sent)
 
 try:
     from supabase import create_client as _sb_create
@@ -389,7 +390,19 @@ def main():
     ap.add_argument("--lookback", type=int, default=7)
     ap.add_argument("--db",       action="store_true")
     ap.add_argument("--dry-run",  action="store_true")
+    ap.add_argument("--force",    action="store_true",
+                    help="Override the deprecation guard (see warning below).")
     args = ap.parse_args()
+
+    # DEPRECATED: live_updater.py (live) + daily_recap.py already cover results
+    # with proper Supabase de-dup. This old catch-up script has a loose "today"
+    # filter that can dump week-old untimestamped matches, and it flooded the
+    # channel once. It now refuses to run without --force, and even then it
+    # shares the "wtt-live" de-dup so it can never re-post what's already sent.
+    if not args.force and not args.dry_run:
+        print("  [DEPRECATED] send_todays_results is retired. Use the live/recap "
+              "feeds. Re-run with --force only if you really need a manual catch-up.")
+        return
 
     if not args.auto and args.event is None:
         ap.error("provide --event <id>  or  --auto")
@@ -494,7 +507,9 @@ def main():
                 correct = ((p_pre > 0.5) == (m["result"] == "W")) if p_pre != 0.5 else None
 
             key = _sent_key(eid, m["id1"], m["id2"])
-            if key in already_sent:
+            # Shared "wtt-live" de-dup: never re-post what the live updater
+            # already sent (belt-and-braces against the old flooding bug).
+            if key in already_sent or (db and _tc_already_sent(db, "wtt-live", [key])):
                 print(f"  [SKIP] {m['name1']} vs {m['name2']} — already sent")
                 continue
 
@@ -510,6 +525,8 @@ def main():
                 total_sent += 1
                 _mark_sent(key)
                 already_sent.add(key)
+                if db:
+                    _tc_mark_sent(db, "wtt-live", key)
                 time.sleep(0.4)   # avoid Telegram rate limit
 
     print(f"\nDone. {total_sent} message(s) sent.")

@@ -99,7 +99,7 @@ def derive_utc_offset(event_id: int, schedule_data: list) -> int | None:
                 if loc and utc:
                     raw.append((utc - loc).total_seconds() / 3600)
 
-    if len(raw) < 3:
+    if len(raw) < 2:   # need at least a couple of completed matches to derive tz
         return None
     med   = statistics.median(raw)
     clean = [x for x in raw if abs(x - med) <= 2]      # drop mismatched-id outliers
