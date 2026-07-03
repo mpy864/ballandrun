@@ -36,6 +36,20 @@ FEEDS = {
 }
 
 
+def _ittf_active(window_days: int = 2):
+    """Is any ITTF/ATTU event currently on (±window)? Used to suppress off-season
+    'silent feed' nagging for the ITTF feeds."""
+    from datetime import date, timedelta
+    try:
+        from ittf_feed import ITTF_EVENTS
+        today = date.today()
+        return any(date.fromisoformat(s) - timedelta(days=window_days) <= today
+                   <= date.fromisoformat(e) + timedelta(days=window_days)
+                   for _, s, e, _tz in ITTF_EVENTS.values())
+    except Exception:
+        return True   # if unsure, don't suppress
+
+
 def _event_list_horizon():
     """Latest end-date in each hand-maintained event list, so we can warn before
     they run dry. Returns {'WTT': date|None, 'ITTF': date|None}."""
@@ -104,15 +118,20 @@ def main():
                              f"(last event ends {latest}). Add the upcoming events so the "
                              f"feeds don't go silent."))
 
+    ittf_on = _ittf_active()
     for feed, (label, max_gap) in FEEDS.items():
+        # During the off-season the ITTF feeds legitimately do little; don't
+        # nag about them being "silent" when there's no ITTF event on.
+        gate_silence = not (feed.startswith("ittf-") and not ittf_on)
         row = rows.get(feed)
         if not row:
-            problems.append((feed, "silent", f"⚠️ <b>{label}</b> has never reported in. Its scheduled job may not be running."))
+            if gate_silence:
+                problems.append((feed, "silent", f"⚠️ <b>{label}</b> has never reported in. Its scheduled job may not be running."))
             continue
         if row.get("last_status") == "error":
             problems.append((feed, "error", f"❌ <b>{label}</b> errored on its last run:\n<code>{(row.get('last_detail') or '')[:300]}</code>"))
         age = _age_minutes(row.get("last_run_at"))
-        if age is not None and age > max_gap:
+        if gate_silence and age is not None and age > max_gap:
             hrs = age / 60
             problems.append((feed, "silent", f"⚠️ <b>{label}</b> hasn't run in {hrs:.1f}h (expected within {max_gap/60:.1f}h). The schedule may be stalled or disabled."))
 
