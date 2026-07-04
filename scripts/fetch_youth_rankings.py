@@ -103,10 +103,29 @@ def fetch_paginated(url: str, year: int, week: int, extra: dict) -> list:
     return rows
 
 
+_PK = {
+    "youth_rankings_singles": ["ittf_id", "age_category", "sub_event", "ranking_year", "ranking_week"],
+    "youth_rankings_doubles": ["pair_id", "age_category", "sub_event", "ranking_year", "ranking_week"],
+}
+
 def upsert_batched(supabase, table: str, rows: list) -> None:
+    keys = _PK.get(table)
+    if keys:  # dedupe within payload → avoids "cannot affect row a second time"
+        seen = {}
+        for r in rows:
+            seen[tuple(r.get(k) for k in keys)] = r
+        rows = list(seen.values())
+    ok = 0
     for i in range(0, len(rows), BATCH_SIZE):
-        supabase.table(table).upsert(rows[i: i + BATCH_SIZE]).execute()
-    print(f"    -> upserted {len(rows)} rows into {table}")
+        chunk = rows[i: i + BATCH_SIZE]
+        try:
+            q = supabase.table(table).upsert(chunk, on_conflict=",".join(keys)) if keys \
+                else supabase.table(table).upsert(chunk)
+            q.execute()
+            ok += len(chunk)
+        except Exception as e:
+            print(f"    [!] upsert error into {table} (batch {i//BATCH_SIZE+1}): {e}")
+    print(f"    -> upserted {ok}/{len(rows)} rows into {table}")
 
 
 # ── Week planning ─────────────────────────────────────────────────────────────
@@ -156,8 +175,9 @@ def age_cat_ranks(url: str, subs: list, year: int, week: int, id_field: str) -> 
             for r in recs:
                 if r.get("AgeCategoryCode") == age_cat:
                     rk = safe_int(r.get("RankingPosition"))
-                    if rk is not None:
-                        out[(str(r[id_field]), r["SubEventCode"])] = rk
+                    idv = r.get(id_field)
+                    if rk is not None and idv is not None:
+                        out[(str(idv), r.get("SubEventCode"))] = rk
     return out
 
 
@@ -171,11 +191,14 @@ def process_week(supabase, year: int, week: int) -> None:
     for sub in SINGLE_EVENTS:
         recs = fetch_paginated(IND_URL, year, week, {"SubEventCode": sub})
         for r in recs:
-            iid = str(r["IttfId"])
+            iid = r.get("IttfId")
+            if iid is None:
+                continue
+            iid = str(iid)
             srows.append({
-                "ittf_id": iid, "player_name": r["PlayerName"],
-                "country_code": r["CountryCode"], "country_name": r["CountryName"],
-                "age_category": r["AgeCategoryCode"], "sub_event": r["SubEventCode"],
+                "ittf_id": iid, "player_name": r.get("PlayerName"),
+                "country_code": r.get("CountryCode"), "country_name": r.get("CountryName"),
+                "age_category": r.get("AgeCategoryCode"), "sub_event": r.get("SubEventCode"),
                 "ranking_year": safe_int(r.get("RankingYear")),
                 "ranking_month": safe_int(r.get("RankingMonth")),
                 "ranking_week": safe_int(r.get("RankingWeek")),
@@ -184,7 +207,7 @@ def process_week(supabase, year: int, week: int) -> None:
                 "previous_rank": safe_int(r.get("PreviousRank")),
                 "rank_diff": safe_int(r.get("RankingDifference")),
                 "publish_date": parse_date(r.get("PublishDate")),
-                "age_cat_rank": acr.get((iid, r["SubEventCode"])),
+                "age_cat_rank": acr.get((iid, r.get("SubEventCode"))),
                 "fetched_at": now,
             })
     if srows:
@@ -196,14 +219,17 @@ def process_week(supabase, year: int, week: int) -> None:
     for sub in DOUBLES_EVENTS:
         recs = fetch_paginated(PAIRS_URL, year, week, {"SubEventCode": sub})
         for r in recs:
-            pid = str(r["PairId"])
+            pid = r.get("PairId")
+            if pid is None:
+                continue
+            pid = str(pid)
             drows.append({
                 "pair_id": pid,
-                "ittf_id1": str(r["IttfId1"]), "player_name1": r["PlayerName1"],
-                "country_code1": r["CountryCode1"], "country_name1": r["CountryName1"],
-                "ittf_id2": str(r["IttfId1d"]), "player_name2": r["PlayerName1d"],
-                "country_code2": r["CountryCode1d"], "country_name2": r["CountryName1d"],
-                "age_category": r["AgeCategoryCode"], "sub_event": r["SubEventCode"],
+                "ittf_id1": str(r.get("IttfId1") or ""), "player_name1": r.get("PlayerName1"),
+                "country_code1": r.get("CountryCode1"), "country_name1": r.get("CountryName1"),
+                "ittf_id2": str(r.get("IttfId1d") or ""), "player_name2": r.get("PlayerName1d"),
+                "country_code2": r.get("CountryCode1d"), "country_name2": r.get("CountryName1d"),
+                "age_category": r.get("AgeCategoryCode"), "sub_event": r.get("SubEventCode"),
                 "ranking_year": safe_int(r.get("RankingYear")),
                 "ranking_month": safe_int(r.get("RankingMonth")),
                 "ranking_week": safe_int(r.get("RankingWeek")),
@@ -212,7 +238,7 @@ def process_week(supabase, year: int, week: int) -> None:
                 "previous_rank": safe_int(r.get("PreviousRank")),
                 "rank_diff": safe_int(r.get("RankingDifference")),
                 "publish_date": parse_date(r.get("PublishDate")),
-                "age_cat_rank": acrd.get((pid, r["SubEventCode"])),
+                "age_cat_rank": acrd.get((pid, r.get("SubEventCode"))),
                 "fetched_at": now,
             })
     if drows:
@@ -254,7 +280,10 @@ def main():
     plan = weeks_between(start, latest)
     print(f"  fetching {len(plan)} week(s): {plan[0]} .. {plan[-1]}\n")
     for (y, w) in plan:
-        process_week(supabase, y, w)
+        try:
+            process_week(supabase, y, w)
+        except Exception as e:
+            print(f"  [!] week {y}/W{w} failed: {e}")
         time.sleep(1)
 
     print("Done.")
