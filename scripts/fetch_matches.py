@@ -325,8 +325,13 @@ def parse_match(m_card: dict, c1: dict, c2: dict,
     comp1_id_raw = c1.get("competitiorId") or c1.get("competitorId") or ""
     comp2_id_raw = c2.get("competitiorId") or c2.get("competitorId") or ""
 
-    # Skip team-level entries (IDs like "100207276") and doubles pairs ("121558_131163")
-    # Only process singles matches — IDs must be plain integers
+    # Skip doubles/mixed — a doubles competitor carries a `players` list of 2.
+    # Handled by parse_doubles_match. (Its competitiorId is a pair id, not a player.)
+    if len(c1.get("players") or []) >= 2 or len(c2.get("players") or []) >= 2 \
+       or "Doubles" in (m_card.get("subEventName") or ""):
+        return None
+
+    # Skip team-level entries (IDs like "100207276") and any joined ids
     if "_" in str(comp1_id_raw) or "_" in str(comp2_id_raw):
         return None
     try:
@@ -403,29 +408,24 @@ def parse_match(m_card: dict, c1: dict, c2: dict,
 
 
 def parse_doubles_match(m_card: dict, c1: dict, c2: dict, event_id: int) -> dict | None:
-    """Parse a doubles/mixed match. Competitor IDs are two player IDs joined by '_'
-    (e.g. '121558_131163'). Splits into the two players per side. Skips team ties."""
+    """Parse a doubles/mixed match. Each competitor is a pair: `players` holds the two
+    player objects (playerId, playerName); competitiorId is the pair id. Skips singles/teams."""
+    p1 = c1.get("players") or []
+    p2 = c2.get("players") or []
+    if len(p1) < 2 or len(p2) < 2:
+        return None
     r1 = str(c1.get("competitiorId") or c1.get("competitorId") or "")
     r2 = str(c2.get("competitiorId") or c2.get("competitorId") or "")
-    if "_" not in r1 or "_" not in r2:
-        return None
 
-    def split_pair(raw):
-        parts = raw.split("_")
+    def pid(pl, i):
         try:
-            a = int(parts[0])
-            b = int(parts[1]) if len(parts) > 1 else None
-        except (ValueError, TypeError):
-            return None, None
-        return a, b
+            return int(pl[i].get("playerId"))
+        except (ValueError, TypeError, AttributeError):
+            return None
 
-    c1p1, c1p2 = split_pair(r1)
-    c2p1, c2p2 = split_pair(r2)
-    ids = [c1p1, c1p2, c2p1, c2p2]
-    if not all(ids):
-        return None
-    # skip team/registration IDs (>= 1,000,000 are not players)
-    if any(x >= 1_000_000 for x in ids):
+    c1p1, c1p2 = pid(p1, 0), pid(p1, 1)
+    c2p1, c2p2 = pid(p2, 0), pid(p2, 1)
+    if not all([c1p1, c1p2, c2p1, c2p2]):
         return None
 
     game_scores = m_card.get("gameScores") or m_card.get("resultsGameScores")
