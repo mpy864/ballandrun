@@ -6,6 +6,7 @@ import PageBackground from '../components/PageBackground.jsx'
 import { getSport, CATEGORIES, DISCIPLINES, ROSTER } from '../lib/topsRoster.js'
 import { makeVerdict } from '../lib/verdict.js'
 import { TalentTab, EventsTab, CompareTab } from './sportTabs.jsx'
+import TennisView from './tennisView.jsx'
 
 // ─── Atoms ────────────────────────────────────────────────────────────────────
 
@@ -325,14 +326,14 @@ export default function SportPage() {
               </div>
               <button onClick={() => navigate('/okr')} style={{ fontSize: 12, fontWeight: 600, color: '#475569', background: 'none', border: 'none', cursor: 'pointer' }}>OKR</button>
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
+            {sportKey !== 'tennis' && <div style={{ display: 'flex', gap: 6 }}>
               {TABS.map(t => (
                 <button key={t.key} onClick={() => setTab(t.key)} style={{
                   padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer',
                   background: tab === t.key ? '#0f172a' : '#f1f5f9', color: tab === t.key ? '#fff' : '#64748b',
                 }}>{t.label}</button>
               ))}
-            </div>
+            </div>}
           </div>
 
           {/* Non-live sport */}
@@ -342,7 +343,9 @@ export default function SportPage() {
             </div>
           )}
 
-          {loading ? (
+          {sportKey === 'tennis' ? (
+            <TennisView />
+          ) : loading ? (
             <div style={{ textAlign: 'center', padding: '80px 0', color: '#94a3b8', fontSize: 14 }}>Loading {sport.name}…</div>
           ) : tab === 'squad' ? (
             <>

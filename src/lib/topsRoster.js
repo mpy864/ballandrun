@@ -25,9 +25,9 @@ export const SPORTS = [
     key: 'tennis',
     name: 'Tennis',
     icon: '🎾',
-    live: false,
+    live: true,
     federation: 'All India Tennis Association',
-    blurb: 'ATP / WTA / ITF — data adapter in setup',
+    blurb: 'ATP / WTA rankings (senior) — matches & juniors next',
     accent: '#16a34a',
   },
 ]
