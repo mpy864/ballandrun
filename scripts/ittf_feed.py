@@ -195,10 +195,51 @@ def _india_matches(event_id, day_raw, statuses):
             if m.get("Status") in statuses and _involves_india(m)]
 
 
+def _backfill_score(event_id, m):
+    """The match-day feed sometimes reports a finished knockout match as 0–0
+    (the real games only live in the bracket data). Recover the score from
+    brackets/<subEvent>.json so we don't mis-drop it as a walkover."""
+    h, a = m.get("Home") or {}, m.get("Away") or {}
+    if _games(h) > 0 or _games(a) > 0:
+        return
+    parts = (m.get("Key") or "").split(".")
+    if len(parts) < 2:
+        return
+    sub = ".".join(parts[:2])                       # e.g. W.DOUBLES--------U19
+    data = _get_json(f"{RESULTS_BASE}/TTE{event_id}/brackets/{sub}.json")
+    if not data:
+        return
+    hd, ad = h.get("Desc"), a.get("Desc")
+
+    def walk(o):
+        if isinstance(o, dict):
+            if "Home" in o and "Away" in o:
+                bh, ba = o.get("Home") or {}, o.get("Away") or {}
+                if {bh.get("Desc"), ba.get("Desc")} == {hd, ad} and \
+                   (_games(bh) > 0 or _games(ba) > 0):
+                    if bh.get("Desc") == hd:
+                        h["Res"], a["Res"] = bh.get("Res"), ba.get("Res")
+                    else:
+                        h["Res"], a["Res"] = ba.get("Res"), bh.get("Res")
+                    return True
+            return any(walk(v) for v in o.values())
+        if isinstance(o, list):
+            return any(walk(v) for v in o)
+        return False
+
+    walk(data)
+
+
 def _finished_india(event_id, day_raw):
-    """Finished Indian matches, excluding walkovers/unplayed."""
-    return [m for m in _india_matches(event_id, day_raw, {ST_FINISHED})
-            if not _is_walkover(m)]
+    """Finished Indian matches, excluding true walkovers/unplayed.
+    Backfills 0–0 knockout scores from the bracket data first."""
+    out = []
+    for m in _india_matches(event_id, day_raw, {ST_FINISHED}):
+        if _is_walkover(m):
+            _backfill_score(event_id, m)   # recover real score if it exists
+        if not _is_walkover(m):
+            out.append(m)
+    return out
 
 
 def run_live(event_ids, token, channel, db, dry_run):
