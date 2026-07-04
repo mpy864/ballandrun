@@ -47,7 +47,7 @@ function ScoreNum({ score }) {
 
 // ─── Athlete / pair card (verdict-first) ─────────────────────────────────────
 
-function EntryCard({ entry, lookup, score, live, onOpen }) {
+function EntryCard({ entry, lookup, score, live, onOpen, onOpenEntry }) {
   const [open, setOpen] = useState(false)
   const disc = DISCIPLINES[entry.discipline] || {}
   const players = entry.players || []
@@ -65,8 +65,8 @@ function EntryCard({ entry, lookup, score, live, onOpen }) {
           {/* names + meta */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
             <span
-              onClick={() => live && players[0]?.id && onOpen(players[0].id)}
-              style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', cursor: live && players[0]?.id ? 'pointer' : 'default' }}
+              onClick={() => live && onOpenEntry(entry)}
+              style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', cursor: live ? 'pointer' : 'default' }}
             >
               {players.map((p, i) => (live && p.id ? lookup[p.id]?.name : null) || p.name || `#${p.id}`).join(' / ')}
             </span>
@@ -135,7 +135,7 @@ function sortValue(entry, scores, pairScores) {
   return Number(entryScore(entry, scores, pairScores)?.score) || 0
 }
 
-function CategoryColumn({ cat, entries, lookup, scores, pairScores, live, onOpen }) {
+function CategoryColumn({ cat, entries, lookup, scores, pairScores, live, onOpen, onOpenEntry }) {
   const inCat = entries.filter(e => e.category === cat.key)
   const ordered = live ? [...inCat].sort((a, b) => sortValue(b, scores, pairScores) - sortValue(a, scores, pairScores)) : inCat
   return (
@@ -152,7 +152,7 @@ function CategoryColumn({ cat, entries, lookup, scores, pairScores, live, onOpen
         ? <div style={{ fontSize: 12, color: '#cbd5e1', textAlign: 'center', padding: '20px 0' }}>No athletes yet</div>
         : ordered.map((e, i) => (
             <EntryCard key={`${e.discipline}-${e.players.map(p => p.id || p.name).join('_')}-${i}`}
-              entry={e} lookup={lookup} score={entryScore(e, scores, pairScores)} live={live} onOpen={onOpen} />
+              entry={e} lookup={lookup} score={entryScore(e, scores, pairScores)} live={live} onOpen={onOpen} onOpenEntry={onOpenEntry} />
           ))}
     </div>
   )
@@ -231,6 +231,14 @@ export default function SportPage() {
   const [loading, setLoading] = useState(true)
 
   const entries = ROSTER[sportKey] || []
+
+  // Pair card → pair profile; singles card → player profile
+  const openEntry = (entry) => {
+    const disc = DISCIPLINES[entry.discipline] || {}
+    const ids = (entry.players || []).map(p => p.id).filter(Boolean)
+    if (disc.kind === 'doubles' && ids.length === 2) return navigate(`/pair/${ids.join('_')}`)
+    if (ids[0]) navigate(`/player/${ids[0]}`)
+  }
 
   const allIds = useMemo(() => {
     if (!sport?.live) return []
@@ -345,7 +353,7 @@ export default function SportPage() {
               )}
               <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', alignItems: 'start' }}>
                 {CATEGORIES.map(cat => (
-                  <CategoryColumn key={cat.key} cat={cat} entries={entries} lookup={lookup} scores={scores} pairScores={pairScores} live={sport.live} onOpen={id => navigate(`/player/${id}`)} />
+                  <CategoryColumn key={cat.key} cat={cat} entries={entries} lookup={lookup} scores={scores} pairScores={pairScores} live={sport.live} onOpen={id => navigate(`/player/${id}`)} onOpenEntry={openEntry} />
                 ))}
               </div>
               {sport.live && <TeamPerformance rows={tournaments} />}

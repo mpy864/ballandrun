@@ -12,6 +12,7 @@ import IndiaPage from './pages/IndiaPage.jsx'
 import ForecastPage from './pages/ForecastPage.jsx'
 import TopsPlatformPage from './pages/TopsPlatformPage.jsx'
 import SportPage from './pages/SportPage.jsx'
+import PairProfile from './pages/PairProfile.jsx'
 import PageBackground from './components/PageBackground.jsx'
 
 function ProtectedRoute({ children }) {
@@ -104,6 +105,11 @@ export default function App() {
       <Route path="/sport/:sport" element={
         <ProtectedRoute>
           <SportPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/pair/:pair" element={
+        <ProtectedRoute>
+          <PairProfile />
         </ProtectedRoute>
       } />
     </Routes>
