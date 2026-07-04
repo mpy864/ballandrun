@@ -1,0 +1,37 @@
+name: Backfill Doubles Matches
+
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: 'Earliest event start_date (YYYY-MM-DD)'
+        required: false
+        default: '2024-01-01'
+      limit:
+        description: 'Cap number of events (0 = all)'
+        required: false
+        default: '0'
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests supabase
+
+      - name: Run doubles backfill
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        working-directory: scripts
+        run: python backfill_doubles.py --since "${{ github.event.inputs.since }}" --limit "${{ github.event.inputs.limit }}"
