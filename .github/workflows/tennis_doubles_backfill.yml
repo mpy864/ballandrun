@@ -1,0 +1,37 @@
+name: Tennis Doubles Backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: 'Space-separated years (blank = last 6)'
+        required: false
+        default: ''
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests supabase
+
+      - name: Fetch Indian doubles matches
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          if [ -n "${{ github.event.inputs.years }}" ]; then
+            python scripts/fetch_tennis_doubles.py --years ${{ github.event.inputs.years }}
+          else
+            python scripts/fetch_tennis_doubles.py
+          fi
