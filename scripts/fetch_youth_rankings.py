@@ -1,26 +1,26 @@
 """
 fetch_youth_rankings.py
-Fetches current-week WTT youth rankings and upserts into Supabase.
+Fetches WTT youth rankings (singles MS/WS, doubles MD/WD/XD) and upserts into Supabase.
 
-Singles (internalttu/Rankings/GetRankingIndividuals):
-  CategoryCode=YOU, SubEventCode=MS/WS — all age groups in one call
-
-Doubles (internalttu/Rankings/GetRankingPairs):
-  CategoryCode=YOU, SubEventCode=MD/WD/XD — all age groups in one call
-
-AgeCategoryCode in each response row tells the player's actual age group.
-Rankings publish every Monday; RankingWeek is read from the response.
+IMPORTANT (2026-07-04): the WTT youth API no longer returns the latest week when
+called without a week — it returns a stale 2021 default (rank 0). So every request
+now passes RankingYear + RankingWeek explicitly, and rows are accepted only when the
+returned week matches the requested week. The script fetches each week from the last
+week already in the DB up to the latest available week (auto-detected), which also
+backfills any gap.
 
 Usage:
     pip install requests supabase
     export SUPABASE_URL=...  SUPABASE_SERVICE_KEY=...
-    python scripts/fetch_youth_rankings.py
+    python scripts/fetch_youth_rankings.py            # auto: DB-latest -> current
+    python scripts/fetch_youth_rankings.py --weeks 16 # force last N weeks
 """
 
 import os
 import time
+import argparse
 import requests
-from datetime import datetime, timezone
+from datetime import date, timedelta, datetime, timezone
 from supabase import create_client
 
 # ── Config ─────────────────────────────────────────────────────────────────
@@ -41,37 +41,29 @@ PAGE_SIZE  = 500
 SINGLE_EVENTS  = ["MS", "WS"]
 DOUBLES_EVENTS = ["MD", "WD", "XD"]
 AGE_CATEGORIES = ["U13", "U15", "U17", "U19"]
+MAX_LOOKBACK_WEEKS = 8   # how far back to search for the latest published week
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
 
-# ── Helpers ─────────────────────────────────────────────────────────────────
 
-def fetch_paginated(url: str, params: dict) -> list:
-    rows, start = [], 1
-    while True:
-        r = requests.get(url, params={**params, "StartRank": start,
-                                       "EndRank": start + PAGE_SIZE - 1, "q": 1},
-                         headers=HEADERS, timeout=TIMEOUT)
-        r.raise_for_status()
-        page = r.json().get("Result", [])
-        if not page:
-            break
-        rows.extend(page)
-        start += PAGE_SIZE
-        time.sleep(0.5)
-    return rows
+# ── Small helpers ─────────────────────────────────────────────────────────────
+
+def safe_int(v):
+    try:
+        return int(v) if v not in (None, "", "null") else None
+    except Exception:
+        return None
 
 
-def week_exists(supabase, year: int, week: int, sub_event: str) -> bool:
-    res = (supabase.table("youth_rankings_singles")
-           .select("ittf_id", count="exact")
-           .eq("ranking_year", year).eq("ranking_week", week)
-           .eq("sub_event", sub_event).limit(1).execute())
-    return (res.count or 0) > 0
+def safe_float(v):
+    try:
+        return float(v) if v not in (None, "", "null") else None
+    except Exception:
+        return None
 
 
-def parse_date(s) -> str | None:
+def parse_date(s):
     if not s:
         return None
     try:
@@ -80,167 +72,192 @@ def parse_date(s) -> str | None:
         return None
 
 
-def safe_int(v) -> int | None:
-    try:
-        return int(v) if v not in (None, "", "null") else None
-    except Exception:
-        return None
+def fetch_paginated(url: str, year: int, week: int, extra: dict) -> list:
+    """Fetch all pages for a specific week. Only rows whose RankingYear/RankingWeek
+    match the requested week are returned (guards against the stale 2021 default)."""
+    rows, start = [], 1
+    while True:
+        params = {"CategoryCode": "YOU", "RankingYear": year, "RankingWeek": week,
+                  "StartRank": start, "EndRank": start + PAGE_SIZE - 1, "q": 1, **extra}
+        for attempt in range(4):
+            try:
+                r = requests.get(url, params=params, headers=HEADERS, timeout=TIMEOUT)
+                r.raise_for_status()
+                break
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                wait = 8 * (attempt + 1)
+                print(f"      [retry {attempt+1}/3 after {wait}s] {e}")
+                time.sleep(wait)
+        else:
+            print("      [gave up after retries — skipping page]")
+            break
+        page = r.json().get("Result", [])
+        # keep only rows for the requested week
+        page = [x for x in page
+                if str(x.get("RankingYear")) == str(year) and str(x.get("RankingWeek")) == str(week)]
+        if not page:
+            break
+        rows.extend(page)
+        start += PAGE_SIZE
+        time.sleep(0.4)
+    return rows
 
 
-def safe_float(v) -> float | None:
-    try:
-        return float(v) if v not in (None, "", "null") else None
-    except Exception:
-        return None
-
-
-def upsert_batched(supabase, table: str, rows: list[dict]) -> None:
+def upsert_batched(supabase, table: str, rows: list) -> None:
     for i in range(0, len(rows), BATCH_SIZE):
-        supabase.table(table).upsert(rows[i : i + BATCH_SIZE]).execute()
-    print(f"  -> upserted {len(rows)} rows into {table}")
+        supabase.table(table).upsert(rows[i: i + BATCH_SIZE]).execute()
+    print(f"    -> upserted {len(rows)} rows into {table}")
 
 
-# ── Age-category rank helpers ────────────────────────────────────────────────
+# ── Week planning ─────────────────────────────────────────────────────────────
 
-def collect_singles_age_cat_ranks() -> dict[tuple, int]:
-    """Query each age_category × sub_event to get WTT-matching RankingPosition."""
-    rank_map: dict[tuple, int] = {}
+def db_latest_week(supabase, table: str):
+    res = (supabase.table(table)
+           .select("ranking_year, ranking_week")
+           .order("ranking_year", desc=True).order("ranking_week", desc=True)
+           .limit(1).execute())
+    if res.data:
+        return safe_int(res.data[0]["ranking_year"]), safe_int(res.data[0]["ranking_week"])
+    return None, None
+
+
+def latest_available_week():
+    """Walk back from the current ISO week until a week returns real data."""
+    y, w, _ = date.today().isocalendar()
+    for _ in range(MAX_LOOKBACK_WEEKS):
+        probe = fetch_paginated(IND_URL, y, w, {"SubEventCode": "MS"})
+        if probe:
+            return y, w
+        d = date.fromisocalendar(y, w, 1) - timedelta(days=7)
+        y, w, _ = d.isocalendar()
+    return None, None
+
+
+def weeks_between(start_yw, end_yw):
+    """Inclusive list of (year, week) from start to end, stepping one ISO week."""
+    weeks = []
+    d = date.fromisocalendar(start_yw[0], start_yw[1], 1)
+    end = date.fromisocalendar(end_yw[0], end_yw[1], 1)
+    while d <= end:
+        y, w, _ = d.isocalendar()
+        weeks.append((y, w))
+        d += timedelta(days=7)
+    return weeks
+
+
+# ── Per-week fetch ────────────────────────────────────────────────────────────
+
+def age_cat_ranks(url: str, subs: list, year: int, week: int, id_field: str) -> dict:
+    """Within-age-category rank (RankingPosition) for a given week."""
+    out = {}
     for age_cat in AGE_CATEGORIES:
-        for sub in SINGLE_EVENTS:
-            records = fetch_paginated(IND_URL, {
-                "CategoryCode": "YOU", "SubEventCode": sub, "AgeCategoryCode": age_cat,
-            })
-            for r in records:
+        for sub in subs:
+            recs = fetch_paginated(url, year, week, {"SubEventCode": sub, "AgeCategoryCode": age_cat})
+            for r in recs:
                 if r.get("AgeCategoryCode") == age_cat:
-                    key = (str(r["IttfId"]), r["SubEventCode"])
-                    rank = safe_int(r.get("RankingPosition"))
-                    if rank is not None:
-                        rank_map[key] = rank
-            time.sleep(0.5)
-    return rank_map
+                    rk = safe_int(r.get("RankingPosition"))
+                    if rk is not None:
+                        out[(str(r[id_field]), r["SubEventCode"])] = rk
+    return out
 
 
-def collect_doubles_age_cat_ranks() -> dict[tuple, int]:
-    rank_map: dict[tuple, int] = {}
-    for age_cat in AGE_CATEGORIES:
-        for sub in DOUBLES_EVENTS:
-            records = fetch_paginated(PAIRS_URL, {
-                "CategoryCode": "YOU", "SubEventCode": sub, "AgeCategoryCode": age_cat,
-            })
-            for r in records:
-                if r.get("AgeCategoryCode") == age_cat:
-                    key = (str(r["PairId"]), r["SubEventCode"])
-                    rank = safe_int(r.get("RankingPosition"))
-                    if rank is not None:
-                        rank_map[key] = rank
-            time.sleep(0.5)
-    return rank_map
-
-
-# ── Singles ─────────────────────────────────────────────────────────────────
-
-def process_singles(supabase) -> None:
-    print("Fetching youth singles (MS + WS, all age groups) ...")
+def process_week(supabase, year: int, week: int) -> None:
     now = datetime.now(timezone.utc).isoformat()
+    print(f"  Week {year}/W{week}")
 
-    print("  Collecting age-category ranks ...")
-    age_cat_ranks = collect_singles_age_cat_ranks()
-
-    rows = []
+    # ── Singles ──
+    acr = age_cat_ranks(IND_URL, SINGLE_EVENTS, year, week, "IttfId")
+    srows = []
     for sub in SINGLE_EVENTS:
-        records = fetch_paginated(IND_URL, {"CategoryCode": "YOU", "SubEventCode": sub})
-        if not records:
-            print(f"  YOU/{sub}: no data")
-            continue
-        yr  = safe_int(records[0].get("RankingYear"))
-        wk  = safe_int(records[0].get("RankingWeek"))
-        if week_exists(supabase, yr, wk, sub):
-            print(f"  YOU/{sub}: week {yr}/W{wk} already in DB — skipping")
-            continue
-        print(f"  YOU/{sub}: {len(records)} records  (Y={yr} W={wk})")
-        for r in records:
-            ittf_id = str(r["IttfId"])
-            sub_event = r["SubEventCode"]
-            rows.append({
-                "ittf_id":       ittf_id,
-                "player_name":   r["PlayerName"],
-                "country_code":  r["CountryCode"],
-                "country_name":  r["CountryName"],
-                "age_category":  r["AgeCategoryCode"],
-                "sub_event":     sub_event,
-                "ranking_year":  safe_int(r.get("RankingYear")),
+        recs = fetch_paginated(IND_URL, year, week, {"SubEventCode": sub})
+        for r in recs:
+            iid = str(r["IttfId"])
+            srows.append({
+                "ittf_id": iid, "player_name": r["PlayerName"],
+                "country_code": r["CountryCode"], "country_name": r["CountryName"],
+                "age_category": r["AgeCategoryCode"], "sub_event": r["SubEventCode"],
+                "ranking_year": safe_int(r.get("RankingYear")),
                 "ranking_month": safe_int(r.get("RankingMonth")),
-                "ranking_week":  safe_int(r.get("RankingWeek")),
-                "points_ytd":    safe_float(r.get("RankingPointsYTD")),
-                "current_rank":  safe_int(r.get("CurrentRank")),
+                "ranking_week": safe_int(r.get("RankingWeek")),
+                "points_ytd": safe_float(r.get("RankingPointsYTD")),
+                "current_rank": safe_int(r.get("CurrentRank")),
                 "previous_rank": safe_int(r.get("PreviousRank")),
-                "rank_diff":     safe_int(r.get("RankingDifference")),
-                "publish_date":  parse_date(r.get("PublishDate")),
-                "age_cat_rank":  age_cat_ranks.get((ittf_id, sub_event)),
-                "fetched_at":    now,
+                "rank_diff": safe_int(r.get("RankingDifference")),
+                "publish_date": parse_date(r.get("PublishDate")),
+                "age_cat_rank": acr.get((iid, r["SubEventCode"])),
+                "fetched_at": now,
             })
-        time.sleep(1)
+    if srows:
+        upsert_batched(supabase, "youth_rankings_singles", srows)
 
-    if rows:
-        upsert_batched(supabase, "youth_rankings_singles", rows)
-
-
-# ── Doubles ─────────────────────────────────────────────────────────────────
-
-def process_doubles(supabase) -> None:
-    print("Fetching youth doubles (MD + WD + XD, all age groups) ...")
-    now = datetime.now(timezone.utc).isoformat()
-
-    print("  Collecting age-category ranks ...")
-    age_cat_ranks = collect_doubles_age_cat_ranks()
-
-    rows = []
+    # ── Doubles ──
+    acrd = age_cat_ranks(PAIRS_URL, DOUBLES_EVENTS, year, week, "PairId")
+    drows = []
     for sub in DOUBLES_EVENTS:
-        records = fetch_paginated(PAIRS_URL, {"CategoryCode": "YOU", "SubEventCode": sub})
-        if not records:
-            print(f"  YOU/{sub}: no data")
-            continue
-        print(f"  YOU/{sub}: {len(records)} records")
-        for r in records:
-            pair_id = str(r["PairId"])
-            sub_event = r["SubEventCode"]
-            rows.append({
-                "pair_id":       pair_id,
-                "ittf_id1":      str(r["IttfId1"]),
-                "player_name1":  r["PlayerName1"],
-                "country_code1": r["CountryCode1"],
-                "country_name1": r["CountryName1"],
-                "ittf_id2":      str(r["IttfId1d"]),
-                "player_name2":  r["PlayerName1d"],
-                "country_code2": r["CountryCode1d"],
-                "country_name2": r["CountryName1d"],
-                "age_category":  r["AgeCategoryCode"],
-                "sub_event":     sub_event,
-                "ranking_year":  safe_int(r.get("RankingYear")),
+        recs = fetch_paginated(PAIRS_URL, year, week, {"SubEventCode": sub})
+        for r in recs:
+            pid = str(r["PairId"])
+            drows.append({
+                "pair_id": pid,
+                "ittf_id1": str(r["IttfId1"]), "player_name1": r["PlayerName1"],
+                "country_code1": r["CountryCode1"], "country_name1": r["CountryName1"],
+                "ittf_id2": str(r["IttfId1d"]), "player_name2": r["PlayerName1d"],
+                "country_code2": r["CountryCode1d"], "country_name2": r["CountryName1d"],
+                "age_category": r["AgeCategoryCode"], "sub_event": r["SubEventCode"],
+                "ranking_year": safe_int(r.get("RankingYear")),
                 "ranking_month": safe_int(r.get("RankingMonth")),
-                "ranking_week":  safe_int(r.get("RankingWeek")),
-                "points":        safe_float(r.get("Points")),
-                "current_rank":  safe_int(r.get("CurrentRank")),
+                "ranking_week": safe_int(r.get("RankingWeek")),
+                "points": safe_float(r.get("Points")),
+                "current_rank": safe_int(r.get("CurrentRank")),
                 "previous_rank": safe_int(r.get("PreviousRank")),
-                "rank_diff":     safe_int(r.get("RankingDifference")),
-                "publish_date":  parse_date(r.get("PublishDate")),
-                "age_cat_rank":  age_cat_ranks.get((pair_id, sub_event)),
-                "fetched_at":    now,
+                "rank_diff": safe_int(r.get("RankingDifference")),
+                "publish_date": parse_date(r.get("PublishDate")),
+                "age_cat_rank": acrd.get((pid, r["SubEventCode"])),
+                "fetched_at": now,
             })
-        time.sleep(1)
-
-    if rows:
-        upsert_batched(supabase, "youth_rankings_doubles", rows)
+    if drows:
+        upsert_batched(supabase, "youth_rankings_doubles", drows)
 
 
-# ── Main ─────────────────────────────────────────────────────────────────────
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    process_singles(supabase)
-    process_doubles(supabase)
-    print("Done.")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--weeks", type=int, default=0,
+                    help="force fetch of the last N weeks (default: DB-latest -> current)")
+    args = ap.parse_args()
 
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+    print("Finding latest available week ...")
+    latest = latest_available_week()
+    if latest == (None, None):
+        print("No youth ranking data returned by the API — aborting.")
+        return
+    print(f"  latest available: {latest[0]}/W{latest[1]}")
+
+    if args.weeks > 0:
+        start_d = date.fromisocalendar(latest[0], latest[1], 1) - timedelta(days=7 * (args.weeks - 1))
+        start = start_d.isocalendar()[:2]
+    else:
+        db_y, db_w = db_latest_week(supabase, "youth_rankings_singles")
+        if db_y is None:
+            start = latest
+        else:
+            start_d = date.fromisocalendar(db_y, db_w, 1) + timedelta(days=7)  # week after DB latest
+            start = start_d.isocalendar()[:2]
+
+    if date.fromisocalendar(*start, 1) > date.fromisocalendar(*latest, 1):
+        print("DB already current — nothing to fetch.")
+        return
+
+    plan = weeks_between(start, latest)
+    print(f"  fetching {len(plan)} week(s): {plan[0]} .. {plan[-1]}\n")
+    for (y, w) in plan:
+        process_week(supabase, y, w)
+        time.sleep(1)
+
+    print("Done.")
 
 
 if __name__ == "__main__":

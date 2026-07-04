@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import AuthBar from '../components/AuthBar.jsx'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const TODAY = new Date().toISOString().slice(0, 10)
@@ -244,6 +245,7 @@ function Shell({ children }) {
       <div style={{ position: 'fixed', inset: 0, zIndex: 4,
                     background: 'linear-gradient(180deg,#eef2fb 0%,#e3e9f5 100%)',
                     pointerEvents: 'none' }} />
+      <div style={{ position: 'relative', zIndex: 5 }}><AuthBar /></div>
       <div style={{ position: 'relative', zIndex: 5, maxWidth: 960, margin: '0 auto',
                     padding: '36px 16px 48px' }}>
         {children}

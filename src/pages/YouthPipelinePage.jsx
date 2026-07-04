@@ -807,12 +807,12 @@ export default function YouthPipelinePage() {
                 </p>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-                <a href="/india" style={{ fontSize: 12, color: '#ea580c', textDecoration: 'none', fontWeight: 700 }}>
+                <button onClick={() => navigate('/india')} style={{ fontSize: 12, color: '#ea580c', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}>
                   🇮🇳 India Hub
-                </a>
-                <a href="/" style={{ fontSize: 12, color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}>
-                  ← India Dashboard
-                </a>
+                </button>
+                <button onClick={() => navigate('/')} style={{ fontSize: 12, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+                  ← Home
+                </button>
               </div>
             </div>
 

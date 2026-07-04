@@ -279,6 +279,7 @@ def fetch_event_matches(event_id: int) -> list[dict]:
         return []
 
     records = []
+    doubles_records = []
     for team_tie in cards:
         if not isinstance(team_tie, dict):
             continue
@@ -310,8 +311,12 @@ def fetch_event_matches(event_id: int) -> list[dict]:
             record = parse_match(m_card, c1, c2, event_id)
             if record:
                 records.append(record)
+            else:
+                drec = parse_doubles_match(m_card, c1, c2, event_id)
+                if drec:
+                    doubles_records.append(drec)
 
-    return records
+    return records, doubles_records
 
 
 def parse_match(m_card: dict, c1: dict, c2: dict,
@@ -393,6 +398,84 @@ def parse_match(m_card: dict, c1: dict, c2: dict,
         "game_scores":    game_scores,
         "result":         result,
         "event_date":     event_date,
+        "last_updated":   datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def parse_doubles_match(m_card: dict, c1: dict, c2: dict, event_id: int) -> dict | None:
+    """Parse a doubles/mixed match. Competitor IDs are two player IDs joined by '_'
+    (e.g. '121558_131163'). Splits into the two players per side. Skips team ties."""
+    r1 = str(c1.get("competitiorId") or c1.get("competitorId") or "")
+    r2 = str(c2.get("competitiorId") or c2.get("competitorId") or "")
+    if "_" not in r1 or "_" not in r2:
+        return None
+
+    def split_pair(raw):
+        parts = raw.split("_")
+        try:
+            a = int(parts[0])
+            b = int(parts[1]) if len(parts) > 1 else None
+        except (ValueError, TypeError):
+            return None, None
+        return a, b
+
+    c1p1, c1p2 = split_pair(r1)
+    c2p1, c2p2 = split_pair(r2)
+    ids = [c1p1, c1p2, c2p1, c2p2]
+    if not all(ids):
+        return None
+    # skip team/registration IDs (>= 1,000,000 are not players)
+    if any(x >= 1_000_000 for x in ids):
+        return None
+
+    game_scores = m_card.get("gameScores") or m_card.get("resultsGameScores")
+    if game_scores:
+        clean = []
+        for g in game_scores.split(","):
+            p = g.strip().split("-")
+            if len(p) == 2 and p[0].strip().isdigit() and p[1].strip().isdigit():
+                a, b = p[0].strip(), p[1].strip()
+                if (a, b) not in [("7", "0"), ("0", "7"), ("0", "0")]:
+                    clean.append(f"{a}-{b}")
+        game_scores = ",".join(clean) if clean else None
+
+    match_score = m_card.get("overallScores") or m_card.get("resultOverallScores")
+    result = None
+    if match_score:
+        p = match_score.split("-")
+        if len(p) == 2 and p[0].isdigit() and p[1].isdigit():
+            result = "W" if int(p[0]) > int(p[1]) else "L"
+
+    event_date = None
+    match_dt = m_card.get("matchDateTime") or {}
+    date_str = match_dt.get("startDateLocal") or match_dt.get("startDateUTC")
+    if date_str:
+        try:
+            event_date = datetime.strptime(date_str, "%m/%d/%Y %H:%M:%S").strftime("%Y-%m-%d")
+        except ValueError:
+            event_date = date_str[:10]
+
+    doc_code = m_card.get("documentCode") or m_card.get("matchId") or m_card.get("id")
+    match_id = f"{event_id}_{doc_code}" if doc_code else None
+    cat = m_card.get("subEventName")
+    age = next((a for a in ("U19", "U17", "U15", "U13", "U11") if cat and a in cat), None)
+
+    return {
+        "match_id":       match_id,
+        "event_id":       event_id,
+        "event_category": cat,
+        "round_phase":    m_card.get("subEventDescription"),
+        "comp1_id":       r1,
+        "comp1_p1_id":    c1p1,
+        "comp1_p2_id":    c1p2,
+        "comp2_id":       r2,
+        "comp2_p1_id":    c2p1,
+        "comp2_p2_id":    c2p2,
+        "match_score":    match_score,
+        "game_scores":    game_scores,
+        "result":         result,
+        "event_date":     event_date,
+        "age_group":      age,
         "last_updated":   datetime.now(timezone.utc).isoformat(),
     }
 
@@ -508,10 +591,10 @@ def main():
         # Ensure event row exists
         ensure_event_in_db(supabase, ev)
 
-        matches = fetch_event_matches(eid)
-        print(f"  Parsed {len(matches)} matches.")
+        matches, dmatches = fetch_event_matches(eid)
+        print(f"  Parsed {len(matches)} singles, {len(dmatches)} doubles.")
 
-        if not matches:
+        if not matches and not dmatches:
             print(f"  [!] No matches returned — skipping.")
             time.sleep(SLEEP_EVENT)
             continue
@@ -526,6 +609,23 @@ def main():
                 ).execute()
             except Exception as e:
                 print(f"  [!] Upsert error (batch {i//500 + 1}): {e}")
+
+        # Doubles → wtt_matches_doubles
+        d_upsert = [m for m in dmatches if m.get("match_id")]
+        for i in range(0, len(d_upsert), 500):
+            try:
+                supabase.table("wtt_matches_doubles").upsert(
+                    d_upsert[i:i+500], on_conflict="match_id"
+                ).execute()
+            except Exception as e:
+                print(f"  [!] Doubles upsert error (batch {i//500 + 1}): {e}")
+        if d_upsert:
+            dpseudo = []
+            for r in dmatches:
+                dpseudo.append({"comp1_id": r["comp1_p1_id"], "comp2_id": r["comp1_p2_id"]})
+                dpseudo.append({"comp1_id": r["comp2_p1_id"], "comp2_id": r["comp2_p2_id"]})
+            ensure_players_in_db(supabase, dpseudo)
+            print(f"  Doubles: sent {len(d_upsert)} to wtt_matches_doubles.")
 
         # Verify actual DB count
         db_count = supabase.table("wtt_matches_singles") \

@@ -10,6 +10,8 @@ import YouthPipelinePage from './pages/YouthPipelinePage.jsx'
 import PlayerPage from './pages/PlayerPage.jsx'
 import IndiaPage from './pages/IndiaPage.jsx'
 import ForecastPage from './pages/ForecastPage.jsx'
+import TopsPlatformPage from './pages/TopsPlatformPage.jsx'
+import SportPage from './pages/SportPage.jsx'
 import PageBackground from './components/PageBackground.jsx'
 
 function ProtectedRoute({ children }) {
@@ -50,6 +52,11 @@ export default function App() {
       <Route path="/login" element={<RedirectIfAuthed><LoginPage /></RedirectIfAuthed>} />
       <Route path="/" element={
         <ProtectedRoute>
+          <TopsPlatformPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/rankings" element={
+        <ProtectedRoute>
           <IndiaDashboard />
         </ProtectedRoute>
       } />
@@ -87,6 +94,16 @@ export default function App() {
       <Route path="/forecast" element={
         <ProtectedRoute>
           <ForecastPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/platform" element={
+        <ProtectedRoute>
+          <TopsPlatformPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/sport/:sport" element={
+        <ProtectedRoute>
+          <SportPage />
         </ProtectedRoute>
       } />
     </Routes>

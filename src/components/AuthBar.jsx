@@ -13,12 +13,14 @@ export default function AuthBar() {
     navigate('/login')
   }
 
-  const homeLink = (
-    <a href="/" style={{
-      fontSize: 12, fontWeight: 600, color: '#64748b', textDecoration: 'none',
-    }}>
-      Home
-    </a>
+  const nav = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14, justifyContent: 'center' }}>
+      <button onClick={() => navigate(-1)} style={{
+        fontSize: 12, fontWeight: 600, color: '#64748b', background: 'none',
+        border: 'none', padding: 0, cursor: 'pointer',
+      }}>← Back</button>
+      <button onClick={() => navigate('/')} style={{ fontSize: 12, fontWeight: 600, color: '#64748b', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>Home</button>
+    </div>
   )
 
   if (!session || !profile) {
@@ -27,7 +29,7 @@ export default function AuthBar() {
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 16px',
         background: 'white', borderBottom: '1px solid #e2e8f0', fontSize: 12,
       }}>
-        {homeLink}
+        {nav}
       </div>
     )
   }
@@ -65,9 +67,7 @@ export default function AuthBar() {
           </span>
         )}
       </div>
-      <div style={{ textAlign: 'center' }}>
-        {homeLink}
-      </div>
+      {nav}
       <button
         onClick={handleSignOut}
         style={{

@@ -285,13 +285,8 @@ export default function IndiaPage() {
   // ── Navigation ────────────────────────────────────────────────────────────
 
   function goToProfile(player) {
-    if (player.isSenior) {
-      navigate('/')  // senior profile on main dashboard
-    } else if (player.isDoubles) {
-      navigate(`/player/${player.ittf_id1}?sub=${player.sub_event}&age=${player.level}`)
-    } else {
-      navigate(`/player/${player.ittf_id}?sub=${player.sub_event}&age=${player.level}`)
-    }
+    const id = player.isDoubles ? player.ittf_id1 : player.ittf_id
+    navigate(`/player/${id}?sub=${player.sub_event}&age=${player.level || 'Senior'}`)
   }
 
   const inCompare = key => !!compareList.find(p => p._key === key)

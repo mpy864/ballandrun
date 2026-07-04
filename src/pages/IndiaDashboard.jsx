@@ -377,18 +377,19 @@ export default function IndiaDashboard() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
               {[
+                { href: '/platform',   label: 'Platform' },
                 { href: '/okr',        label: 'OKR Dashboard' },
                 { href: '/h2h',        label: 'H2H / Compare' },
                 { href: '/live',       label: 'Live'          },
                 { href: '/tournament', label: 'Tournament'    },
                 { href: '/forecast',   label: 'Forecast'      },
               ].map(l => (
-                <a key={l.href} href={l.href} style={{
+                <button key={l.href} onClick={() => navigate(l.href)} style={{
                   fontSize: 12, fontWeight: 600, color: '#475569',
-                  textDecoration: 'none', whiteSpace: 'nowrap',
+                  background: 'none', border: 'none', padding: 0, cursor: 'pointer', whiteSpace: 'nowrap',
                 }}>
                   {l.label}
-                </a>
+                </button>
               ))}
             </div>
           </div>

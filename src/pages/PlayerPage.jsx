@@ -863,9 +863,9 @@ export default function PlayerPage() {
             border: '1px solid rgba(30,70,160,0.08)',
             borderRadius: 12, padding: '10px 16px',
           }}>
-            <a href={isSenior ? '/' : '/youth'} style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#64748b', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>
-              <ArrowLeft size={14} /> {isSenior ? 'India Dashboard' : 'Youth Pipeline'}
-            </a>
+            <button onClick={() => window.history.back()} style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#64748b', fontSize: 13, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontWeight: 600 }}>
+              <ArrowLeft size={14} /> Back
+            </button>
             <span style={{ color: '#e2e8f0' }}>·</span>
             <span style={{ fontSize: 13, color: '#94a3b8' }}>{name}</span>
           </div>
