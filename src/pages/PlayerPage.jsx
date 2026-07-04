@@ -380,7 +380,8 @@ export default function PlayerPage() {
   const subEvent    = searchParams.get('sub') || 'MS'
   const ageCategory = searchParams.get('age') || null
   const isDoubles   = ['MD', 'WD', 'XD', 'MDI', 'WDI', 'XDI'].includes(subEvent)
-  const isSenior    = ageCategory === 'Senior'
+  // Default to senior when no age is given (e.g. bare /player/:id links from the Squad)
+  const isSenior    = ageCategory ? ageCategory === 'Senior' : true
   const numId       = parseInt(ittf_id)
 
   const [playerInfo,  setPlayerInfo]  = useState(null)
