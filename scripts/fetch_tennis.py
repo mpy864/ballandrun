@@ -48,8 +48,15 @@ def d8(s):
 
 
 def get_rows(url, cols):
-    r = requests.get(url, timeout=60)
-    r.raise_for_status()
+    print(f"    GET {url}")
+    try:
+        r = requests.get(url, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
+    except Exception as e:
+        print(f"    [!] request error: {e}")
+        return []
+    if r.status_code != 200:
+        print(f"    [!] HTTP {r.status_code} for {url}")
+        return []
     rows = [row for row in csv.reader(io.StringIO(r.text)) if row]
     if not rows:
         return []
