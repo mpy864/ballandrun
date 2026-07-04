@@ -37,7 +37,6 @@ export function TalentTab({ onOpen, navigate }) {
   const [disc, setDisc] = useState('MS')
   const [level, setLevel] = useState('Senior')
   const [rows, setRows] = useState([])
-  const [rising, setRising] = useState([])
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -69,8 +68,7 @@ export function TalentTab({ onOpen, navigate }) {
         const latest = {}
         for (const r of data || []) if (!latest[r.player_id]) latest[r.player_id] = r
         out = Object.values(latest).map(r => ({ kind: 'singles', id: r.player_id, label: indPlayers[r.player_id]?.name || `#${r.player_id}`, rank: r.rank, rank_change: r.rank_change }))
-        // rising = biggest climbers
-        if (!c) setRising(out.filter(x => (x.rank_change ?? 0) <= -10).sort((a, b) => a.rank_change - b.rank_change).slice(0, 6))
+          .sort((a, b) => (a.rank || 9999) - (b.rank || 9999))
       }
 
       else if (level === 'Senior' && d.kind === 'doubles') {
@@ -83,7 +81,6 @@ export function TalentTab({ onOpen, navigate }) {
           .filter(r => r.publish_date === latestDate && (idset.has(r.p1_ittf_id) || idset.has(r.p2_ittf_id)))
           .map(r => ({ kind: 'doubles', ids: [r.p1_ittf_id, r.p2_ittf_id], label: r.team_name, rank: r.current_rank, rank_change: r.previous_rank ? r.previous_rank - r.current_rank : null }))
           .sort((a, b) => (a.rank || 9999) - (b.rank || 9999))
-        if (!c) setRising([])
       }
 
       else if (d.kind === 'singles') {  // youth singles
@@ -95,7 +92,6 @@ export function TalentTab({ onOpen, navigate }) {
         out = (data || []).filter(r => r.publish_date === latestDate)
           .map(r => ({ kind: 'singles', id: Number(r.ittf_id), label: r.player_name, rank: r.current_rank, rank_change: r.rank_diff }))
           .sort((a, b) => (a.rank || 9999) - (b.rank || 9999))
-        if (!c) setRising([])
       }
 
       else {  // youth doubles
@@ -107,7 +103,6 @@ export function TalentTab({ onOpen, navigate }) {
         out = (data || []).filter(r => r.publish_date === latestDate)
           .map(r => ({ kind: 'doubles', ids: [Number(r.ittf_id1), Number(r.ittf_id2)], label: `${r.player_name1} / ${r.player_name2}`, rank: r.current_rank, rank_change: r.rank_diff }))
           .sort((a, b) => (a.rank || 9999) - (b.rank || 9999))
-        if (!c) setRising([])
       }
 
       if (!c) { setRows(out); setLoading(false) }
@@ -137,14 +132,6 @@ export function TalentTab({ onOpen, navigate }) {
         </div>
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search…" style={{ marginLeft: 'auto', fontSize: 12, padding: '6px 10px', borderRadius: 7, border: '1px solid #e2e8f0', outline: 'none' }} />
       </div>
-
-      {/* rising (senior singles only) */}
-      {rising.length > 0 && (
-        <div style={{ ...card, overflow: 'hidden' }}>
-          <div style={{ padding: '11px 16px', fontSize: 13, fontWeight: 900, color: '#15803d' }}>Rising into contention</div>
-          {rising.map((r, i) => <Row key={i} r={r} onClick={() => open(r)} />)}
-        </div>
-      )}
 
       {/* list */}
       <div style={{ ...card, overflow: 'hidden' }}>
