@@ -39,7 +39,31 @@ export default function PairProfile() {
         ([m.comp1_p1_id, m.comp1_p2_id].includes(a) && [m.comp1_p1_id, m.comp1_p2_id].includes(b)) ||
         ([m.comp2_p1_id, m.comp2_p2_id].includes(a) && [m.comp2_p1_id, m.comp2_p2_id].includes(b)))
 
-      if (!cancelled) { setNames(nm); setRankRows(rk || []); setScore(sc?.[0] || null); setMatches(together); setLoading(false) }
+      // resolve opponent pair names (same shape as the singles rows)
+      const oppIds = new Set()
+      for (const m of together) {
+        const onC1 = [m.comp1_p1_id, m.comp1_p2_id].includes(a)
+        if (onC1) { oppIds.add(m.comp2_p1_id); oppIds.add(m.comp2_p2_id) }
+        else { oppIds.add(m.comp1_p1_id); oppIds.add(m.comp1_p2_id) }
+      }
+      oppIds.delete(null); oppIds.delete(undefined)
+      const { data: opps } = await supabase.from('wtt_players').select('ittf_id, player_name')
+        .in('ittf_id', oppIds.size ? [...oppIds] : [0])
+      const om = Object.fromEntries((opps || []).map(p => [p.ittf_id, p.player_name]))
+      const enriched = together.map(m => {
+        const onC1 = [m.comp1_p1_id, m.comp1_p2_id].includes(a)
+        const o1 = om[onC1 ? m.comp2_p1_id : m.comp1_p1_id]
+        const o2 = om[onC1 ? m.comp2_p2_id : m.comp1_p2_id]
+        const rp = (m.round_phase || '').split(' - ')
+        return {
+          ...m,
+          player_result: onC1 ? m.result : (m.result === 'W' ? 'L' : 'W'),
+          opp_name: [o1, o2].filter(Boolean).join(' / ') || 'Unknown',
+          round: rp.length >= 2 ? rp[1] : (m.round_phase || ''),
+        }
+      })
+
+      if (!cancelled) { setNames(nm); setRankRows(rk || []); setScore(sc?.[0] || null); setMatches(enriched); setLoading(false) }
     }
     load()
     return () => { cancelled = true }
@@ -120,18 +144,17 @@ export default function PairProfile() {
                 </div>
                 {matches.length === 0
                   ? <div style={{ padding: '30px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No doubles matches yet. Filling after the next data sync.</div>
-                  : matches.map(m => {
-                      const onC1 = [m.comp1_p1_id, m.comp1_p2_id].includes(a)
-                      const res = onC1 ? m.result : (m.result === 'W' ? 'L' : 'W')
-                      return (
-                        <div key={m.match_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 18px', borderTop: '1px solid #f1f5f9' }}>
-                          <span style={{ width: 20, fontWeight: 800, color: res === 'W' ? '#16a34a' : '#f87171' }}>{res}</span>
-                          <span style={{ flex: 1, fontSize: 12, color: '#475569' }}>{m.round_phase || m.event_category || ''}</span>
-                          <span style={{ fontSize: 12, color: '#64748b' }}>{m.match_score}</span>
-                          <span style={{ fontSize: 11, color: '#94a3b8' }}>{m.event_date || ''}</span>
+                  : matches.map(m => (
+                      <div key={m.match_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 18px', borderTop: '1px solid #f1f5f9', background: m.player_result === 'W' ? 'rgba(22,163,74,0.04)' : 'rgba(220,38,38,0.03)' }}>
+                        <span style={{ fontSize: 12, fontWeight: 800, width: 14, color: m.player_result === 'W' ? '#16a34a' : '#dc2626' }}>{m.player_result === 'W' ? '✓' : '✗'}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: '#1e293b' }}>{m.opp_name}</span>
+                          {m.round && <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 6 }}>{m.round}</span>}
                         </div>
-                      )
-                    })}
+                        <span style={{ fontSize: 11, color: '#64748b', flexShrink: 0 }}>{m.match_score}</span>
+                        <span style={{ fontSize: 10, color: '#94a3b8', width: 74, textAlign: 'right', flexShrink: 0 }}>{m.event_date || ''}</span>
+                      </div>
+                    ))}
               </div>
             </>
           )}
