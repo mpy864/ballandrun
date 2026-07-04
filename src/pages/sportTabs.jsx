@@ -1,8 +1,16 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase.js'
 
-// Shared card style
 const card = { background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(15,23,42,0.08)', borderRadius: 14 }
+
+const DISCIPLINES = [
+  { code: 'MS', label: 'MS', kind: 'singles', gender: 'M' },
+  { code: 'WS', label: 'WS', kind: 'singles', gender: 'W' },
+  { code: 'MD', label: 'MD', kind: 'doubles' },
+  { code: 'WD', label: 'WD', kind: 'doubles' },
+  { code: 'XD', label: 'XD', kind: 'doubles' },
+]
+const LEVELS = ['Senior', 'U19', 'U17', 'U15', 'U13']
 
 function Move({ diff }) {
   if (diff == null || diff === 0) return null
@@ -12,79 +20,140 @@ function Move({ diff }) {
     : <span style={{ color: '#f87171', fontSize: 11, fontWeight: 700 }}>▼{n}</span>
 }
 
-function Row({ p, onOpen }) {
+function Row({ r, onClick }) {
   return (
-    <div onClick={() => onOpen(p.id)} style={{
-      display: 'flex', alignItems: 'center', gap: 12, padding: '9px 16px',
-      borderTop: '1px solid #f1f5f9', cursor: 'pointer',
-    }}>
-      <span style={{ width: 46, fontSize: 15, fontWeight: 800, color: '#0f172a' }}>#{p.rank}</span>
-      <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
-      <Move diff={p.rank_change} />
-      <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 99, background: p.gender === 'M' ? '#eff6ff' : '#fdf2f8', color: p.gender === 'M' ? '#2563eb' : '#db2777' }}>
-        {p.gender === 'M' ? 'MS' : 'WS'}
-      </span>
+    <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 16px', borderTop: '1px solid #f1f5f9', cursor: 'pointer' }}>
+      <span style={{ width: 46, fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{r.rank ? `#${r.rank}` : '—'}</span>
+      <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.label}</span>
+      <Move diff={r.rank_change} />
     </div>
   )
 }
 
-// ─── Talent ───────────────────────────────────────────────────────────────────
+// ─── Talent — all India players, every discipline and level ─────────────────
 
-export function TalentTab({ onOpen }) {
-  const [players, setPlayers] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [g, setG] = useState('all')
+export function TalentTab({ onOpen, navigate }) {
+  const [indPlayers, setIndPlayers] = useState(null)   // {id: {name,gender}}
+  const [disc, setDisc] = useState('MS')
+  const [level, setLevel] = useState('Senior')
+  const [rows, setRows] = useState([])
+  const [rising, setRising] = useState([])
   const [q, setQ] = useState('')
+  const [loading, setLoading] = useState(true)
 
+  // load India player registry once
   useEffect(() => {
-    let cancelled = false
-    async function load() {
-      const { data: pl } = await supabase.from('wtt_players').select('ittf_id, player_name, gender').eq('country_code', 'IND')
-      const ids = (pl || []).map(p => p.ittf_id)
-      const nameMap = Object.fromEntries((pl || []).map(p => [p.ittf_id, p.player_name]))
-      const { data: ranks } = await supabase.from('rankings_singles_normalized')
-        .select('player_id, rank, rank_change, gender, ranking_date')
-        .in('player_id', ids).order('ranking_date', { ascending: false }).limit(2000)
-      const latest = {}
-      for (const r of ranks || []) {
-        if (!latest[r.player_id]) latest[r.player_id] = { id: r.player_id, name: nameMap[r.player_id] || `#${r.player_id}`, rank: r.rank, rank_change: r.rank_change, gender: r.gender }
-      }
-      if (!cancelled) { setPlayers(Object.values(latest).sort((a, b) => a.rank - b.rank)); setLoading(false) }
-    }
-    load()
-    return () => { cancelled = true }
+    let c = false
+    ;(async () => {
+      const { data } = await supabase.from('wtt_players').select('ittf_id, player_name, gender').eq('country_code', 'IND')
+      const map = {}; for (const p of data || []) map[p.ittf_id] = { name: p.player_name, gender: p.gender }
+      if (!c) setIndPlayers(map)
+    })()
+    return () => { c = true }
   }, [])
 
-  const filtered = useMemo(() => players
-    .filter(p => g === 'all' || p.gender === g)
-    .filter(p => !q || p.name.toLowerCase().includes(q.toLowerCase())), [players, g, q])
+  useEffect(() => {
+    if (!indPlayers) return
+    const d = DISCIPLINES.find(x => x.code === disc)
+    let c = false
+    setLoading(true)
+    ;(async () => {
+      const indIds = Object.keys(indPlayers).map(Number)
+      let out = []
 
-  const rising = useMemo(() => players.filter(p => (p.rank_change ?? 0) <= -10).sort((a, b) => a.rank_change - b.rank_change).slice(0, 6), [players])
+      if (level === 'Senior' && d.kind === 'singles') {
+        const { data } = await supabase.from('rankings_singles_normalized')
+          .select('player_id, rank, rank_change, gender, ranking_date')
+          .in('player_id', indIds).eq('gender', d.gender)
+          .order('ranking_date', { ascending: false }).limit(1500)
+        const latest = {}
+        for (const r of data || []) if (!latest[r.player_id]) latest[r.player_id] = r
+        out = Object.values(latest).map(r => ({ kind: 'singles', id: r.player_id, label: indPlayers[r.player_id]?.name || `#${r.player_id}`, rank: r.rank, rank_change: r.rank_change }))
+        // rising = biggest climbers
+        if (!c) setRising(out.filter(x => (x.rank_change ?? 0) <= -10).sort((a, b) => a.rank_change - b.rank_change).slice(0, 6))
+      }
 
-  if (loading) return <div style={{ textAlign: 'center', padding: '60px 0', color: '#94a3b8' }}>Loading India players…</div>
+      else if (level === 'Senior' && d.kind === 'doubles') {
+        const idset = new Set(indIds)
+        const { data } = await supabase.from('rankings_doubles_teams')
+          .select('p1_ittf_id, p2_ittf_id, team_name, current_rank, previous_rank, category, publish_date')
+          .eq('category', disc).order('publish_date', { ascending: false }).limit(2500)
+        const latestDate = data?.[0]?.publish_date
+        out = (data || [])
+          .filter(r => r.publish_date === latestDate && (idset.has(r.p1_ittf_id) || idset.has(r.p2_ittf_id)))
+          .map(r => ({ kind: 'doubles', ids: [r.p1_ittf_id, r.p2_ittf_id], label: r.team_name, rank: r.current_rank, rank_change: r.previous_rank ? r.previous_rank - r.current_rank : null }))
+          .sort((a, b) => (a.rank || 9999) - (b.rank || 9999))
+        if (!c) setRising([])
+      }
+
+      else if (d.kind === 'singles') {  // youth singles
+        const { data } = await supabase.from('youth_rankings_singles')
+          .select('ittf_id, player_name, current_rank, rank_diff, sub_event, age_category, publish_date')
+          .eq('country_code', 'IND').eq('sub_event', disc).eq('age_category', level)
+          .order('publish_date', { ascending: false }).limit(1000)
+        const latestDate = data?.[0]?.publish_date
+        out = (data || []).filter(r => r.publish_date === latestDate)
+          .map(r => ({ kind: 'singles', id: Number(r.ittf_id), label: r.player_name, rank: r.current_rank, rank_change: r.rank_diff }))
+          .sort((a, b) => (a.rank || 9999) - (b.rank || 9999))
+        if (!c) setRising([])
+      }
+
+      else {  // youth doubles
+        const { data } = await supabase.from('youth_rankings_doubles')
+          .select('ittf_id1, player_name1, ittf_id2, player_name2, current_rank, rank_diff, sub_event, age_category, publish_date')
+          .eq('country_code1', 'IND').eq('sub_event', disc).eq('age_category', level)
+          .order('publish_date', { ascending: false }).limit(1000)
+        const latestDate = data?.[0]?.publish_date
+        out = (data || []).filter(r => r.publish_date === latestDate)
+          .map(r => ({ kind: 'doubles', ids: [Number(r.ittf_id1), Number(r.ittf_id2)], label: `${r.player_name1} / ${r.player_name2}`, rank: r.current_rank, rank_change: r.rank_diff }))
+          .sort((a, b) => (a.rank || 9999) - (b.rank || 9999))
+        if (!c) setRising([])
+      }
+
+      if (!c) { setRows(out); setLoading(false) }
+    })()
+    return () => { c = true }
+  }, [indPlayers, disc, level])
+
+  const open = (r) => r.kind === 'doubles' ? navigate(`/pair/${r.ids.join('_')}`) : onOpen(r.id)
+  const filtered = useMemo(() => rows.filter(r => !q || r.label.toLowerCase().includes(q.toLowerCase())), [rows, q])
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* filters */}
+      <div style={{ ...card, padding: '12px 16px', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Discipline</span>
+          {DISCIPLINES.map(x => (
+            <button key={x.code} onClick={() => setDisc(x.code)} style={{ padding: '5px 11px', borderRadius: 7, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer', background: disc === x.code ? '#0f172a' : '#f1f5f9', color: disc === x.code ? '#fff' : '#475569' }}>{x.label}</button>
+          ))}
+        </div>
+        <div style={{ width: 1, height: 22, background: '#e2e8f0' }} />
+        <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Level</span>
+          {LEVELS.map(l => (
+            <button key={l} onClick={() => setLevel(l)} style={{ padding: '5px 11px', borderRadius: 7, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer', background: level === l ? '#0f172a' : '#f1f5f9', color: level === l ? '#fff' : '#475569' }}>{l}</button>
+          ))}
+        </div>
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search…" style={{ marginLeft: 'auto', fontSize: 12, padding: '6px 10px', borderRadius: 7, border: '1px solid #e2e8f0', outline: 'none' }} />
+      </div>
+
+      {/* rising (senior singles only) */}
       {rising.length > 0 && (
         <div style={{ ...card, overflow: 'hidden' }}>
           <div style={{ padding: '11px 16px', fontSize: 13, fontWeight: 900, color: '#15803d' }}>Rising into contention</div>
-          {rising.map(p => <Row key={p.id} p={p} onOpen={onOpen} />)}
+          {rising.map((r, i) => <Row key={i} r={r} onClick={() => open(r)} />)}
         </div>
       )}
+
+      {/* list */}
       <div style={{ ...card, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '11px 16px', flexWrap: 'wrap' }}>
-          {['all', 'M', 'W'].map(x => (
-            <button key={x} onClick={() => setG(x)} style={{
-              padding: '5px 12px', borderRadius: 7, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
-              background: g === x ? '#0f172a' : '#f1f5f9', color: g === x ? '#fff' : '#475569',
-            }}>{x === 'all' ? 'All' : x === 'M' ? 'Men' : 'Women'}</button>
-          ))}
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search player…" style={{
-            marginLeft: 'auto', fontSize: 12, padding: '6px 10px', borderRadius: 7, border: '1px solid #e2e8f0', outline: 'none',
-          }} />
-          <span style={{ fontSize: 11, color: '#94a3b8' }}>{filtered.length}</span>
+        <div style={{ padding: '11px 16px', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#94a3b8' }}>
+          <span>{disc} · {level}</span><span>{filtered.length}</span>
         </div>
-        {filtered.slice(0, 100).map(p => <Row key={p.id} p={p} onOpen={onOpen} />)}
+        {loading ? <div style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8' }}>Loading…</div>
+          : filtered.length === 0 ? <div style={{ padding: '30px 0', textAlign: 'center', color: '#cbd5e1', fontSize: 13, borderTop: '1px solid #f1f5f9' }}>No players for {disc} · {level}.</div>
+          : filtered.slice(0, 150).map((r, i) => <Row key={i} r={r} onClick={() => open(r)} />)}
       </div>
     </div>
   )
@@ -92,27 +161,26 @@ export function TalentTab({ onOpen }) {
 
 // ─── Events ───────────────────────────────────────────────────────────────────
 
-export function EventsTab({ onOpen, navigate }) {
+export function EventsTab({ navigate }) {
   const [byEvent, setByEvent] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    let cancelled = false
-    async function load() {
-      const { data: fc } = await supabase.from('wtt_forecasts').select('event_id, sub_event, label, qkey, p_title').order('p_title', { ascending: false })
+    let c = false
+    ;(async () => {
+      const { data: fc } = await supabase.from('wtt_forecasts').select('event_id, sub_event, label, p_title').order('p_title', { ascending: false })
       const evIds = [...new Set((fc || []).map(f => f.event_id))]
-      const { data: evs } = await supabase.from('wtt_events').select('event_id, event_name, start_date, end_date').in('event_id', evIds.length ? evIds : [0])
+      const { data: evs } = await supabase.from('wtt_events').select('event_id, event_name').in('event_id', evIds.length ? evIds : [0])
       const evMap = Object.fromEntries((evs || []).map(e => [e.event_id, e]))
       const groups = {}
       for (const f of fc || []) {
         const k = `${f.event_id}|${f.sub_event}`
-        if (!groups[k]) groups[k] = { event_id: f.event_id, sub_event: f.sub_event, event: evMap[f.event_id], top: [] }
+        if (!groups[k]) groups[k] = { key: k, event: evMap[f.event_id], sub_event: f.sub_event, top: [] }
         if (groups[k].top.length < 5) groups[k].top.push(f)
       }
-      if (!cancelled) { setByEvent(Object.values(groups)); setLoading(false) }
-    }
-    load()
-    return () => { cancelled = true }
+      if (!c) { setByEvent(Object.values(groups)); setLoading(false) }
+    })()
+    return () => { c = true }
   }, [])
 
   if (loading) return <div style={{ textAlign: 'center', padding: '60px 0', color: '#94a3b8' }}>Loading events…</div>
@@ -125,9 +193,9 @@ export function EventsTab({ onOpen, navigate }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {byEvent.map(g => (
-        <div key={`${g.event_id}-${g.sub_event}`} style={{ ...card, overflow: 'hidden' }}>
+        <div key={g.key} style={{ ...card, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9' }}>
-            <div style={{ fontSize: 13, fontWeight: 900, color: '#0f172a' }}>{g.event?.event_name || `Event ${g.event_id}`}</div>
+            <div style={{ fontSize: 13, fontWeight: 900, color: '#0f172a' }}>{g.event?.event_name || `Event ${g.key}`}</div>
             <div style={{ fontSize: 11, color: '#94a3b8' }}>{g.sub_event} · title odds</div>
           </div>
           {g.top.map((t, i) => (
@@ -138,9 +206,7 @@ export function EventsTab({ onOpen, navigate }) {
           ))}
         </div>
       ))}
-      <button onClick={() => navigate('/forecast')} style={{ alignSelf: 'center', fontSize: 12, fontWeight: 700, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer' }}>
-        Open full forecast page →
-      </button>
+      <button onClick={() => navigate('/forecast')} style={{ alignSelf: 'center', fontSize: 12, fontWeight: 700, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer' }}>Open full forecast page →</button>
     </div>
   )
 }
@@ -154,21 +220,17 @@ export function CompareTab({ navigate }) {
   const [rows, setRows] = useState({})
 
   useEffect(() => {
-    let cancelled = false
-    async function load() {
+    let c = false
+    ;(async () => {
       const { data: pl } = await supabase.from('wtt_players').select('ittf_id, player_name').eq('country_code', 'IND')
       const ids = (pl || []).map(p => p.ittf_id)
       const { data: ranks } = await supabase.from('rankings_singles_normalized').select('player_id, rank, ranking_date').in('player_id', ids).order('ranking_date', { ascending: false }).limit(2000)
-      const seen = {}
-      const list = []
-      for (const p of pl || []) seen[p.ittf_id] = { id: p.ittf_id, name: p.player_name }
+      const seen = {}; for (const p of pl || []) seen[p.ittf_id] = { id: p.ittf_id, name: p.player_name }
       for (const r of ranks || []) if (seen[r.player_id] && seen[r.player_id].rank == null) seen[r.player_id].rank = r.rank
-      for (const v of Object.values(seen)) if (v.rank != null) list.push(v)
-      list.sort((x, y) => x.rank - y.rank)
-      if (!cancelled) setPlayers(list)
-    }
-    load()
-    return () => { cancelled = true }
+      const list = Object.values(seen).filter(v => v.rank != null).sort((x, y) => x.rank - y.rank)
+      if (!c) setPlayers(list)
+    })()
+    return () => { c = true }
   }, [])
 
   useEffect(() => {
@@ -204,15 +266,9 @@ export function CompareTab({ navigate }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        {sel(a, setA)}{sel(b, setB)}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <Col k="a" /><Col k="b" />
-      </div>
-      <button onClick={() => navigate('/h2h')} style={{ alignSelf: 'center', fontSize: 12, fontWeight: 700, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer' }}>
-        Full head-to-head (match history) →
-      </button>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>{sel(a, setA)}{sel(b, setB)}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}><Col k="a" /><Col k="b" /></div>
+      <button onClick={() => navigate('/h2h')} style={{ alignSelf: 'center', fontSize: 12, fontWeight: 700, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer' }}>Full head-to-head (match history) →</button>
     </div>
   )
 }

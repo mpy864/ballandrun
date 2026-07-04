@@ -359,7 +359,7 @@ export default function SportPage() {
               {sport.live && <TeamPerformance rows={tournaments} />}
             </>
           ) : tab === 'talent' ? (
-            <TalentTab onOpen={id => navigate(`/player/${id}`)} />
+            <TalentTab onOpen={id => navigate(`/player/${id}`)} navigate={navigate} />
           ) : tab === 'events' ? (
             <EventsTab onOpen={id => navigate(`/player/${id}`)} navigate={navigate} />
           ) : (
