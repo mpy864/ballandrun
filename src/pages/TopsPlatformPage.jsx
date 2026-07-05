@@ -64,22 +64,16 @@ export default function TopsPlatformPage() {
         <AuthBar />
         <div style={{ maxWidth: 880, margin: '0 auto', padding: '40px 16px 60px' }}>
 
-          {/* Hero */}
-          <div style={{ textAlign: 'center', marginBottom: 34 }}>
-            <p style={{
-              margin: 0, fontSize: 11, fontWeight: 800, color: '#64748b',
-              letterSpacing: '0.18em', textTransform: 'uppercase',
-            }}>
-              Target Olympic Podium Scheme
-            </p>
-            <h1 style={{
-              margin: '8px 0 0', fontSize: 40, fontWeight: 900, color: '#0f172a',
-              letterSpacing: -1.4, lineHeight: 1.05,
-            }}>
-              TOPS Intelligence Platform
+          {/* Hero — left-aligned, descending sizes, near-black */}
+          <div style={{ textAlign: 'left', marginBottom: 40 }}>
+            <h1 style={{ margin: 0, fontSize: 52, fontWeight: 900, color: '#0a0a0a', letterSpacing: -2, lineHeight: 1 }}>
+              TOPS
             </h1>
-            <p style={{ margin: '12px auto 0', fontSize: 14, color: '#475569', maxWidth: 520 }}>
-              Athlete tracking, benchmarking and selection intelligence for Core, Development and TAGG athletes. 
+            <p style={{ margin: '12px 0 0', fontSize: 22, fontWeight: 800, color: '#0a0a0a', lineHeight: 1.2 }}>
+              Building nation via sports by winning medals at Olympics.
+            </p>
+            <p style={{ margin: '6px 0 0', fontSize: 15, fontWeight: 600, color: '#0a0a0a', lineHeight: 1.3 }}>
+              Building bench-strength to make it sustainable.
             </p>
           </div>
 
@@ -100,7 +94,7 @@ export default function TopsPlatformPage() {
           </div>
 
           <p style={{ textAlign: 'center', marginTop: 30, fontSize: 11, color: '#94a3b8' }}>
-            More sports can be added by wiring a data adapter — the athlete cockpit is shared.
+            More sports can be added by wiring a data adapter. The athlete cockpit is shared.
           </p>
         </div>
       </div>
