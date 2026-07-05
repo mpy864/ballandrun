@@ -52,12 +52,6 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: python scripts/fetch_youth_rankings.py
 
-      - name: Fetch senior doubles rankings
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: python scripts/backfill_senior_doubles.py --from-year 2026
-
       - name: Notify on failure
         if: failure()
         run: |

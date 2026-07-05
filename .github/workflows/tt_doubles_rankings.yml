@@ -1,0 +1,30 @@
+name: TT Senior Doubles Rankings
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Monday 02:00 UTC — WTT rankings publish weekly (Mon)
+    - cron: '0 2 * * 1'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests supabase
+
+      - name: Fetch senior doubles rankings (MD/WD/XD)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python scripts/backfill_senior_doubles.py --from-year 2026
