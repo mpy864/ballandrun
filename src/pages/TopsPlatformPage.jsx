@@ -79,8 +79,7 @@ export default function TopsPlatformPage() {
               TOPS Intelligence Platform
             </h1>
             <p style={{ margin: '12px auto 0', fontSize: 14, color: '#475569', maxWidth: 520 }}>
-              Athlete tracking, benchmarking and selection intelligence across sports —
-              one cockpit for Core, Development and TAGG athletes and the rivals they chase.
+              Athlete tracking, benchmarking and selection intelligence for Core, Development and TAGG athletes. 
             </p>
           </div>
 
