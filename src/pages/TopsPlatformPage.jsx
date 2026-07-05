@@ -100,14 +100,19 @@ export default function TopsPlatformPage() {
           </div>
 
           {/* Mission statement — replaces the "more sports" note */}
-          <div style={{ textAlign: 'left', marginTop: 40 }}>
-            <h2 style={{ margin: 0, fontSize: 36, fontWeight: 900, color: '#0a0a0a', letterSpacing: -1, lineHeight: 1 }}>
+          <div style={{
+            marginTop: 40, background: '#0f172a',
+            border: '1px solid rgba(184,134,11,0.35)', borderRadius: 16,
+            padding: '32px 30px', textAlign: 'center',
+            boxShadow: '0 10px 30px rgba(15,23,42,0.30)',
+          }}>
+            <h2 style={{ margin: 0, fontSize: 42, fontWeight: 900, color: '#B8860B', letterSpacing: -1, lineHeight: 1 }}>
               TOPS
             </h2>
-            <p style={{ margin: '8px 0 0', fontSize: 18, fontWeight: 800, color: '#0a0a0a', lineHeight: 1.2 }}>
+            <p style={{ margin: '12px 0 0', fontSize: 20, fontWeight: 800, color: '#B8860B', lineHeight: 1.25 }}>
               Building nation via sports by winning medals at Olympics.
             </p>
-            <p style={{ margin: '5px 0 0', fontSize: 14, fontWeight: 600, color: '#0a0a0a', lineHeight: 1.3 }}>
+            <p style={{ margin: '6px 0 0', fontSize: 14, fontWeight: 600, color: '#B8860B', lineHeight: 1.4 }}>
               Building bench-strength to make it sustainable.
             </p>
           </div>
