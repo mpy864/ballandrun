@@ -6,6 +6,7 @@ const TAGS = {
   Rising:    { color: '#15803d', bg: '#dcfce7', border: '#86efac', dot: '#22c55e' },
   Holding:   { color: '#b45309', bg: '#fffbeb', border: '#fcd34d', dot: '#f59e0b' },
   Plateaued: { color: '#c2410c', bg: '#fff7ed', border: '#fdba74', dot: '#f97316' },
+  Stale:     { color: '#9333ea', bg: '#faf5ff', border: '#e9d5ff', dot: '#a855f7' },
   Watch:     { color: '#64748b', bg: '#f1f5f9', border: '#e2e8f0', dot: '#94a3b8' },
 }
 
@@ -24,6 +25,8 @@ function band(r) {
 export function makeVerdict({ kind, score, singlesRank }) {
   const isPair = kind === 'doubles'
   if (!score) return { tag: 'Watch', ...TAGS.Watch, sentence: 'Not scored yet. Monitor.' }
+  // No matches in the last 3 months: availability unclear, cannot read as a mover.
+  if (score.stale) return { tag: 'Stale', ...TAGS.Stale, sentence: 'No matches in 3 months. Availability unclear.' }
 
   const v    = Number(score.score)
   const rank = isPair ? score.pair_rank : (score.world_rank ?? singlesRank)

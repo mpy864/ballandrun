@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
-import AuthBar from '../components/AuthBar.jsx'
-import PageBackground from '../components/PageBackground.jsx'
 import { getSport, CATEGORIES, DISCIPLINES, ROSTER } from '../lib/topsRoster.js'
 import { makeVerdict } from '../lib/verdict.js'
-import { TalentTab, EventsTab, CompareTab } from './sportTabs.jsx'
+import { okrLink } from '../lib/okrLink.js'
+import { loadSquadReadiness, loadIndiaMovers } from '../lib/squadReadiness.js'
+import { loadWatchlist } from '../lib/watchlist.js'
+import SquadBoard from './SquadBoard.jsx'
+import { TalentTab, CompareTab } from './sportTabs.jsx'
 import TennisView from './tennisView.jsx'
 
 // ─── Atoms ────────────────────────────────────────────────────────────────────
@@ -40,10 +42,19 @@ function TagPill({ v }) {
 function ScoreNum({ score }) {
   if (!score) return <span style={{ fontSize: 13, fontWeight: 800, color: '#cbd5e1' }}>—</span>
   const v = Number(score.score)
-  const tip = score.form_pts != null
-    ? `Rank ${score.rank_pts}/40 · Trajectory ${score.traj_pts}/25 · Runway ${score.runway_pts}/15 · Form ${score.form_pts}/20`
-    : `Pair rank ${score.rank_pts}/55 · Trajectory ${score.traj_pts}/25 · Runway ${score.runway_pts}/20`
+  const tip = `Rank ${score.rank_pts}/45 · Trajectory ${score.traj_pts}/20 · Form ${score.form_pts}/35`
+    + (score.stale ? ' · STALE −10' : '')
   return <span title={`Readiness ${v}/100\n${tip}`} style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>{v}</span>
+}
+
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+function fmtShortDate(d) {
+  if (!d) return ''
+  const [y, m, day] = String(d).split('-').map(Number)
+  return `${day} ${MON[(m || 1) - 1]}`
+}
+function cleanEventLabel(name) {
+  return (name || '').replace(/\s+presented\s+by\s+.*/i, '').replace(/\s+20\d\d$/, '').trim()
 }
 
 // ─── Athlete / pair card (verdict-first) ─────────────────────────────────────
@@ -78,8 +89,37 @@ function EntryCard({ entry, lookup, score, live, onOpen, onOpenEntry }) {
               </span>
             )}
           </div>
-          {/* verdict */}
-          {v && <div style={{ fontSize: 11.5, color: '#475569', marginTop: 3, lineHeight: 1.35 }}>{v.sentence}</div>}
+          {/* age · next tournament */}
+          {live && score && (
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 3 }}>
+              {score.age != null && <span>Age {score.age}</span>}
+              {score.age != null && ' · '}
+              {score.next
+                ? <span>Next: <b style={{ color: '#334155', fontWeight: 600 }}>{cleanEventLabel(score.next.name)}</b>
+                    {' '}<span style={{ color: '#94a3b8' }}>
+                      {fmtShortDate(score.next.date)}{score.next.seed ? ` · seed ${score.next.seed}` : ''}{score.next.qual ? ' · Q' : ''}
+                    </span>
+                    {score.next.provisional && <span style={{ color: '#a855f7', fontStyle: 'italic' }}> · provisional</span>}</span>
+                : <span style={{ color: '#94a3b8' }}>No upcoming entry</span>}
+            </div>
+          )}
+          {/* achievements: 2 deepest runs + biggest win */}
+          {live && score?.achievements && (score.achievements.runs?.length > 0 || score.achievements.bestWin) && (
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
+              {score.achievements.runs.map((r, i) => (
+                <span key={i} style={{ fontSize: 9.5, fontWeight: 700, color: '#0369a1', background: '#e0f2fe', border: '1px solid #bae6fd', padding: '2px 7px', borderRadius: 99 }}>
+                  {r.label} · {r.event}{r.year ? ` ${r.year}` : ''}
+                </span>
+              ))}
+              {score.achievements.bestWin && (
+                <span style={{ fontSize: 9.5, fontWeight: 700, color: '#15803d', background: '#dcfce7', border: '1px solid #bbf7d0', padding: '2px 7px', borderRadius: 99 }}>
+                  beat #{score.achievements.bestWin.rank} {score.achievements.bestWin.name}
+                  {score.achievements.bestWin.event ? ` · ${score.achievements.bestWin.event}` : ''}
+                  {score.achievements.bestWin.year ? ` ${score.achievements.bestWin.year}` : ''}
+                </span>
+              )}
+            </div>
+          )}
           {entry.note && <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>{entry.note}</div>}
         </div>
 
@@ -122,6 +162,37 @@ function EntryCard({ entry, lookup, score, live, onOpen, onOpenEntry }) {
   )
 }
 
+// ─── Youth (TAGG) card ────────────────────────────────────────────────────────
+
+const YOUTH_EVENT_COLOR = { BS: '#3b82f6', GS: '#ec4899', BD: '#8b5cf6', GD: '#f59e0b', XD: '#10b981' }
+
+function bestRank(e) {
+  return (e.youth && e.events?.length) ? Math.min(...e.events.map(x => x[1])) : 9999
+}
+
+function YouthCard({ entry, onOpenEntry }) {
+  const p = entry.players[0]
+  return (
+    <div onClick={() => onOpenEntry(entry)}
+      style={{ background: '#fff', border: '1px solid #e8edf4', borderRadius: 10, marginBottom: 8, padding: '11px 12px', cursor: 'pointer' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{p.name}</span>
+        <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 99, background: '#eef2ff', color: '#3730a3', border: '1px solid #a5b4fc', letterSpacing: '0.04em' }}>{entry.age}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+        {entry.events.map(([e, r], i) => {
+          const c = YOUTH_EVENT_COLOR[e] || '#64748b'
+          return (
+            <span key={i} style={{ fontSize: 10, fontWeight: 700, color: c, background: `${c}15`, border: `1px solid ${c}30`, padding: '2px 7px', borderRadius: 99 }}>
+              {e} #{r}
+            </span>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Category column ──────────────────────────────────────────────────────────
 
 function pairKey(players) {
@@ -138,7 +209,9 @@ function sortValue(entry, scores, pairScores) {
 
 function CategoryColumn({ cat, entries, lookup, scores, pairScores, live, onOpen, onOpenEntry }) {
   const inCat = entries.filter(e => e.category === cat.key)
-  const ordered = live ? [...inCat].sort((a, b) => sortValue(b, scores, pairScores) - sortValue(a, scores, pairScores)) : inCat
+  const ordered = live ? [...inCat].sort((a, b) =>
+    (a.youth && b.youth) ? bestRank(a) - bestRank(b)
+    : sortValue(b, scores, pairScores) - sortValue(a, scores, pairScores)) : inCat
   return (
     <div style={{ background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(15,23,42,0.08)', borderRadius: 14, padding: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, paddingBottom: 10, borderBottom: `2px solid ${cat.border}` }}>
@@ -151,7 +224,9 @@ function CategoryColumn({ cat, entries, lookup, scores, pairScores, live, onOpen
       </div>
       {ordered.length === 0
         ? <div style={{ fontSize: 12, color: '#cbd5e1', textAlign: 'center', padding: '20px 0' }}>No athletes yet</div>
-        : ordered.map((e, i) => (
+        : ordered.map((e, i) => e.youth ? (
+            <YouthCard key={`tagg-${e.players[0].id}-${i}`} entry={e} onOpenEntry={onOpenEntry} />
+          ) : (
             <EntryCard key={`${e.discipline}-${e.players.map(p => p.id || p.name).join('_')}-${i}`}
               entry={e} lookup={lookup} score={entryScore(e, scores, pairScores)} live={live} onOpen={onOpen} onOpenEntry={onOpenEntry} />
           ))}
@@ -229,16 +304,26 @@ export default function SportPage() {
   const [scores, setScores] = useState({})
   const [pairScores, setPairScores] = useState({})
   const [tournaments, setTournaments] = useState(null)
+  const [watch, setWatch] = useState([])
+  const [movers, setMovers] = useState([])
   const [loading, setLoading] = useState(true)
 
   const entries = ROSTER[sportKey] || []
 
-  // Pair card → pair profile; singles card → player profile
+  // Every card opens the OKR dashboard, preselected to the right segment + entity.
+  // /player and /pair remain only as fallback when ids are missing.
   const openEntry = (entry) => {
     const disc = DISCIPLINES[entry.discipline] || {}
     const ids = (entry.players || []).map(p => p.id).filter(Boolean)
-    if (disc.kind === 'doubles' && ids.length === 2) return navigate(`/pair/${ids.join('_')}`)
-    if (ids[0]) navigate(`/player/${ids[0]}`)
+    if (entry.youth) {
+      // Youth cards are player-centric → youth-singles OKR profile.
+      if (ids[0]) return navigate(okrLink({ level: entry.age, kind: 'singles', id: ids[0] }))
+      return
+    }
+    if (disc.kind === 'doubles' && ids.length === 2) {
+      return navigate(okrLink({ level: 'Senior', kind: 'doubles', ids }))
+    }
+    if (ids[0]) return navigate(okrLink({ level: 'Senior', kind: 'singles', id: ids[0] }))
   }
 
   const allIds = useMemo(() => {
@@ -265,39 +350,37 @@ export default function SportPage() {
     let cancelled = false
     async function load() {
       setLoading(true)
-      if (sport.live && allIds.length) {
-        const [{ data: players }, { data: ranks }] = await Promise.all([
-          supabase.from('wtt_players').select('ittf_id, player_name, country_code').in('ittf_id', allIds),
-          supabase.from('rankings_singles_normalized').select('player_id, rank, rank_change, ranking_date').in('player_id', allIds).order('ranking_date', { ascending: false }),
-        ])
-        const map = {}
-        for (const p of players || []) map[p.ittf_id] = { id: p.ittf_id, name: p.player_name, country: p.country_code }
-        for (const r of ranks || []) {
-          const m = map[r.player_id] || (map[r.player_id] = { id: r.player_id })
-          if (m.rank == null) { m.rank = r.rank; m.rank_change = r.rank_change }
-        }
-        if (!cancelled) setLookup(map)
-
-        const doublesEntries = entries.filter(e => (DISCIPLINES[e.discipline] || {}).kind === 'doubles' && (e.players || []).filter(p => p.id).length === 2)
-        const [{ data: prRows }, { data: tRows }, pairResults] = await Promise.all([
-          singlesIds.length ? supabase.rpc('podium_readiness', { p_ids: singlesIds }) : Promise.resolve({ data: [] }),
-          supabase.rpc('india_tournament_performance'),
-          Promise.all(doublesEntries.map(e => {
-            const [a, b] = e.players.map(p => p.id)
-            return supabase.rpc('podium_readiness_pair', { p_id1: a, p_id2: b }).then(r => ({ key: pairKey(e.players), row: r.data?.[0] || null }))
-          })),
-        ])
-        const scoreMap = {}; for (const r of prRows || []) scoreMap[r.player_id] = r
-        const pairMap = {}; for (const x of pairResults) if (x.row) pairMap[x.key] = x.row
-        if (!cancelled) { setScores(scoreMap); setPairScores(pairMap); setTournaments(tRows || []) }
-      } else if (!cancelled) {
-        setLookup({}); setScores({}); setPairScores({}); setTournaments(null)
+      if (!cancelled) setTournaments(null)   // cleared per sport; Events tab refetches lazily
+      if (!(sport.live && allIds.length)) {
+        if (!cancelled) { setLookup({}); setScores({}); setPairScores({}); setTournaments(null); setLoading(false) }
+        return
       }
+      try {
+        const { lookup, scores, pairScores } = await loadSquadReadiness(entries)
+        if (!cancelled) { setLookup(lookup); setScores(scores); setPairScores(pairScores) }
+        // Watchlist + India movers are singles-ranking based → Table Tennis only for now.
+        if (sportKey === 'tt') {
+          const [w, mv] = await Promise.all([loadWatchlist(), loadIndiaMovers(6)])
+          if (!cancelled) { setWatch(w); setMovers(mv) }
+        }
+      } catch (e) { console.error('squad readiness failed', e) }
       if (!cancelled) setLoading(false)
     }
     load()
     return () => { cancelled = true }
   }, [sportKey])
+
+  // India tournament table is only for the Events tab — load it lazily (1.6s RPC),
+  // once, when the tab is first opened, so it never blocks the Squad.
+  useEffect(() => {
+    if (tab !== 'events' || !sport?.live || tournaments !== null) return
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase.rpc('india_tournament_performance')
+      if (!cancelled) setTournaments(data || [])
+    })()
+    return () => { cancelled = true }
+  }, [tab, sportKey, tournaments])
 
   if (!sport) {
     return (
@@ -309,28 +392,27 @@ export default function SportPage() {
 
   return (
     <>
-      <PageBackground />
-      <div style={{ position: 'relative', zIndex: 4, minHeight: '100vh', fontFamily: 'system-ui, sans-serif' }}>
-        <AuthBar />
-        <div style={{ maxWidth: 1140, margin: '0 auto', padding: '22px 16px 56px' }}>
+      <div>
+        <div style={{ maxWidth: 'var(--tops-wide)', margin: '0 auto', padding: '28px 40px 56px' }}>
 
-          {/* Header + menu */}
-          <div style={{ background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(15,23,42,0.08)', borderRadius: 14, padding: '12px 18px', marginBottom: 18 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-              <span style={{ fontSize: 26 }}>{sport.icon}</span>
-              <div style={{ flex: 1 }}>
-                <button onClick={() => navigate('/')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          {/* Header */}
+          <div style={{ marginBottom: 22 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <button onClick={() => navigate('/')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: 'var(--tops-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                   ← TOPS Intelligence
                 </button>
-                <h1 style={{ margin: 0, fontSize: 19, fontWeight: 900, color: '#0f172a' }}>{sport.name}</h1>
+                <h1 style={{ margin: '4px 0 0', fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--tops-ink)' }}>{sport.name}</h1>
               </div>
-              <button onClick={() => navigate('/okr')} style={{ fontSize: 12, fontWeight: 600, color: '#475569', background: 'none', border: 'none', cursor: 'pointer' }}>OKR</button>
+              <button onClick={() => navigate('/okr')} style={{ fontSize: 12, fontWeight: 600, color: 'var(--tops-slate)', background: 'none', border: 'none', cursor: 'pointer' }}>OKR</button>
             </div>
-            {sportKey !== 'tennis' && <div style={{ display: 'flex', gap: 6 }}>
+            {sportKey !== 'tennis' && <div style={{ display: 'flex', gap: 24, marginTop: 16, borderBottom: '1px solid var(--tops-border)' }}>
               {TABS.map(t => (
                 <button key={t.key} onClick={() => setTab(t.key)} style={{
-                  padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer',
-                  background: tab === t.key ? '#0f172a' : '#f1f5f9', color: tab === t.key ? '#fff' : '#64748b',
+                  padding: '0 0 10px', marginBottom: -1, background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: 13.5, fontWeight: 600,
+                  color: tab === t.key ? 'var(--tops-ink)' : 'var(--tops-muted)',
+                  borderBottom: tab === t.key ? '2px solid var(--tops-accent)' : '2px solid transparent',
                 }}>{t.label}</button>
               ))}
             </div>}
@@ -338,7 +420,7 @@ export default function SportPage() {
 
           {/* Non-live sport */}
           {!sport.live && (
-            <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 12, padding: '12px 16px', marginBottom: 16, fontSize: 12, color: '#b45309' }}>
+            <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', padding: '12px 16px', marginBottom: 16, fontSize: 12, color: '#b45309' }}>
               Live ranking adapter pending. Showing static roster.
             </div>
           )}
@@ -348,23 +430,11 @@ export default function SportPage() {
           ) : loading ? (
             <div style={{ textAlign: 'center', padding: '80px 0', color: '#94a3b8', fontSize: 14 }}>Loading {sport.name}…</div>
           ) : tab === 'squad' ? (
-            <>
-              {sport.live && (
-                <p style={{ margin: '0 0 12px 2px', fontSize: 11, color: '#94a3b8' }}>
-                  Each athlete is scored 0–100 for medal readiness. Colour and tag show status; the line explains why. Hover the number for the breakdown.
-                </p>
-              )}
-              <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', alignItems: 'start' }}>
-                {CATEGORIES.map(cat => (
-                  <CategoryColumn key={cat.key} cat={cat} entries={entries} lookup={lookup} scores={scores} pairScores={pairScores} live={sport.live} onOpen={id => navigate(`/player/${id}`)} onOpenEntry={openEntry} />
-                ))}
-              </div>
-              {sport.live && <TeamPerformance rows={tournaments} />}
-            </>
+            <SquadBoard sport={sport} entries={entries} lookup={lookup} scores={scores} pairScores={pairScores} watch={watch} movers={movers} loading={loading} />
           ) : tab === 'talent' ? (
-            <TalentTab onOpen={id => navigate(`/player/${id}`)} navigate={navigate} />
+            <TalentTab onOpen={id => navigate(okrLink({ level: 'Senior', kind: 'singles', id }))} navigate={navigate} />
           ) : tab === 'events' ? (
-            <EventsTab onOpen={id => navigate(`/player/${id}`)} navigate={navigate} />
+            <TeamPerformance rows={tournaments} />
           ) : (
             <CompareTab navigate={navigate} />
           )}

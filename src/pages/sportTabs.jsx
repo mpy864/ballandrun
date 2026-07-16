@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase.js'
+import { okrLink } from '../lib/okrLink.js'
 
 const card = { background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(15,23,42,0.08)', borderRadius: 14 }
 
@@ -110,7 +111,8 @@ export function TalentTab({ onOpen, navigate }) {
     return () => { c = true }
   }, [indPlayers, disc, level])
 
-  const open = (r) => r.kind === 'doubles' ? navigate(`/pair/${r.ids.join('_')}`) : onOpen(r.id)
+  // level is 'Senior' or a youth band ('U11'..'U19'); okrLink derives the segment.
+  const open = (r) => navigate(okrLink({ level, kind: r.kind, id: r.id, ids: r.ids }))
   const filtered = useMemo(() => rows.filter(r => !q || r.label.toLowerCase().includes(q.toLowerCase())), [rows, q])
 
   return (

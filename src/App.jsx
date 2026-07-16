@@ -11,31 +11,24 @@ import PlayerPage from './pages/PlayerPage.jsx'
 import IndiaPage from './pages/IndiaPage.jsx'
 import ForecastPage from './pages/ForecastPage.jsx'
 import TopsPlatformPage from './pages/TopsPlatformPage.jsx'
+import HomePage from './pages/HomePage.jsx'
 import SportPage from './pages/SportPage.jsx'
 import PairProfile from './pages/PairProfile.jsx'
 import PageBackground from './components/PageBackground.jsx'
+import AppShell from './components/AppShell.jsx'
 
-function ProtectedRoute({ children }) {
+// Authed layout: the persistent shell (sidebar) wraps all signed-in routes.
+function ShellLayout() {
   const { session, loading } = useAuth()
-
   if (loading) {
     return (
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'system-ui, sans-serif',
-        color: '#94a3b8',
-        fontSize: 14,
-      }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--tops-muted)', fontSize: 14 }}>
         Loading…
       </div>
     )
   }
-
   if (!session) return <Navigate to="/login" replace />
-  return children
+  return <AppShell />
 }
 
 function RedirectIfAuthed({ children }) {
@@ -48,71 +41,27 @@ function RedirectIfAuthed({ children }) {
 export default function App() {
   return (
     <>
-    <PageBackground />
-    <Routes>
-      <Route path="/login" element={<RedirectIfAuthed><LoginPage /></RedirectIfAuthed>} />
-      <Route path="/" element={
-        <ProtectedRoute>
-          <TopsPlatformPage />
-        </ProtectedRoute>
-      } />
-      <Route path="/rankings" element={
-        <ProtectedRoute>
-          <IndiaDashboard />
-        </ProtectedRoute>
-      } />
-      <Route path="/okr" element={
-        <ProtectedRoute>
-          <DynamicOKRDashboard />
-        </ProtectedRoute>
-      } />
-      <Route path="/h2h" element={
-        <ProtectedRoute>
-          <H2HDashboard />
-        </ProtectedRoute>
-      } />
-      <Route path="/live" element={<LivePage />} />
-      <Route path="/youth" element={
-        <ProtectedRoute>
-          <YouthPipelinePage />
-        </ProtectedRoute>
-      } />
-      <Route path="/tournament" element={
-        <ProtectedRoute>
-          <TournamentPage />
-        </ProtectedRoute>
-      } />
-      <Route path="/player/:ittf_id" element={
-        <ProtectedRoute>
-          <PlayerPage />
-        </ProtectedRoute>
-      } />
-      <Route path="/india" element={
-        <ProtectedRoute>
-          <IndiaPage />
-        </ProtectedRoute>
-      } />
-      <Route path="/forecast" element={
-        <ProtectedRoute>
-          <ForecastPage />
-        </ProtectedRoute>
-      } />
-      <Route path="/platform" element={
-        <ProtectedRoute>
-          <TopsPlatformPage />
-        </ProtectedRoute>
-      } />
-      <Route path="/sport/:sport" element={
-        <ProtectedRoute>
-          <SportPage />
-        </ProtectedRoute>
-      } />
-      <Route path="/pair/:pair" element={
-        <ProtectedRoute>
-          <PairProfile />
-        </ProtectedRoute>
-      } />
-    </Routes>
+      <PageBackground />
+      <Routes>
+        <Route path="/login" element={<RedirectIfAuthed><LoginPage /></RedirectIfAuthed>} />
+        <Route path="/live" element={<LivePage />} />
+
+        {/* All signed-in routes live inside the app shell */}
+        <Route element={<ShellLayout />}>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/platform" element={<TopsPlatformPage />} />
+          <Route path="/rankings" element={<IndiaDashboard />} />
+          <Route path="/okr" element={<DynamicOKRDashboard />} />
+          <Route path="/h2h" element={<H2HDashboard />} />
+          <Route path="/youth" element={<YouthPipelinePage />} />
+          <Route path="/tournament" element={<TournamentPage />} />
+          <Route path="/player/:ittf_id" element={<PlayerPage />} />
+          <Route path="/india" element={<IndiaPage />} />
+          <Route path="/forecast" element={<ForecastPage />} />
+          <Route path="/sport/:sport" element={<SportPage />} />
+          <Route path="/pair/:pair" element={<PairProfile />} />
+        </Route>
+      </Routes>
     </>
   )
 }

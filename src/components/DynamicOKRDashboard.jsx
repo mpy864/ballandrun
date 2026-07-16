@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
-import AuthBar from './AuthBar.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -13,6 +13,19 @@ import {
   parseScoresForPlayer, parseGame1Won, countDeuceGames, checkComeback,
   cleanRound, computeWindowData, nsNarrative, computeVerdict,
 } from '../lib/playerMetrics.js';
+import { loadDoublesPairs, loadDoublesPairMetrics } from '../lib/doublesOkr.js';
+import { loadYouthSinglesPlayers, loadYouthSinglesPlayerMetrics } from '../lib/youthSinglesOkr.js';
+import { loadYouthDoublesPairs, loadYouthDoublesPairMetrics } from '../lib/youthDoublesOkr.js';
+
+// Segment = {level} × {discipline}. Senior singles is the original path.
+const SEGMENTS = [
+  { id: 'senior_singles', level: 'Senior', discipline: 'Singles' },
+  { id: 'senior_doubles', level: 'Senior', discipline: 'Doubles' },
+  { id: 'youth_singles',  level: 'Youth',  discipline: 'Singles' },
+  { id: 'youth_doubles',  level: 'Youth',  discipline: 'Doubles' },
+];
+
+const YOUTH_AGES = ['U11', 'U13', 'U15', 'U17', 'U19'];
 
 function fmtMonthYear(date) {
   if (!date || isNaN(date)) return '—';
@@ -580,9 +593,29 @@ const BM_METRICS = [
 
 export default function DynamicOKRDashboard() {
   const { allowedIttfIds } = useAuth();
+  const [searchParams] = useSearchParams();
+  const urlSeg = SEGMENTS.some(s => s.id === searchParams.get('seg')) ? searchParams.get('seg') : 'senior_singles';
+  const urlAge = YOUTH_AGES.includes(searchParams.get('age')) ? searchParams.get('age') : 'U17';
+  const urlPid = searchParams.get('pid');
+  const urlP1  = searchParams.get('p1');
+  const urlP2  = searchParams.get('p2');
+  const [segment, setSegment]               = useState(urlSeg);
+  const [segAge, setSegAge]                 = useState(urlAge);
+  const isSeniorDoubles = segment === 'senior_doubles';
+  const isYouthDoubles  = segment === 'youth_doubles';
+  const isDoubles       = isSeniorDoubles || isYouthDoubles;   // UI flag (both)
+  const isYouthSingles  = segment === 'youth_singles';
+  const isYouth         = isYouthSingles || isYouthDoubles;
+  const isSeniorSingles = segment === 'senior_singles';
   const [allPlayersMerged, setAllPlayersMerged] = useState([]);
   const [players, setPlayers]               = useState([]);
-  const [selectedPlayer, setSelectedPlayer] = useState(null);
+  const [selectedPlayer, setSelectedPlayer] = useState(
+    urlPid ? (urlSeg === 'senior_singles' ? Number(urlPid) : String(urlPid)) : null
+  );
+  // Deep-link pair resolution (senior/youth doubles): resolved once against the loaded list.
+  const pairDeepLinkRef = useRef(urlP1 && urlP2 ? { p1: Number(urlP1), p2: Number(urlP2) } : null);
+  // Deep-link singles player not guaranteed to be in the ranked list — append-fetch it once.
+  const singlesDeepLinkRef = useRef(urlPid && urlSeg === 'senior_singles' ? String(urlPid) : null);
   const [playerMetrics, setPlayerMetrics]   = useState(null);
   const [playerName, setPlayerName]         = useState('');
   const [playerProfile, setPlayerProfile]   = useState(null);
@@ -635,6 +668,37 @@ export default function DynamicOKRDashboard() {
   };
 
   useEffect(() => {
+    setLoading(true);
+    if (isSeniorDoubles) {
+      (async () => {
+        try {
+          const pairs = await loadDoublesPairs(supabase);
+          setAllPlayersMerged(pairs);
+        } catch (err) { setError(err.message); }
+        finally { setLoading(false); }
+      })();
+      return;
+    }
+    if (isYouthSingles) {
+      (async () => {
+        try {
+          const list = await loadYouthSinglesPlayers(supabase, segAge);
+          setAllPlayersMerged(list);
+        } catch (err) { setError(err.message); }
+        finally { setLoading(false); }
+      })();
+      return;
+    }
+    if (isYouthDoubles) {
+      (async () => {
+        try {
+          const list = await loadYouthDoublesPairs(supabase, segAge);
+          setAllPlayersMerged(list);
+        } catch (err) { setError(err.message); }
+        finally { setLoading(false); }
+      })();
+      return;
+    }
     (async () => {
       try {
         // Get latest ranking date
@@ -698,28 +762,62 @@ export default function DynamicOKRDashboard() {
           })
           .sort((a, b) => a.rank - b.rank);
 
-        setAllPlayersMerged(merged);
+        // Deep-linked player outside the top-500 list: fetch + prepend so it resolves.
+        let finalMerged = merged;
+        const dlPid = singlesDeepLinkRef.current;
+        if (dlPid && !merged.some(m => String(m.player_id) === String(dlPid))) {
+          singlesDeepLinkRef.current = null;
+          try {
+            const [{ data: prow }, { data: rrow }] = await Promise.all([
+              supabase.from('wtt_players')
+                .select('ittf_id,player_name,country_code,dob,handedness,grip,gender')
+                .eq('ittf_id', dlPid).single(),
+              supabase.from('rankings_singles_normalized')
+                .select('rank').eq('player_id', dlPid)
+                .order('ranking_date', { ascending: false }).limit(1),
+            ]);
+            if (prow) {
+              const g = normGender(prow.gender);
+              finalMerged = [{
+                player_id: prow.ittf_id, player_name: prow.player_name,
+                rank: Number(rrow?.[0]?.rank ?? 9999), gender: g,
+                gender_label: g === 'M' ? 'Men' : g === 'W' ? 'Women' : (prow.gender || ''),
+                country_code: prow.country_code || '', dob: prow.dob || null,
+                handedness: prow.handedness || '', grip: prow.grip || '',
+              }, ...merged];
+            }
+          } catch { /* ignore — falls back to first */ }
+        }
+
+        setAllPlayersMerged(finalMerged);
       } catch (err) { setError(err.message); }
       finally { setLoading(false); }
     })();
-  }, []);
+  }, [segment, segAge]);
 
   // Filter players reactively whenever the full list or allowedIttfIds changes
   useEffect(() => {
     if (allPlayersMerged.length === 0) return;
-    const visible = allowedIttfIds
-      ? allPlayersMerged.filter(p => allowedIttfIds.includes(String(p.player_id)))
-      : allPlayersMerged;
+    // For pairs, org access is by either member's id (not the pair_id).
+    const allowed = (p) => !allowedIttfIds
+      || allowedIttfIds.includes(String(p.player_id))
+      || (p.isPair && (allowedIttfIds.includes(String(p.p1)) || allowedIttfIds.includes(String(p.p2))));
+    const visible = allowedIttfIds ? allPlayersMerged.filter(allowed) : allPlayersMerged;
     setPlayers(visible);
     setSelectedPlayer(p => {
-      if (!p) {
-        const first = visible.find(pl => pl.gender === 'M') || visible[0];
-        return first?.player_id ?? null;
+      const pickFirst = () => (visible.find(pl => pl.gender === 'M') || visible[0])?.player_id ?? null;
+      // Deep-link a pair by its two player ids (once), before any pick-first fallback.
+      const dl = pairDeepLinkRef.current;
+      if (dl) {
+        pairDeepLinkRef.current = null;
+        const match = visible.find(pl => pl.isPair &&
+          ((Number(pl.p1) === dl.p1 && Number(pl.p2) === dl.p2) ||
+           (Number(pl.p1) === dl.p2 && Number(pl.p2) === dl.p1)));
+        if (match) return match.player_id;
       }
-      if (allowedIttfIds && !allowedIttfIds.includes(String(p))) {
-        const first = visible.find(pl => pl.gender === 'M') || visible[0];
-        return first?.player_id ?? null;
-      }
+      if (!p) return pickFirst();
+      // Segment switch or filtered out: previously-selected entity no longer visible.
+      if (!visible.some(pl => String(pl.player_id) === String(p))) return pickFirst();
       return p;
     });
   }, [allPlayersMerged, allowedIttfIds]);
@@ -741,6 +839,33 @@ export default function DynamicOKRDashboard() {
       setOpenDna(null); setFormShowAll(false);
       setPlayerProfile(null);
       try {
+        if (isSeniorDoubles) {
+          const pair = players.find(p => String(p.player_id) === String(selectedPlayer));
+          if (!pair) { setFetching(false); return; }
+          setPlayerName(pair.player_name);
+          const metrics = await loadDoublesPairMetrics(supabase, pair);
+          setPlayerMetrics(metrics);
+          setFetching(false);
+          return;
+        }
+        if (isYouthSingles) {
+          const yp = players.find(p => String(p.player_id) === String(selectedPlayer));
+          if (!yp) { setFetching(false); return; }
+          setPlayerName(yp.player_name);
+          const metrics = await loadYouthSinglesPlayerMetrics(supabase, yp, segAge);
+          setPlayerMetrics(metrics);
+          setFetching(false);
+          return;
+        }
+        if (isYouthDoubles) {
+          const yp = players.find(p => String(p.player_id) === String(selectedPlayer));
+          if (!yp) { setFetching(false); return; }
+          setPlayerName(yp.player_name);
+          const metrics = await loadYouthDoublesPairMetrics(supabase, yp, segAge);
+          setPlayerMetrics(metrics);
+          setFetching(false);
+          return;
+        }
         const [
           { data: matches,  error: e1 },
           { data: rankings, error: e2 },
@@ -833,10 +958,10 @@ export default function DynamicOKRDashboard() {
       } catch (err) { setError(err.message); }
       finally { setFetching(false); }
     })();
-  }, [selectedPlayer]);
+  }, [selectedPlayer, segment, segAge]);
 
   useEffect(() => {
-    if (activeTab !== 'benchmark' || !selectedPlayer) return;
+    if (activeTab !== 'benchmark' || !selectedPlayer || !isSeniorSingles) return;
     const playerGender = players.find(p => p.player_id === selectedPlayer)?.gender;
     if (!playerGender) return;
     let cancelled = false;
@@ -1215,9 +1340,8 @@ export default function DynamicOKRDashboard() {
         @keyframes sl { from { opacity:0; transform:translateY(-3px); } to { opacity:1; transform:translateY(0); } }
       `}</style>
 
-      <AuthBar />
-      <div className="okr min-h-screen" style={{ position: 'relative', zIndex: 4 }}>
-        <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
+      <div className="okr" style={{ position: 'relative', zIndex: 4 }}>
+        <div className="mx-auto px-6 py-6 space-y-4" style={{ maxWidth: 1120 }}>
 
           <div className="flex items-center justify-between" style={{
             background: 'rgba(255,255,255,0.82)',
@@ -1227,9 +1351,11 @@ export default function DynamicOKRDashboard() {
             borderRadius: 12,
             padding: '10px 16px',
           }}>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">TOPS · Table Tennis</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">
+              TOPS · Table Tennis{isYouth ? ` · Youth ${segAge}${isDoubles ? ' Doubles' : ''}` : isDoubles ? ' · Doubles' : ''}
+            </p>
             <div className="flex items-center gap-3">
-              {selectedPlayer && playerMetrics && (
+              {isSeniorSingles && selectedPlayer && playerMetrics && (
                 <DataSourceToggle value={dataSource} onChange={changeDataSource} showDomestic={isIndian} />
               )}
               <a href="/" className="text-xs font-medium text-orange-600 hover:text-orange-800 flex items-center gap-1">
@@ -1242,6 +1368,48 @@ export default function DynamicOKRDashboard() {
                 Compare players <ArrowRight size={11} />
               </a>
             </div>
+          </div>
+
+          {/* ── Segment selector (Level × Discipline) ── */}
+          <div className="bg-white border border-slate-200 rounded-xl px-3 py-2.5 flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] text-slate-400 uppercase tracking-widest mr-1">Segment</span>
+            {SEGMENTS.map(s => (
+              <button key={s.id}
+                onClick={() => {
+                  if (s.id === segment) return;
+                  setSegment(s.id);
+                  setSelectedPlayer(null); setPlayerMetrics(null); setPlayerName('');
+                  setSearchTerm(''); setActiveTab('rank'); setDataSource('wtt');
+                  setFilterGender(''); setFilterRank(''); setFilterCountry('');
+                  setFilterAge(''); setFilterStyle(''); setFilterGrip('');
+                }}
+                className={`text-xs font-semibold px-3 py-1 rounded-full border transition-all ${
+                  segment === s.id
+                    ? 'bg-slate-800 text-white border-slate-800'
+                    : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>
+                {s.level} {s.discipline}
+              </button>
+            ))}
+            {isYouth && (
+              <div className="w-full flex items-center gap-1.5 flex-wrap mt-1.5 pt-1.5 border-t border-slate-100">
+                <span className="text-[10px] text-slate-400 uppercase tracking-widest mr-1">Age</span>
+                {YOUTH_AGES.map(ag => (
+                  <button key={ag}
+                    onClick={() => {
+                      if (ag === segAge) return;
+                      setSegAge(ag);
+                      setSelectedPlayer(null); setPlayerMetrics(null); setPlayerName('');
+                      setSearchTerm(''); setActiveTab('rank');
+                    }}
+                    className={`text-xs font-semibold px-3 py-1 rounded-full border transition-all ${
+                      segAge === ag
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>
+                    {ag}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* ── Player Search + Filters ── */}
@@ -1286,11 +1454,16 @@ export default function DynamicOKRDashboard() {
 
             {/* Filter chips */}
             <div className="px-3 py-2.5 flex gap-1.5 flex-wrap items-center border-b border-slate-100">
-              {/* Gender */}
-              {['M','W'].map(g => (
+              {/* Gender / discipline */}
+              {(isDoubles
+                ? [['M','MD'],['W','WD'],['X','XD']]
+                : isYouthSingles
+                ? [['M','Boys'],['W','Girls']]
+                : [['M','Men'],['W','Women']]
+              ).map(([g, label]) => (
                 <button key={g} onClick={() => setFilterGender(filterGender === g ? '' : g)}
                   className={`text-xs px-2.5 py-1 rounded-full border transition-all ${filterGender === g ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>
-                  {g === 'M' ? 'Men' : 'Women'}
+                  {label}
                 </button>
               ))}
               <span className="w-px h-4 bg-slate-200 mx-0.5" />
@@ -1308,6 +1481,7 @@ export default function DynamicOKRDashboard() {
                 <option value="">Country</option>
                 {countries.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
+              {isSeniorSingles && (<>
               {/* Age */}
               <select value={filterAge} onChange={e => setFilterAge(e.target.value)}
                 className={`text-xs px-2 py-1 rounded-full border transition-all focus:outline-none ${filterAge ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200'}`}>
@@ -1329,6 +1503,7 @@ export default function DynamicOKRDashboard() {
                 <option value="Shakehand">Shakehand</option>
                 <option value="Penhold">Penhold</option>
               </select>
+              </>)}
               {/* Clear */}
               {(filterGender || filterRank || filterCountry || filterAge || filterStyle || filterGrip || searchTerm) && (
                 <button onClick={clearFilters} className="text-xs px-2.5 py-1 rounded-full border border-red-200 text-red-400 hover:bg-red-50 ml-auto">
@@ -1381,6 +1556,8 @@ export default function DynamicOKRDashboard() {
                       {players.find(p => p.player_id === selectedPlayer)?.gender_label}
                       {calcAge(playerProfile?.dob) && ` · Age ${calcAge(playerProfile?.dob)}`}
                       {fmtStyle(playerProfile?.handedness, playerProfile?.grip) && ` · ${fmtStyle(playerProfile?.handedness, playerProfile?.grip)}`}
+                      {isDoubles && playerMetrics?.partnership?.matches
+                        ? ` · ${playerMetrics.partnership.matches} matches as a pair` : ''}
                     </p>
                   </div>
                   <div className="flex items-center gap-6 flex-wrap">
@@ -1400,7 +1577,7 @@ export default function DynamicOKRDashboard() {
 
               <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
                 <div className="flex border-b border-slate-100">
-                  {TABS.map(tab => (
+                  {TABS.filter(t => t.id !== 'benchmark' || isSeniorSingles).map(tab => (
                     <button key={tab.id} onClick={() => switchTab(tab.id)}
                       className={`flex-1 py-3.5 text-sm font-medium transition-all relative ${
                         activeTab === tab.id ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>
@@ -1502,7 +1679,7 @@ export default function DynamicOKRDashboard() {
                         }} />
                       </div>
                       <div className="flex gap-2 flex-wrap">
-                        {WL_FILTERS.map(f => (
+                        {WL_FILTERS.filter(f => (f.id !== 'style' && f.id !== 'grip') || isSeniorSingles).map(f => (
                           <button key={f.id} onClick={() => {
                             setWlFilter(f.id);
                             setOpenRankBar(null); setOpenTierBar(null);

@@ -1,122 +1,163 @@
 import { useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import AuthBar from '../components/AuthBar.jsx'
 import PageBackground from '../components/PageBackground.jsx'
 import { SPORTS } from '../lib/topsRoster.js'
+import { card, chip, T } from '../lib/ui.js'
+
+// ─── Crafted line marks (no emoji) ────────────────────────────────────────────
+function SportMark({ sport, size = 24 }) {
+  const c = sport.accent
+  if (sport.key === 'tennis') {
+    // racquet: oval head + strings + straight handle down (not a magnifier)
+    return (
+      <svg viewBox="0 0 28 28" width={size} height={size} fill="none"
+        stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <ellipse cx="12.5" cy="9.5" rx="6.2" ry="7" />
+        <path d="M12.5 3 V16 M6.4 9.5 H18.6" opacity="0.4" strokeWidth="1.3" />
+        <path d="M12.5 16.5 V22.5" strokeWidth="2.6" />
+        <circle cx="21.5" cy="5.5" r="1.7" fill={c} stroke="none" />
+      </svg>
+    )
+  }
+  // table tennis: paddle — round head + straight handle down + ball
+  return (
+    <svg viewBox="0 0 28 28" width={size} height={size} fill="none"
+      stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="12.5" cy="9.8" rx="7" ry="7.3" fill={`color-mix(in srgb, ${c} 14%, #fff)`} />
+      <path d="M12.5 16.8 V22.5" strokeWidth="2.6" />
+      <circle cx="21.5" cy="5.5" r="1.7" fill={c} stroke="none" />
+    </svg>
+  )
+}
+
+// ─── Motion variants ──────────────────────────────────────────────────────────
+const container = { hidden: {}, show: { transition: { staggerChildren: 0.07, delayChildren: 0.04 } } }
+const rise = {
+  hidden: { opacity: 0, y: 16 },
+  show:   { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 130, damping: 18 } },
+}
 
 // ─── Sport card ───────────────────────────────────────────────────────────────
-
 function SportCard({ sport, onClick }) {
   return (
-    <button
+    <motion.button
       onClick={onClick}
+      variants={rise}
+      whileHover={{ y: -3 }}
+      whileTap={{ scale: 0.985 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 26 }}
       style={{
-        position: 'relative', textAlign: 'left', cursor: 'pointer',
-        background: 'rgba(255,255,255,0.92)',
-        border: '1px solid rgba(15,23,42,0.08)', borderRadius: 16,
-        padding: '22px 22px 20px', width: '100%',
-        boxShadow: '0 1px 3px rgba(15,23,42,0.06)',
-        transition: 'transform 0.12s, box-shadow 0.12s',
-        display: 'flex', flexDirection: 'column', gap: 12,
+        ...card, textAlign: 'left', cursor: 'pointer', padding: '22px 24px', width: '100%',
+        display: 'flex', flexDirection: 'column', gap: 16,
       }}
-      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 10px 26px rgba(15,23,42,0.12)' }}
-      onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(15,23,42,0.06)' }}
     >
-      {/* accent stripe */}
-      <span style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: sport.accent, borderRadius: '16px 16px 0 0' }} />
-
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 40, lineHeight: 1 }}>{sport.icon}</span>
         <span style={{
-          fontSize: 9, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase',
-          padding: '3px 9px', borderRadius: 99,
-          background: sport.live ? '#dcfce7' : '#f1f5f9',
-          color:      sport.live ? '#15803d' : '#94a3b8',
-          border: `1px solid ${sport.live ? '#86efac' : '#e2e8f0'}`,
+          width: 46, height: 46, borderRadius: 13, display: 'grid', placeItems: 'center',
+          background: `color-mix(in srgb, ${sport.accent} 9%, #fff)`,
         }}>
-          {sport.live ? '● Live data' : 'Setup'}
+          <SportMark sport={sport} size={24} />
+        </span>
+        <span style={sport.live ? chip('#34c759', { fontSize: 10 }) : chip('#86868b', { fontSize: 10 })}>
+          {sport.live ? '● Live' : 'Setup'}
         </span>
       </div>
 
       <div>
-        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#0f172a', letterSpacing: -0.4 }}>
+        <h2 style={{ margin: 0, fontSize: 21, fontWeight: 600, color: T.ink, letterSpacing: '-0.02em' }}>
           {sport.name}
         </h2>
-        <p style={{ margin: '3px 0 0', fontSize: 12, color: '#64748b' }}>{sport.blurb}</p>
+        <p style={{ margin: '4px 0 0', fontSize: 13.5, color: T.slate, lineHeight: 1.45 }}>{sport.blurb}</p>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
-        <span style={{ fontSize: 11, color: '#94a3b8' }}>{sport.federation}</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: sport.accent }}>Open →</span>
+        <span style={{ fontSize: 12, color: T.muted }}>{sport.federation}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: sport.accent }}>Open →</span>
       </div>
-    </button>
+    </motion.button>
   )
 }
 
-// ─── Landing page ─────────────────────────────────────────────────────────────
-
+// ─── Landing ──────────────────────────────────────────────────────────────────
 export default function TopsPlatformPage() {
   const navigate = useNavigate()
 
   return (
     <>
       <PageBackground />
-      <div style={{ position: 'relative', zIndex: 4, minHeight: '100vh', fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ position: 'relative', zIndex: 4, minHeight: '100vh' }}>
         <AuthBar />
-        <div style={{ maxWidth: 880, margin: '0 auto', padding: '40px 16px 60px' }}>
+        <motion.div
+          variants={container} initial="hidden" animate="show"
+          style={{ maxWidth: 'var(--tops-content)', margin: '0 auto', padding: '72px 32px 72px' }}
+        >
+          <style>{`
+            .tops-hero { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 64px; align-items: center; }
+            @media (max-width: 900px) { .tops-hero { grid-template-columns: 1fr; gap: 40px; } }
+          `}</style>
 
-          {/* Hero */}
-          <div style={{ textAlign: 'center', marginBottom: 34 }}>
-            <p style={{
-              margin: 0, fontSize: 11, fontWeight: 800, color: '#64748b',
-              letterSpacing: '0.18em', textTransform: 'uppercase',
-            }}>
-              Target Olympic Podium Scheme
-            </p>
-            <h1 style={{
-              margin: '8px 0 0', fontSize: 40, fontWeight: 900, color: '#0f172a',
-              letterSpacing: -1.4, lineHeight: 1.05,
-            }}>
-              TOPS Intelligence Platform
-            </h1>
-            <p style={{ margin: '12px auto 0', fontSize: 14, color: '#475569', maxWidth: 520 }}>
-              Athlete tracking, benchmarking and selection intelligence for Core, Development and TAGG athletes.
-            </p>
+          <div className="tops-hero">
+            {/* Left — message */}
+            <div>
+              <motion.p variants={rise} style={{
+                margin: 0, fontSize: 12, fontWeight: 600, color: T.muted,
+                letterSpacing: '0.16em', textTransform: 'uppercase',
+              }}>
+                Target Olympic Podium Scheme
+              </motion.p>
+              <motion.h1 variants={rise} style={{
+                margin: '14px 0 0', fontSize: 56, fontWeight: 600, color: T.ink,
+                letterSpacing: '-0.035em', lineHeight: 1.02,
+              }}>
+                TOPS Intelligence<br />Platform
+              </motion.h1>
+              <motion.p variants={rise} style={{
+                margin: '20px 0 0', fontSize: 17, color: T.slate, maxWidth: 440, lineHeight: 1.5,
+              }}>
+                Podium readiness, benchmarking and selection intelligence for India's athletes.
+              </motion.p>
+              <motion.p variants={rise} style={{
+                margin: '26px 0 0', paddingTop: 18, borderTop: `1px solid ${T.divider}`,
+                fontSize: 12.5, fontWeight: 500, color: T.muted, maxWidth: 440,
+              }}>
+                An initiative of the Sports Authority of India.
+              </motion.p>
+            </div>
+
+            {/* Right — sport selector */}
+            <div>
+              <motion.p variants={rise} style={{
+                fontSize: 11, fontWeight: 700, color: T.muted, letterSpacing: '0.1em',
+                textTransform: 'uppercase', margin: '0 0 14px 2px',
+              }}>
+                Select a sport
+              </motion.p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {SPORTS.map(s => (
+                  <SportCard key={s.key} sport={s} onClick={() => navigate(`/sport/${s.key}`)} />
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* Sport selector */}
-          <p style={{
-            fontSize: 11, fontWeight: 800, color: '#94a3b8', letterSpacing: '0.1em',
-            textTransform: 'uppercase', margin: '0 0 12px 4px',
+          {/* Mission band */}
+          <motion.div variants={rise} style={{
+            marginTop: 56, background: 'var(--tops-navy, #0f172a)', borderRadius: 20,
+            padding: '38px 30px', textAlign: 'center',
+            boxShadow: '0 20px 60px rgba(15,23,42,0.22)',
           }}>
-            Select a sport
-          </p>
-          <div style={{
-            display: 'grid', gap: 16,
-            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-          }}>
-            {SPORTS.map(s => (
-              <SportCard key={s.key} sport={s} onClick={() => navigate(`/sport/${s.key}`)} />
-            ))}
-          </div>
-
-          {/* Mission statement — replaces the "more sports" note */}
-          <div style={{
-            marginTop: 40, background: '#0f172a',
-            border: '1px solid rgba(184,134,11,0.35)', borderRadius: 16,
-            padding: '32px 30px', textAlign: 'center',
-            boxShadow: '0 10px 30px rgba(15,23,42,0.30)',
-          }}>
-            <h2 style={{ margin: 0, fontSize: 42, fontWeight: 900, color: '#B8860B', letterSpacing: -1, lineHeight: 1 }}>
+            <h2 style={{ margin: 0, fontSize: 40, fontWeight: 700, color: '#e3b341', letterSpacing: '-0.02em', lineHeight: 1 }}>
               TOPS
             </h2>
-            <p style={{ margin: '12px 0 0', fontSize: 20, fontWeight: 800, color: '#B8860B', lineHeight: 1.25 }}>
-              Building nation via sports by winning medals at Olympics.
+            <p style={{ margin: '14px 0 0', fontSize: 19, fontWeight: 600, color: '#e3b341', lineHeight: 1.3 }}>
+              Building the nation through sport, by winning Olympic medals.
             </p>
-            <p style={{ margin: '6px 0 0', fontSize: 14, fontWeight: 600, color: '#B8860B', lineHeight: 1.4 }}>
-              Building bench-strength to make it sustainable.
+            <p style={{ margin: '6px 0 0', fontSize: 14, fontWeight: 500, color: 'color-mix(in srgb, #e3b341 82%, #fff)', lineHeight: 1.4 }}>
+              And building the bench strength to make it sustainable.
             </p>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       </div>
     </>
   )

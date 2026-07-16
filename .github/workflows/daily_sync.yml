@@ -52,6 +52,18 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: python scripts/fetch_youth_rankings.py
 
+      - name: Fetch upcoming entries (next tournament)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python scripts/fetch_entries.py --days-fwd 75
+
+      - name: Refresh India tournament snapshot (materialized view)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python -c "import os;from supabase import create_client;create_client(os.environ['SUPABASE_URL'],os.environ['SUPABASE_SERVICE_KEY']).rpc('refresh_india_tournament_mv').execute();print('tournament snapshot refreshed')"
+
       - name: Notify on failure
         if: failure()
         run: |

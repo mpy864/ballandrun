@@ -61,7 +61,24 @@ export const ROSTER = {
     { category: 'development', discipline: 'MS', players: [{ id: 200316, name: 'Ankur Bhattacharjee' }], watch: [] },
     { category: 'development', discipline: 'WS', players: [{ id: 201368, name: 'Syndrela Das' }], watch: [] },
 
-    // TAGG — no entries yet
+    // TAGG — Target Asian Games Group (Junior/Youth).
+    // Youth entries: `youth: true`, `age` (U15/U17), `events` = [[event, age-category rank]].
+    { category: 'tagg', youth: true, age: 'U15', players: [{ id: 201460, name: 'Akash Rajavelu' }],        events: [['BD', 4]] },
+    { category: 'tagg', youth: true, age: 'U15', players: [{ id: 212643, name: 'Rishaan Chattopadhayay' }], events: [['BD', 4]] },
+    { category: 'tagg', youth: true, age: 'U15', players: [{ id: 202751, name: 'Aditya Das' }],             events: [['BS', 14], ['XD', 6]] },
+    { category: 'tagg', youth: true, age: 'U15', players: [{ id: 201145, name: 'Ankolika Chakraborty' }],   events: [['GS', 8], ['GD', 10], ['XD', 6]] },
+    { category: 'tagg', youth: true, age: 'U15', players: [{ id: 202752, name: 'Naisha Rewaskar' }],        events: [['GS', 17], ['GD', 10]] },
+    { category: 'tagg', youth: true, age: 'U15', players: [{ id: 203837, name: 'Tanishka Kalbhairav' }],    events: [['GS', 19]] },
+    { category: 'tagg', youth: true, age: 'U17', players: [{ id: 200318, name: 'Ananya Muralidharan' }],    events: [['GD', 10]] },
+    { category: 'tagg', youth: true, age: 'U17', players: [{ id: 202723, name: 'Divyanshi Bhowmick' }],     events: [['GS', 5], ['GD', 1]] },
+    { category: 'tagg', youth: true, age: 'U17', players: [{ id: 200319, name: 'Prisha Goel' }],            events: [['GS', 19]] },
+    { category: 'tagg', youth: true, age: 'U17', players: [{ id: 201368, name: 'Syndrela Das' }],           events: [['GS', 9], ['GD', 1]] },
+    // Added on selector's instruction — resolved across singles AND doubles youth rankings.
+    { category: 'tagg', youth: true, age: 'U17', players: [{ id: 201372, name: 'Sarthak Arya' }],           events: [['BS', 28], ['BD', 80], ['XD', 64]] },
+    { category: 'tagg', youth: true, age: 'U17', players: [{ id: 200839, name: 'Kavya Bhatt' }],            events: [['GS', 19], ['GD', 111], ['XD', 164]] },
+    { category: 'tagg', youth: true, age: 'U17', players: [{ id: 145804, name: 'Hansini Mathan' }],         events: [['GS', 24], ['GD', 47], ['XD', 127]] },
+    { category: 'tagg', youth: true, age: 'U15', players: [{ id: 202918, name: 'Ahona Ray' }],              events: [['GS', 22], ['GD', 58]] },
+    { category: 'tagg', youth: true, age: 'U15', players: [{ id: 213004, name: 'Sreejani Chakraborty' }],   events: [['GS', 27], ['GD', 58]] },
   ],
 
   // Static placeholder until the tennis ranking adapter is built.
