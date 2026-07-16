@@ -282,20 +282,20 @@ def main():
             print(f"[ITTF] {name} — not yet concluded, skipping.")
             continue
 
-        # Skip if already fetched
-        if event_has_matches(supabase, event_id):
-            print(f"[ITTF] {name} — already in DB, skipping.")
-            continue
-
-        print(f"\n[ITTF] Fetching: {name} ({start_str} to {end_str})")
-
-        # Ensure event exists in wtt_events
+        # Always upsert metadata for concluded events (allows corrected names/dates to propagate)
+        print(f"\n[ITTF] Event: {name} ({start_str} to {end_str})")
         supabase.table("wtt_events").upsert({
             "event_id":         event_id,
             "event_name":       name,
             "event_start_date": start_str,
         }, on_conflict="event_id").execute()
 
+        # Skip match fetching if already ingested
+        if event_has_matches(supabase, event_id):
+            print(f"  Matches already in DB, skipping fetch.")
+            continue
+
+        print(f"  Fetching matches...")
         matches = fetch_event(event_id, start_str, end_str, base_url)
 
         if not matches:
