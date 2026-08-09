@@ -240,10 +240,14 @@ def events_needing_fetch(supabase: Client,
 
 # ─── Match Fetching ───────────────────────────────────────────────────────────
 
-def fetch_event_matches(event_id: int) -> list[dict]:
+def fetch_event_matches(event_id: int) -> tuple[list[dict], list[dict]]:
     """
     Fetch and parse all match results for one event.
-    Returns list of match dicts ready for Supabase upsert.
+    Returns (singles, doubles) — two lists of match dicts ready for Supabase upsert.
+
+    Every failure path must return a 2-tuple as well. The caller unpacks the result
+    directly, so returning a bare [] here raises ValueError and kills the whole run
+    over one bad event — which froze five feeds for three weeks in July 2026.
     """
     try:
         resp = requests.get(
@@ -254,17 +258,17 @@ def fetch_event_matches(event_id: int) -> list[dict]:
         )
     except Exception as e:
         print(f"  [!] Request error for event {event_id}: {e}")
-        return []
+        return [], []
 
     if resp.status_code != 200:
         print(f"  [!] HTTP {resp.status_code} for event {event_id}")
-        return []
+        return [], []
 
     try:
         data = resp.json()
     except Exception as e:
         print(f"  [!] JSON parse error for event {event_id}: {e}")
-        return []
+        return [], []
 
     # API returns either a direct list or {"Data": [...]}
     if isinstance(data, list):
@@ -276,7 +280,7 @@ def fetch_event_matches(event_id: int) -> list[dict]:
 
     if not cards:
         print(f"  [!] Empty response for event {event_id}")
-        return []
+        return [], []
 
     records = []
     doubles_records = []
