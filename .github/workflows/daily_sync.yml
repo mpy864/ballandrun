@@ -1,19 +1,49 @@
 name: Daily WTT Data Sync
 
+# Each feed runs as its own parallel job. They are independent sources with
+# nothing to say to each other, so a failure in one must not stop the others.
+#
+# They used to be six sequential steps in a single job. On 2026-07-19 WTT began
+# returning HTTP 500 for one event, fetch_matches.py crashed on it, and because
+# the steps shared one job the four feeds behind it silently stopped running for
+# three weeks — youth rankings went 26 days stale before anyone noticed.
+#
+# fail-fast: false is the line that prevents a repeat.
+
 on:
   schedule:
     # 00:30 UTC = 06:00 IST — runs every day
     - cron: '30 0 * * *'
-
-  # Allow manual trigger from GitHub Actions UI
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
-  sync:
+  feed:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    timeout-minutes: 25
+
+    strategy:
+      # Without this, one red feed cancels every sibling still in flight —
+      # exactly the coupling this split exists to remove.
+      fail-fast: false
+      # All of these scrape WTT. Three at a time keeps us from hammering it
+      # harder in parallel than the old serial run ever did.
+      max-parallel: 3
+      matrix:
+        include:
+          - name: Senior rankings
+            cmd: fetch_rankings.py
+          - name: WTT match results
+            cmd: fetch_matches.py
+          - name: ITTF match results
+            cmd: fetch_ittf_matches.py
+          - name: Youth rankings
+            cmd: fetch_youth_rankings.py
+          - name: Upcoming entries
+            cmd: fetch_entries.py --days-fwd 75
 
     steps:
       - name: Checkout repo
@@ -25,47 +55,39 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          pip install requests supabase
+        run: pip install requests supabase
 
-      - name: Fetch rankings
+      - name: Run ${{ matrix.name }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: python scripts/fetch_rankings.py
+        run: python scripts/${{ matrix.cmd }}
 
-      - name: Fetch match results
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: python scripts/fetch_matches.py
+  refresh-snapshot:
+    name: Refresh India snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The one genuine dependency in the set: the materialized view reads the
+    # match and entry tables, so it must run after them. `always()` means it
+    # refreshes from whatever did land, rather than being skipped because an
+    # unrelated feed failed.
+    needs: feed
+    if: always()
 
-      - name: Fetch ITTF match results
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: python scripts/fetch_ittf_matches.py
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-      - name: Fetch youth rankings
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: python scripts/fetch_youth_rankings.py
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-      - name: Fetch upcoming entries (next tournament)
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: python scripts/fetch_entries.py --days-fwd 75
+      - name: Install dependencies
+        run: pip install supabase
 
       - name: Refresh India tournament snapshot (materialized view)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: python -c "import os;from supabase import create_client;create_client(os.environ['SUPABASE_URL'],os.environ['SUPABASE_SERVICE_KEY']).rpc('refresh_india_tournament_mv').execute();print('tournament snapshot refreshed')"
-
-      - name: Notify on failure
-        if: failure()
-        run: |
-          echo "Daily sync failed — check logs above"
-          exit 1
