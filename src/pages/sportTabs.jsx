@@ -85,24 +85,28 @@ export function TalentTab({ onOpen, navigate }) {
       }
 
       else if (d.kind === 'singles') {  // youth singles
+        // age_cat_rank is the rank WITHIN the age band — what WTT calls "Ranking
+        // Position" and what this tab's U17/U15/… heading implies. current_rank is
+        // the rank across the whole 10-18 youth pool, so showing it here understates
+        // every player (Divyanshi Bhowmick: 13th in U17, but 21st overall).
         const { data } = await supabase.from('youth_rankings_singles')
-          .select('ittf_id, player_name, current_rank, rank_diff, sub_event, age_category, publish_date')
+          .select('ittf_id, player_name, age_cat_rank, rank_diff, sub_event, age_category, publish_date')
           .eq('country_code', 'IND').eq('sub_event', disc).eq('age_category', level)
           .order('publish_date', { ascending: false }).limit(1000)
         const latestDate = data?.[0]?.publish_date
         out = (data || []).filter(r => r.publish_date === latestDate)
-          .map(r => ({ kind: 'singles', id: Number(r.ittf_id), label: r.player_name, rank: r.current_rank, rank_change: r.rank_diff }))
+          .map(r => ({ kind: 'singles', id: Number(r.ittf_id), label: r.player_name, rank: r.age_cat_rank, rank_change: r.rank_diff }))
           .sort((a, b) => (a.rank || 9999) - (b.rank || 9999))
       }
 
-      else {  // youth doubles
+      else {  // youth doubles — same reasoning: rank within the age band, not the pool
         const { data } = await supabase.from('youth_rankings_doubles')
-          .select('ittf_id1, player_name1, ittf_id2, player_name2, current_rank, rank_diff, sub_event, age_category, publish_date')
+          .select('ittf_id1, player_name1, ittf_id2, player_name2, age_cat_rank, rank_diff, sub_event, age_category, publish_date')
           .eq('country_code1', 'IND').eq('sub_event', disc).eq('age_category', level)
           .order('publish_date', { ascending: false }).limit(1000)
         const latestDate = data?.[0]?.publish_date
         out = (data || []).filter(r => r.publish_date === latestDate)
-          .map(r => ({ kind: 'doubles', ids: [Number(r.ittf_id1), Number(r.ittf_id2)], label: `${r.player_name1} / ${r.player_name2}`, rank: r.current_rank, rank_change: r.rank_diff }))
+          .map(r => ({ kind: 'doubles', ids: [Number(r.ittf_id1), Number(r.ittf_id2)], label: `${r.player_name1} / ${r.player_name2}`, rank: r.age_cat_rank, rank_change: r.rank_diff }))
           .sort((a, b) => (a.rank || 9999) - (b.rank || 9999))
       }
 

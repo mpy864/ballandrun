@@ -40,7 +40,12 @@ PAGE_SIZE  = 500
 
 SINGLE_EVENTS  = ["MS", "WS"]
 DOUBLES_EVENTS = ["MD", "WD", "XD"]
-AGE_CATEGORIES = ["U13", "U15", "U17", "U19"]
+# Must list EVERY band the API returns. The main fetch is not age-filtered, so rows
+# for a missing band still land in the table — just with age_cat_rank NULL, because
+# nothing looked up their within-band position. U11 was absent here from the start:
+# 68,036 rows since Jan 2024 carry a null rank, and the pipeline page's top-64 filter
+# then silently falls back to the whole-pool rank, hiding every U11 player.
+AGE_CATEGORIES = ["U11", "U13", "U15", "U17", "U19"]
 MAX_LOOKBACK_WEEKS = 8   # how far back to search for the latest published week
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
