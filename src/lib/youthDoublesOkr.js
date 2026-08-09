@@ -32,7 +32,7 @@ export async function loadYouthDoublesPairs(supabase, ageCategory) {
 
   const { data: rows } = await supabase
     .from('youth_rankings_doubles')
-    .select('pair_id,ittf_id1,player_name1,ittf_id2,player_name2,country_code1,sub_event,age_cat_rank')
+    .select('pair_id,ittf_id1,player_name1,ittf_id2,player_name2,country_code1,country_code2,sub_event,age_cat_rank')
     .eq('age_category', ageCategory)
     .in('sub_event', ['MD', 'WD', 'XD'])
     .eq('ranking_year', latest.ranking_year)
@@ -53,7 +53,12 @@ export async function loadYouthDoublesPairs(supabase, ageCategory) {
       gender_label: GLABEL[r.sub_event] || r.sub_event,
       discipline:   r.sub_event,
       subEvent:     r.sub_event,
-      country_code: r.country_code1 || '',
+      // Both partners are carried through: a pair's nationality cannot be read off
+      // player 1 alone, since WTT lists pairs in its own order and an Indian player
+      // is often the second name. Consumers checking "is this Indian?" need both.
+      country_code:  r.country_code1 || '',
+      country_code1: r.country_code1 || '',
+      country_code2: r.country_code2 || '',
       dob: null, handedness: '', grip: '',
       isYouth: true, isPair: true, ageCategory,
     }));

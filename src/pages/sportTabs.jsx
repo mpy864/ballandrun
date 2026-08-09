@@ -102,7 +102,11 @@ export function TalentTab({ onOpen, navigate }) {
       else {  // youth doubles — same reasoning: rank within the age band, not the pool
         const { data } = await supabase.from('youth_rankings_doubles')
           .select('ittf_id1, player_name1, ittf_id2, player_name2, age_cat_rank, rank_diff, sub_event, age_category, publish_date')
-          .eq('country_code1', 'IND').eq('sub_event', disc).eq('age_category', level)
+          // Must check BOTH partners. WTT lists a pair in its own order, so filtering
+          // on country_code1 alone drops every pair where the Indian player happens to
+          // be listed second — 16 pairs in the 2026-08-03 week, half of U17 MD.
+          .or('country_code1.eq.IND,country_code2.eq.IND')
+          .eq('sub_event', disc).eq('age_category', level)
           .order('publish_date', { ascending: false }).limit(1000)
         const latestDate = data?.[0]?.publish_date
         out = (data || []).filter(r => r.publish_date === latestDate)
