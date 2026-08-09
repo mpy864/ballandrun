@@ -33,6 +33,10 @@ FEEDS = {
     "ittf-live":     ("ITTF Live Results",  150),   # cron every 30m (very lax)
     "ittf-recap":    ("ITTF Daily Recap",   600),   # cron every 6h
     "ittf-schedule": ("ITTF Daily Schedule", 1560), # daily
+    # Not a Telegram feed: check_data_quality.py asserts things about the DATA rather
+    # than about a job running. Every feed above can be green while the tables behind
+    # them go stale — which is exactly what happened for 26 days in July 2026.
+    "data-quality":  ("Data quality checks", 1560), # daily, after the sync
 }
 
 

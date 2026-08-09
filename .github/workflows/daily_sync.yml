@@ -63,6 +63,33 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: python scripts/${{ matrix.cmd }}
 
+  data-quality:
+    name: Data quality checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Runs after the feeds so it sees post-sync data. `always()` matters: a feed
+    # failing is precisely when you want to know what the tables now look like.
+    needs: feed
+    if: always()
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests supabase
+
+      - name: Check data quality
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python scripts/check_data_quality.py
+
   refresh-snapshot:
     name: Refresh India snapshot
     runs-on: ubuntu-latest
