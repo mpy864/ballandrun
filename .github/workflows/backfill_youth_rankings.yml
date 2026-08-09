@@ -1,16 +1,28 @@
 name: Backfill Youth Rankings
 
+# Historical youth rankings, run by hand. Uses the SAME script as the daily sync
+# (scripts/fetch_youth_rankings.py) so a backfill can never write a different shape
+# from the live ingest — the three older backfill scripts did exactly that and are
+# now in scripts/_retired/.
+#
+# Give an explicit week range and run in chunks. A week costs roughly 2-3 minutes,
+# so keep a chunk to about 20 weeks to stay inside the timeout below.
+
 on:
   workflow_dispatch:
     inputs:
       from_year:
-        description: 'Start year (e.g. 2024)'
-        required: false
-        default: '2024'
+        description: 'Start year (e.g. 2025)'
+        required: true
       from_week:
-        description: 'Start week (e.g. 1)'
+        description: 'Start ISO week (1-53)'
+        required: true
+      to_year:
+        description: 'End year — leave blank to run to the latest published week'
         required: false
-        default: '1'
+      to_week:
+        description: 'End ISO week — leave blank to run to the latest published week'
+        required: false
 
 jobs:
   backfill:
@@ -31,11 +43,18 @@ jobs:
       - name: Install dependencies
         run: pip install requests supabase
 
-      - name: Run backfill
+      - name: Backfill youth rankings
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          FROM_YEAR: ${{ inputs.from_year }}
+          FROM_WEEK: ${{ inputs.from_week }}
+          TO_YEAR:   ${{ inputs.to_year }}
+          TO_WEEK:   ${{ inputs.to_week }}
         run: |
-          python scripts/backfill_youth_rankings.py \
-            --from-year ${{ github.event.inputs.from_year }} \
-            --from-week ${{ github.event.inputs.from_week }}
+          ARGS="--from-year $FROM_YEAR --from-week $FROM_WEEK"
+          if [ -n "$TO_YEAR" ] && [ -n "$TO_WEEK" ]; then
+            ARGS="$ARGS --to-year $TO_YEAR --to-week $TO_WEEK"
+          fi
+          echo "Running: fetch_youth_rankings.py $ARGS"
+          python scripts/fetch_youth_rankings.py $ARGS

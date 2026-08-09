@@ -24,9 +24,18 @@ Usage:
     export SUPABASE_URL=...  SUPABASE_SERVICE_KEY=...
     python scripts/fetch_youth_rankings.py            # auto: DB-latest -> current
     python scripts/fetch_youth_rankings.py --weeks 16 # force last N weeks
+
+    # explicit range, for backfilling in chunks that fit a workflow timeout
+    python scripts/fetch_youth_rankings.py --from-year 2025 --from-week 32 \
+                                           --to-year 2025 --to-week 51
+
+This script is the single owner of youth_rankings_singles / youth_rankings_doubles.
+The three former backfill scripts are in scripts/_retired/ — they carried an older,
+exclusive reading of the age bands and would undo the rows written here.
 """
 
 import os
+import sys
 import time
 import argparse
 import requests
@@ -314,7 +323,21 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--weeks", type=int, default=0,
                     help="force fetch of the last N weeks (default: DB-latest -> current)")
+    # Explicit bounds exist so a long backfill can be split into chunks that each fit
+    # inside a workflow timeout. --weeks can only count back from the latest week, so
+    # it cannot express "weeks 30-50" and re-does everything newer each time.
+    ap.add_argument("--from-year", type=int, help="start year (with --from-week)")
+    ap.add_argument("--from-week", type=int, help="start ISO week")
+    ap.add_argument("--to-year", type=int, help="end year (with --to-week)")
+    ap.add_argument("--to-week", type=int, help="end ISO week")
     args = ap.parse_args()
+
+    if bool(args.from_year) != bool(args.from_week):
+        sys.exit("--from-year and --from-week must be given together")
+    if bool(args.to_year) != bool(args.to_week):
+        sys.exit("--to-year and --to-week must be given together")
+    if args.weeks and args.from_year:
+        sys.exit("--weeks and --from-year are mutually exclusive")
 
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -325,7 +348,15 @@ def main():
         return
     print(f"  latest available: {latest[0]}/W{latest[1]}")
 
-    if args.weeks > 0:
+    # An explicit end never runs past what is actually published.
+    if args.to_year:
+        if date.fromisocalendar(args.to_year, args.to_week, 1) < date.fromisocalendar(*latest, 1):
+            latest = (args.to_year, args.to_week)
+            print(f"  capped to {latest[0]}/W{latest[1]} by --to-week")
+
+    if args.from_year:
+        start = (args.from_year, args.from_week)
+    elif args.weeks > 0:
         start_d = date.fromisocalendar(latest[0], latest[1], 1) - timedelta(days=7 * (args.weeks - 1))
         start = start_d.isocalendar()[:2]
     else:
