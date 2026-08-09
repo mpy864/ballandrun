@@ -9,6 +9,16 @@ returned week matches the requested week. The script fetches each week from the 
 week already in the DB up to the latest available week (auto-detected), which also
 backfills any gap.
 
+IMPORTANT (2026-08-10): age bands are INCLUSIVE — "Under 19" means 19 and under, so a
+U17 player is ranked in the U19 list too. The API does not model it that way: it tags
+each competitor with its NARROWEST band and its AgeCategoryCode filter returns only
+those. We therefore write ONE ROW PER BAND a competitor is eligible for, and compute
+the within-band position ourselves (see band_positions). `age_category` means "the band
+this ranking is for", NOT "the competitor's own band".
+
+Before this, Syndrela Das / Divyanshi Bhowmick — World #1 in U19 girls' doubles — had
+no U19 row at all, because the pair is tagged U17.
+
 Usage:
     pip install requests supabase
     export SUPABASE_URL=...  SUPABASE_SERVICE_KEY=...
@@ -40,12 +50,16 @@ PAGE_SIZE  = 500
 
 SINGLE_EVENTS  = ["MS", "WS"]
 DOUBLES_EVENTS = ["MD", "WD", "XD"]
-# Must list EVERY band the API returns. The main fetch is not age-filtered, so rows
-# for a missing band still land in the table — just with age_cat_rank NULL, because
-# nothing looked up their within-band position. U11 was absent here from the start:
-# 68,036 rows since Jan 2024 carry a null rank, and the pipeline page's top-64 filter
-# then silently falls back to the whole-pool rank, hiding every U11 player.
-AGE_CATEGORIES = ["U11", "U13", "U15", "U17", "U19"]
+
+# Ascending, narrowest first. Age bands are INCLUSIVE — "Under 19" means 19 and under —
+# so a U15 player is ranked in U15, U17 and U19 alike. The API does not model it that
+# way: it tags each player/pair with its NARROWEST band only, and its AgeCategoryCode
+# filter returns just those. Treating the bands as exclusive buckets is what lost
+# Syndrela Das / Divyanshi Bhowmick's World #1 in U19 girls' doubles — the pair is
+# tagged U17, so no U19 row was ever written.
+BANDS = ["U11", "U13", "U15", "U17", "U19"]
+_BAND_IX = {b: i for i, b in enumerate(BANDS)}
+
 MAX_LOOKBACK_WEEKS = 8   # how far back to search for the latest published week
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
@@ -171,18 +185,51 @@ def weeks_between(start_yw, end_yw):
 
 # ── Per-week fetch ────────────────────────────────────────────────────────────
 
-def age_cat_ranks(url: str, subs: list, year: int, week: int, id_field: str) -> dict:
-    """Within-age-category rank (RankingPosition) for a given week."""
+def eligible_bands(native: str) -> list:
+    """Every band a competitor tagged `native` is ranked in — its own and all wider
+    ones. A U13 player appears in the U13, U15, U17 and U19 lists."""
+    i = _BAND_IX.get(native)
+    return BANDS[i:] if i is not None else []
+
+
+def band_positions(recs: list, id_field: str) -> dict:
+    """{(id, sub_event, band): position within that band}
+
+    Derived locally rather than requested, for two reasons:
+
+    1. The API's AgeCategoryCode filter returns only competitors whose NARROWEST band
+       matches, so asking it for "U17" omits the U15 and U13 players who are ranked
+       there. That produced the gaps we saw in stored data — U17 WS beginning at
+       position 2, U19 MS missing 3, 6, 7 and 8.
+    2. For PAIRS the API's RankingPosition is merely a copy of CurrentRank
+       (JIANG/YAO: CurrentRank=4, RankingPosition=4, while WTT publishes position 2),
+       so there is no band position to read even when the rows are present.
+
+    WTT's own site derives it the same way: take everyone eligible for the band, order
+    by world rank, number 1..N. Confirmed against the published U17 girls' doubles
+    list — eligible pairs at world ranks 1, 4, 6, 10 are shown as positions 1, 2, 3, 4.
+
+    Input is the UNFILTERED per-sub-event rows the caller already fetched, so this
+    costs no extra requests — it removes roughly 25 paginated calls per week.
+    """
+    by_sub = {}
+    for r in recs:
+        idv    = r.get(id_field)
+        rank   = safe_int(r.get("CurrentRank"))
+        native = r.get("AgeCategoryCode")
+        if idv is None or rank is None or native not in _BAND_IX:
+            continue
+        by_sub.setdefault(r.get("SubEventCode"), []).append((rank, str(idv), native))
+
     out = {}
-    for age_cat in AGE_CATEGORIES:
-        for sub in subs:
-            recs = fetch_paginated(url, year, week, {"SubEventCode": sub, "AgeCategoryCode": age_cat})
-            for r in recs:
-                if r.get("AgeCategoryCode") == age_cat:
-                    rk = safe_int(r.get("RankingPosition"))
-                    idv = r.get(id_field)
-                    if rk is not None and idv is not None:
-                        out[(str(idv), r.get("SubEventCode"))] = rk
+    for sub, rows in by_sub.items():
+        rows.sort(key=lambda t: t[0])          # by world rank, best first
+        for band in BANDS:
+            limit, pos = _BAND_IX[band], 0
+            for _rank, idv, native in rows:
+                if _BAND_IX[native] <= limit:  # narrow enough to be eligible here
+                    pos += 1
+                    out[(idv, sub, band)] = pos
     return out
 
 
@@ -191,61 +238,72 @@ def process_week(supabase, year: int, week: int) -> None:
     print(f"  Week {year}/W{week}")
 
     # ── Singles ──
-    acr = age_cat_ranks(IND_URL, SINGLE_EVENTS, year, week, "IttfId")
+    # Fetch every sub-event first, then derive band positions from the whole set:
+    # a band's ordering depends on competitors the API tags with a narrower band.
+    singles = {sub: fetch_paginated(IND_URL, year, week, {"SubEventCode": sub})
+               for sub in SINGLE_EVENTS}
+    spos = band_positions([r for rs in singles.values() for r in rs], "IttfId")
+
     srows = []
-    for sub in SINGLE_EVENTS:
-        recs = fetch_paginated(IND_URL, year, week, {"SubEventCode": sub})
+    for sub, recs in singles.items():
         for r in recs:
             iid = r.get("IttfId")
             if iid is None:
                 continue
             iid = str(iid)
-            srows.append({
-                "ittf_id": iid, "player_name": r.get("PlayerName"),
-                "country_code": r.get("CountryCode"), "country_name": r.get("CountryName"),
-                "age_category": r.get("AgeCategoryCode"), "sub_event": r.get("SubEventCode"),
-                "ranking_year": safe_int(r.get("RankingYear")),
-                "ranking_month": safe_int(r.get("RankingMonth")),
-                "ranking_week": safe_int(r.get("RankingWeek")),
-                "points_ytd": safe_float(r.get("RankingPointsYTD")),
-                "current_rank": safe_int(r.get("CurrentRank")),
-                "previous_rank": safe_int(r.get("PreviousRank")),
-                "rank_diff": safe_int(r.get("RankingDifference")),
-                "publish_date": parse_date(r.get("PublishDate")),
-                "age_cat_rank": acr.get((iid, r.get("SubEventCode"))),
-                "fetched_at": now,
-            })
+            # One row per band this player is ranked in, not just their own.
+            for band in eligible_bands(r.get("AgeCategoryCode")):
+                srows.append({
+                    "ittf_id": iid, "player_name": r.get("PlayerName"),
+                    "country_code": r.get("CountryCode"), "country_name": r.get("CountryName"),
+                    "age_category": band, "sub_event": r.get("SubEventCode"),
+                    "ranking_year": safe_int(r.get("RankingYear")),
+                    "ranking_month": safe_int(r.get("RankingMonth")),
+                    "ranking_week": safe_int(r.get("RankingWeek")),
+                    "points_ytd": safe_float(r.get("RankingPointsYTD")),
+                    "current_rank": safe_int(r.get("CurrentRank")),
+                    "previous_rank": safe_int(r.get("PreviousRank")),
+                    "rank_diff": safe_int(r.get("RankingDifference")),
+                    "publish_date": parse_date(r.get("PublishDate")),
+                    "age_cat_rank": spos.get((iid, r.get("SubEventCode"), band)),
+                    "fetched_at": now,
+                })
     if srows:
         upsert_batched(supabase, "youth_rankings_singles", srows)
 
     # ── Doubles ──
-    acrd = age_cat_ranks(PAIRS_URL, DOUBLES_EVENTS, year, week, "PairId")
+    # Identical treatment. This is also the only way pairs get a real band position at
+    # all: the API returns RankingPosition == CurrentRank for every pair.
+    doubles = {sub: fetch_paginated(PAIRS_URL, year, week, {"SubEventCode": sub})
+               for sub in DOUBLES_EVENTS}
+    dpos = band_positions([r for rs in doubles.values() for r in rs], "PairId")
+
     drows = []
-    for sub in DOUBLES_EVENTS:
-        recs = fetch_paginated(PAIRS_URL, year, week, {"SubEventCode": sub})
+    for sub, recs in doubles.items():
         for r in recs:
             pid = r.get("PairId")
             if pid is None:
                 continue
             pid = str(pid)
-            drows.append({
-                "pair_id": pid,
-                "ittf_id1": str(r.get("IttfId1") or ""), "player_name1": r.get("PlayerName1"),
-                "country_code1": r.get("CountryCode1"), "country_name1": r.get("CountryName1"),
-                "ittf_id2": str(r.get("IttfId1d") or ""), "player_name2": r.get("PlayerName1d"),
-                "country_code2": r.get("CountryCode1d"), "country_name2": r.get("CountryName1d"),
-                "age_category": r.get("AgeCategoryCode"), "sub_event": r.get("SubEventCode"),
-                "ranking_year": safe_int(r.get("RankingYear")),
-                "ranking_month": safe_int(r.get("RankingMonth")),
-                "ranking_week": safe_int(r.get("RankingWeek")),
-                "points": safe_float(r.get("Points")),
-                "current_rank": safe_int(r.get("CurrentRank")),
-                "previous_rank": safe_int(r.get("PreviousRank")),
-                "rank_diff": safe_int(r.get("RankingDifference")),
-                "publish_date": parse_date(r.get("PublishDate")),
-                "age_cat_rank": acrd.get((pid, r.get("SubEventCode"))),
-                "fetched_at": now,
-            })
+            for band in eligible_bands(r.get("AgeCategoryCode")):
+                drows.append({
+                    "pair_id": pid,
+                    "ittf_id1": str(r.get("IttfId1") or ""), "player_name1": r.get("PlayerName1"),
+                    "country_code1": r.get("CountryCode1"), "country_name1": r.get("CountryName1"),
+                    "ittf_id2": str(r.get("IttfId1d") or ""), "player_name2": r.get("PlayerName1d"),
+                    "country_code2": r.get("CountryCode1d"), "country_name2": r.get("CountryName1d"),
+                    "age_category": band, "sub_event": r.get("SubEventCode"),
+                    "ranking_year": safe_int(r.get("RankingYear")),
+                    "ranking_month": safe_int(r.get("RankingMonth")),
+                    "ranking_week": safe_int(r.get("RankingWeek")),
+                    "points": safe_float(r.get("Points")),
+                    "current_rank": safe_int(r.get("CurrentRank")),
+                    "previous_rank": safe_int(r.get("PreviousRank")),
+                    "rank_diff": safe_int(r.get("RankingDifference")),
+                    "publish_date": parse_date(r.get("PublishDate")),
+                    "age_cat_rank": dpos.get((pid, r.get("SubEventCode"), band)),
+                    "fetched_at": now,
+                })
     if drows:
         upsert_batched(supabase, "youth_rankings_doubles", drows)
 
