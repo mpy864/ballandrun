@@ -9,7 +9,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/mohityadav/tops-tt-dashboard/scripts/run_daily_schedule.sh</string>
+        <string>/Users/mohityadav/ballandrun/scripts/run_daily_schedule.sh</string>
     </array>
 
     <!-- Run every day at 07:00 local time -->
@@ -24,8 +24,8 @@
 
     <!-- If Mac was asleep at 7am, run as soon as it wakes -->
     <key>StandardOutPath</key>
-    <string>/Users/mohityadav/tops-tt-dashboard/logs/daily_schedule.log</string>
+    <string>/Users/mohityadav/ballandrun/logs/daily_schedule.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/mohityadav/tops-tt-dashboard/logs/daily_schedule.log</string>
+    <string>/Users/mohityadav/ballandrun/logs/daily_schedule.log</string>
 </dict>
 </plist>

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Wrapper for daily_schedule.py — runs once every morning at 7:00 AM via launchd.
 
-PROJECT=/Users/mohityadav/tops-tt-dashboard
+PROJECT=/Users/mohityadav/ballandrun
 PYTHON=/opt/miniconda3/bin/python3
 
 cd "$PROJECT"

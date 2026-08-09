@@ -3,7 +3,7 @@
 # Run once: bash scripts/setup_automation.sh
 # To stop everything: bash scripts/setup_automation.sh --stop
 
-PROJECT=/Users/mohityadav/tops-tt-dashboard
+PROJECT=/Users/mohityadav/ballandrun
 AGENTS=~/Library/LaunchAgents
 LIVE_PLIST=com.ballandrun.wtt-live.plist
 DAILY_PLIST=com.ballandrun.wtt-daily.plist

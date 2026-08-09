@@ -11,7 +11,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/mohityadav/tops-tt-dashboard/scripts/run_live_updater.sh</string>
+        <string>/Users/mohityadav/ballandrun/scripts/run_live_updater.sh</string>
     </array>
 
     <!-- Start immediately when agent is loaded (login / launchctl load) -->
@@ -28,8 +28,8 @@
 
     <!-- Log output -->
     <key>StandardOutPath</key>
-    <string>/Users/mohityadav/tops-tt-dashboard/logs/live_updater.log</string>
+    <string>/Users/mohityadav/ballandrun/logs/live_updater.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/mohityadav/tops-tt-dashboard/logs/live_updater.log</string>
+    <string>/Users/mohityadav/ballandrun/logs/live_updater.log</string>
 </dict>
 </plist>

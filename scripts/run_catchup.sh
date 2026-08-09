@@ -2,7 +2,7 @@
 # run_catchup.sh — Hourly safety net: catch any results live_updater may have missed.
 # Sourced by launchd agent com.ballandrun.wtt-catchup.
 
-PROJECT=/Users/mohityadav/tops-tt-dashboard
+PROJECT=/Users/mohityadav/ballandrun
 PYTHON=/opt/miniconda3/bin/python3
 
 cd "$PROJECT"

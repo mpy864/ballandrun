@@ -9,7 +9,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/mohityadav/tops-tt-dashboard/scripts/run_catchup.sh</string>
+        <string>/Users/mohityadav/ballandrun/scripts/run_catchup.sh</string>
     </array>
 
     <!-- Run immediately on load, then every hour as safety net for missed results -->
@@ -19,8 +19,8 @@
     <integer>3600</integer>
 
     <key>StandardOutPath</key>
-    <string>/Users/mohityadav/tops-tt-dashboard/logs/catchup.log</string>
+    <string>/Users/mohityadav/ballandrun/logs/catchup.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/mohityadav/tops-tt-dashboard/logs/catchup.log</string>
+    <string>/Users/mohityadav/ballandrun/logs/catchup.log</string>
 </dict>
 </plist>

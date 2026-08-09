@@ -2,7 +2,7 @@
 # Wrapper for live_updater.py — sourced by launchd agent.
 # Keeps the Mac awake and restarts automatically on crash (via KeepAlive in plist).
 
-PROJECT=/Users/mohityadav/tops-tt-dashboard
+PROJECT=/Users/mohityadav/ballandrun
 PYTHON=/opt/miniconda3/bin/python3
 
 cd "$PROJECT"
