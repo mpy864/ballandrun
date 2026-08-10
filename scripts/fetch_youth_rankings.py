@@ -194,6 +194,34 @@ def weeks_between(start_yw, end_yw):
 
 # ── Per-week fetch ────────────────────────────────────────────────────────────
 
+def prune_stale(supabase, table: str, year: int, week: int, cutoff: str, wrote: int) -> None:
+    """Delete rows for this week that this run did not write.
+
+    An upsert only overwrites keys it produces. WTT prunes its own history, so a
+    re-fetch of an old week returns a different set of competitors — everyone it no
+    longer serves keeps their old row, with a position from the previous band model.
+    The week then holds two eras at once and its positions stop forming 1..N.
+
+    Rows written by this run carry fetched_at == cutoff exactly, so `< cutoff` removes
+    precisely the leftovers.
+
+    The `wrote` guard matters: if a fetch came back empty (an API blip, a rate limit),
+    pruning would delete the entire week. Nothing written, nothing pruned.
+    """
+    if not wrote:
+        print(f"    [prune skipped] nothing written to {table} — week left intact")
+        return
+    try:
+        r = (supabase.table(table).delete()
+             .eq("ranking_year", year).eq("ranking_week", week)
+             .lt("fetched_at", cutoff).execute())
+        n = len(r.data or [])
+        if n:
+            print(f"    -> pruned {n} stale rows from {table}")
+    except Exception as e:
+        print(f"    [!] prune failed on {table}: {e}")
+
+
 def eligible_bands(native: str) -> list:
     """Every band a competitor tagged `native` is ranked in — its own and all wider
     ones. A U13 player appears in the U13, U15, U17 and U19 lists."""
@@ -279,6 +307,7 @@ def process_week(supabase, year: int, week: int) -> None:
                 })
     if srows:
         upsert_batched(supabase, "youth_rankings_singles", srows)
+    prune_stale(supabase, "youth_rankings_singles", year, week, now, len(srows))
 
     # ── Doubles ──
     # Identical treatment. This is also the only way pairs get a real band position at
@@ -315,6 +344,7 @@ def process_week(supabase, year: int, week: int) -> None:
                 })
     if drows:
         upsert_batched(supabase, "youth_rankings_doubles", drows)
+    prune_stale(supabase, "youth_rankings_doubles", year, week, now, len(drows))
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
