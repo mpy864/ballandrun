@@ -26,4 +26,12 @@ dist-ssr
 .env*.local
 __pycache__/
 *.pyc
+analysis_output/
+
+# Credentials. `.env` alone was not enough: a `.env.bak` holding the Supabase
+# SERVICE key sat unignored and would have been published by any `git add .`.
+# Match every variant, then re-allow a committed template.
 .env
+.env.*
+*.env
+!.env.example
