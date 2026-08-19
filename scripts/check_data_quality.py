@@ -29,11 +29,18 @@ import os
 import sys
 from datetime import date, datetime, timezone
 
+import requests
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tg_common import get_db, record_health                      # noqa: E402
 # Imported, never re-declared: a second copy of these lists is exactly how U11 came to
 # be missing from one of them for nineteen months.
-from fetch_youth_rankings import BANDS, SINGLE_EVENTS, DOUBLES_EVENTS   # noqa: E402
+from fetch_youth_rankings import (BANDS, SINGLE_EVENTS, DOUBLES_EVENTS,   # noqa: E402
+                                  latest_available_week, HEADERS as WTT_HEADERS)
+
+# Senior publish list. Served with Content-Encoding: br regardless of Accept-Encoding,
+# so `brotli` must be installed wherever this runs.
+SEN_CDN = "https://wtt-web-frontdoor-withoutcache-cqakg0andqf5hchn.a01.azurefd.net/ranking"
 
 FEED = "data-quality"
 PAGE = 1000
@@ -123,6 +130,61 @@ def doubles_sample(db, table, publish_date, band, sub, n=500):
 
 # ── Checks ────────────────────────────────────────────────────────────────────
 
+def check_upstream_gap(db):
+    """Is WTT publishing weeks we have not collected?
+
+    Freshness alone cannot answer this. It measures the age of the newest row we
+    hold, so a dead feed stays green for the whole threshold window. That is exactly
+    what happened on 2026-08-18: the youth sync had been failing for a week, the
+    newest week we held was internally perfect, 8 days sat inside the 10-day limit,
+    and the check said PASS while WTT had already published W34.
+
+    Asking the source directly is the only way to see an absence.
+    """
+    print("\nupstream gap")
+
+    # ── youth (both tables share one source) ──
+    try:
+        y, w = latest_available_week()
+        if y is None:
+            fail("upstream gap", "youth: WTT returned no published week at all")
+        else:
+            for table in ("youth_rankings_singles", "youth_rankings_doubles"):
+                r = (db.table(table).select("ranking_year,ranking_week")
+                     .order("ranking_year", desc=True).order("ranking_week", desc=True)
+                     .limit(1).execute())
+                if not r.data:
+                    fail("upstream gap", f"{table}: empty")
+                    continue
+                have = (r.data[0]["ranking_year"], r.data[0]["ranking_week"])
+                if have < (y, w):
+                    fail("upstream gap", f"{table}: WTT has {y} W{w}, we have "
+                                         f"{have[0]} W{have[1]} — the ingest is not landing")
+                else:
+                    ok(f"{table}: current with WTT ({y} W{w})")
+    except Exception as e:
+        fail("upstream gap", f"youth: could not reach WTT — {type(e).__name__}: {e}")
+
+    # ── senior doubles (CDN publish list; served brotli-encoded) ──
+    try:
+        r = requests.get(f"{SEN_CDN}/PUBLISH_DATE.json",
+                         params={"CategoryCode": "SEN", "q": 1},
+                         headers=WTT_HEADERS, timeout=30)
+        rows = r.json().get("Result", [])
+        y, w = max((int(x["RankingYear"]), int(x["RankingWeek"])) for x in rows)
+        d = (db.table("rankings_doubles_teams").select("ranking_year,ranking_week")
+             .order("ranking_year", desc=True).order("ranking_week", desc=True)
+             .limit(1).execute())
+        have = (d.data[0]["ranking_year"], d.data[0]["ranking_week"]) if d.data else (0, 0)
+        if have < (y, w):
+            fail("upstream gap", f"rankings_doubles_teams: WTT has {y} W{w}, we have "
+                                 f"{have[0]} W{have[1]}")
+        else:
+            ok(f"rankings_doubles_teams: current with WTT ({y} W{w})")
+    except Exception as e:
+        fail("upstream gap", f"senior doubles: could not reach WTT — {type(e).__name__}: {e}")
+
+
 def check_freshness(db):
     print("\nfreshness")
     for label, table, col, limit in FRESHNESS:
@@ -207,8 +269,9 @@ def main():
     if db is None:
         sys.exit("Missing SUPABASE_URL / SUPABASE_SERVICE_KEY")
 
-    if not args.publish_date:
-        check_freshness(db)          # meaningless when inspecting a named past week
+    if not args.publish_date:        # both are meaningless for a named past week
+        check_freshness(db)
+        check_upstream_gap(db)
 
     for table, subs in (("youth_rankings_singles", SINGLE_EVENTS),
                         ("youth_rankings_doubles", DOUBLES_EVENTS)):

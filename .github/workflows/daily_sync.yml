@@ -82,7 +82,9 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests supabase
+        # brotli: the check asks WTT's CDN which weeks are published, and that
+        # endpoint replies Content-Encoding: br whatever Accept-Encoding says.
+        run: pip install requests supabase brotli
 
       - name: Check data quality
         env:

@@ -3,8 +3,17 @@ name: TT Senior Doubles Rankings
 on:
   workflow_dispatch:
   schedule:
-    # Monday 02:00 UTC — WTT rankings publish weekly (Mon)
-    - cron: '0 2 * * 1'
+    # Daily, not weekly. WTT publishes on Mondays, but this ran at 02:00 UTC on the
+    # Monday itself — before that day's list was up — so it always collected the
+    # PREVIOUS week and the feed sat permanently ~7 days behind. Worse, a transient
+    # failure (a DNS blip took it out on 2026-07-27) then cost a full week, because
+    # the next attempt was seven days away.
+    #
+    # backfill_senior_doubles.py checks week_exists() and fetches only what is
+    # missing, so a daily run costs one CDN call and a few existence checks when
+    # there is nothing new. Timing sensitivity disappears and a failure self-corrects
+    # the next morning.
+    - cron: '0 2 * * *'
 
 jobs:
   sync:
