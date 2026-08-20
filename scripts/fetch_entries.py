@@ -100,7 +100,36 @@ def upcoming_event_ids(sb, back, fwd):
     hi = (date.today() + timedelta(days=fwd)).isoformat()
     r = (sb.table("wtt_events").select("event_id, event_name, start_date")
          .gte("start_date", lo).lte("start_date", hi).order("start_date").execute())
-    return [(row["event_id"], row.get("event_name") or "") for row in (r.data or [])]
+    return [(row["event_id"], row.get("event_name") or "", row.get("start_date"))
+            for row in (r.data or [])]
+
+
+def prune_withdrawals(sb, event_id, name, cutoff, wrote):
+    """Remove entries WTT no longer lists for this event.
+
+    Entries are volatile — players withdraw right up to the first ball — but the
+    upsert could only ever add or update, so a withdrawal left its row behind
+    permanently and the count only ever grew. On 2026-08-20 that meant 25 phantom
+    entries on Olomouc four days before it started, and 4 Indian athletes still shown
+    as playing Youth Bangkok II after withdrawing.
+
+    Every row written by this pass carries the same `cutoff` timestamp, so anything
+    older was not in WTT's current list.
+
+    Caller guarantees `wrote` — pruning on an empty fetch would delete the event.
+    """
+    if not wrote:
+        return 0
+    try:
+        r = (sb.table("wtt_entries").delete()
+             .eq("event_id", event_id).lt("last_updated", cutoff).execute())
+        n = len(r.data or [])
+        if n:
+            print(f"      withdrew: {n} entr{'y' if n == 1 else 'ies'} removed")
+        return n
+    except Exception as e:
+        print(f"      [!] prune failed for {event_id} {name}: {e}")
+        return 0
 
 
 def main():
@@ -112,24 +141,35 @@ def main():
 
     sb = create_client(SUPABASE_URL, SUPABASE_KEY)
     if args.events:
-        events = [(int(e), "") for e in args.events.split(",") if e.strip()]
+        events = [(int(e), "", None) for e in args.events.split(",") if e.strip()]
     else:
         events = upcoming_event_ids(sb, args.days_back, args.days_fwd)
 
     print(f"[entries] {len(events)} events to check")
-    total = 0
-    for eid, name in events:
+    today = date.today().isoformat()
+    total = removed = 0
+    for eid, name, starts in events:
         data = fetch_event_entries(eid)
         if not data:
             print(f"  {eid} {name}: no entries yet")
             continue
         rows = map_rows(data)
+        if not rows:
+            print(f"  {eid} {name}: nothing usable returned — left untouched")
+            continue
+        cutoff = rows[0]["last_updated"]        # map_rows stamps one time per event
         for i in range(0, len(rows), 500):
             sb.table("wtt_entries").upsert(rows[i:i + 500], on_conflict="event_id,sub_event,player_id").execute()
         total += len(rows)
         print(f"  {eid} {name}: {len(rows)} entries")
+
+        # Only for events still to come. Once an event has started its entry list is
+        # a historical record, and WTT may serve a reduced list afterwards — pruning
+        # then would erase who actually entered.
+        if starts is None or starts >= today:
+            removed += prune_withdrawals(sb, eid, name, cutoff, len(rows))
         time.sleep(0.4)
-    print(f"[entries] done — {total} rows upserted")
+    print(f"[entries] done — {total} rows upserted, {removed} withdrawn entries removed")
 
 
 if __name__ == "__main__":
