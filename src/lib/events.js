@@ -1,4 +1,19 @@
 import { supabase } from './supabase.js'
+import { ROSTER } from './topsRoster.js'
+
+// Which events had a TOPS athlete in them. "10 Indians went" reads differently when
+// three of them are on the programme, so the table marks those rows.
+export async function loadTopsEventIds(sportKey = 'tt') {
+  const ids = [...new Set((ROSTER[sportKey] || [])
+    .flatMap(e => (e.players || []).map(p => p.id))
+    .filter(Boolean))]
+  if (!ids.length) return new Set()
+
+  const { data, error } = await supabase
+    .from('india_player_matches').select('event_id').in('player_id', ids)
+  if (error) { console.error('tops event ids failed', error); return new Set() }
+  return new Set((data || []).map(r => r.event_id))
+}
 
 // ─── How hard was the draw ────────────────────────────────────────────────────
 
@@ -151,15 +166,20 @@ export async function loadEventDetail(eventId) {
 // separate side-by-side screen: sorting on points, difficulty or win rate answers the
 // question in one click and keeps every other event on screen as context.
 export const SORTS = {
-  date:      { label: 'Date',     get: e => e.last_date,          dir: 'desc', numeric: false },
+  date:      { label: 'Dates',    get: e => e.last_date,          dir: 'desc', numeric: false },
+  name:      { label: 'Tournament', get: e => e.event_name,       dir: 'asc',  numeric: false },
   athletes:  { label: 'Indians',  get: e => e.athletes,           dir: 'desc' },
   record:    { label: 'Win %',    get: e => e.winPct,             dir: 'desc' },
   points:    { label: 'Points',   get: e => e.contingent_points,  dir: 'desc' },
   // Lower median rank = stronger field, so "hardest first" ascends.
-  field:     { label: 'Field',    get: e => e.field_median_rank,  dir: 'asc'  },
+  field:     { label: 'Difficulty', get: e => e.field_median_rank, dir: 'asc' },
   countries: { label: 'Countries', get: e => e.field_countries,   dir: 'desc' },
   upsets:    { label: 'Upsets',   get: e => e.upsets_given,       dir: 'desc' },
 }
+
+// Newest first — what the table shows before anyone touches a column header, and what
+// the reset returns to.
+export const DEFAULT_SORT = { key: 'date', dir: 'desc' }
 
 export function sortEvents(events, key, dir) {
   const s = SORTS[key] || SORTS.date

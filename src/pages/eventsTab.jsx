@@ -1,17 +1,35 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { card, chip, T } from '../lib/ui.js'
-import { loadEventList, loadEventYears, loadEventDetail, SORTS, sortEvents, difficultyOf } from '../lib/events.js'
+import { loadEventList, loadEventYears, loadEventDetail, loadTopsEventIds,
+         SORTS, sortEvents, difficultyOf, DEFAULT_SORT } from '../lib/events.js'
 
 const WIN = '#12a150'
 const LOSS = '#dc2626'
 const GOLD = '#b8860b'
 
 const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-const fmtDate = d => {
-  if (!d) return ''
+const parts = d => {
+  if (!d) return null
   const [y, m, day] = String(d).split('-').map(Number)
-  return `${day} ${MON[(m || 1) - 1]} ${String(y).slice(2)}`
+  return { y, m, day }
+}
+const fmtDate = d => {
+  const p = parts(d)
+  return p ? `${p.day} ${MON[(p.m || 1) - 1]} ${String(p.y).slice(2)}` : ''
+}
+// "11–13 Aug 26" when a tournament stays in one month, "28 Jul – 2 Aug 26" when it
+// crosses one. Repeating the month on both sides of a three-day event is noise.
+const fmtRange = (from, to) => {
+  const a = parts(from), b = parts(to)
+  if (!a && !b) return ''
+  if (!a || !b) return fmtDate(from || to)
+  if (a.y === b.y && a.m === b.m) {
+    return a.day === b.day
+      ? `${a.day} ${MON[a.m - 1]} ${String(a.y).slice(2)}`
+      : `${a.day}–${b.day} ${MON[a.m - 1]} ${String(a.y).slice(2)}`
+  }
+  return `${a.day} ${MON[a.m - 1]} – ${b.day} ${MON[b.m - 1]} ${String(b.y).slice(2)}`
 }
 const clean = n => (n || '').replace(/\s+presented\s+by\s+.*/i, '').replace(/\s+20\d\d$/, '')
 
@@ -187,13 +205,14 @@ function EventDetail({ ev, onOpenPlayer }) {
 // ─── the tab ─────────────────────────────────────────────────────────────────
 
 const COLS = [
-  { key: 'name',      label: 'Tournament', sort: null,        align: 'left'  },
-  { key: 'athletes',  label: 'Indians',    sort: 'athletes',  align: 'right' },
-  { key: 'record',    label: 'Record',     sort: 'record',    align: 'right' },
+  { key: 'name',      label: 'Tournament', sort: 'name',      align: 'left'  },
+  { key: 'dates',     label: 'Dates',      sort: 'date',      align: 'left'  },
+  { key: 'athletes',  label: 'Indians',    sort: 'athletes',  align: 'right', sub: 'of total' },
+  { key: 'record',    label: 'record',     sort: 'record',    align: 'right', wl: true },
   { key: 'points',    label: 'Points',     sort: 'points',    align: 'right' },
-  { key: 'field',     label: 'Difficulty', sort: 'field',     align: 'right' },
+  { key: 'field',     label: 'Difficulty', sort: 'field',     align: 'right', sub: 'best · top25 · typical' },
   { key: 'countries', label: 'Countries',  sort: 'countries', align: 'right' },
-  { key: 'upsets',    label: 'Upsets',     sort: 'upsets',    align: 'right' },
+  { key: 'upsets',    label: 'Upsets',     sort: 'upsets',    align: 'right', sub: 'given · taken' },
 ]
 
 export default function EventsTab() {
@@ -203,17 +222,21 @@ export default function EventsTab() {
   const [year, setYear] = useState(null)
   const [showSenior, setShowSenior] = useState(true)
   const [showJunior, setShowJunior] = useState(true)
-  const [sortKey, setSortKey] = useState('date')
-  const [sortDir, setSortDir] = useState('desc')
+  const [sortKey, setSortKey] = useState(DEFAULT_SORT.key)
+  const [sortDir, setSortDir] = useState(DEFAULT_SORT.dir)
   const [open, setOpen] = useState(null)
+  const [tops, setTops] = useState(new Set())
+
+  const sorted = sortKey !== DEFAULT_SORT.key || sortDir !== DEFAULT_SORT.dir
 
   useEffect(() => {
     let c = false
     ;(async () => {
-      const ys = await loadEventYears()
+      const [ys, tp] = await Promise.all([loadEventYears(), loadTopsEventIds('tt')])
       if (c) return
       setYears(ys)
       setYear(ys[0] || null)
+      setTops(tp)
     })()
     return () => { c = true }
   }, [])
@@ -258,6 +281,20 @@ export default function EventsTab() {
                     padding: '14px 22px', borderBottom: `1px solid ${T.divider}` }}>
         {toggle(showSenior, setShowSenior, 'Senior', nSenior)}
         {toggle(showJunior, setShowJunior, 'Junior', nJunior)}
+
+        {/* Sorting is easy to enter and easy to forget you are in — without a way back,
+            a reader who sorted by points half a minute ago reads the list as if it were
+            chronological. Only shown while it applies. */}
+        {sorted && (
+          <button
+            onClick={() => { setSortKey(DEFAULT_SORT.key); setSortDir(DEFAULT_SORT.dir) }}
+            style={{ appearance: 'none', cursor: 'pointer', background: 'transparent',
+                     border: 'none', padding: '5px 4px', fontSize: 12,
+                     color: T.slate, textDecoration: 'underline' }}>
+            Sorted by {SORTS[sortKey]?.label ?? sortKey} — back to newest first
+          </button>
+        )}
+
         <span style={{ flex: 1 }} />
         <select value={year ?? ''} onChange={e => setYear(e.target.value)}
           style={{ fontSize: 12.5, padding: '5px 9px', border: `1px solid ${T.border}`,
@@ -287,8 +324,19 @@ export default function EventsTab() {
                           borderBottom: `1px solid ${T.border}`,
                           cursor: c.sort ? 'pointer' : 'default', userSelect: 'none',
                         }}>
-                        {c.label}
+                        {/* W and L carry their result colour in the header too, so the
+                            column reads as wins-then-losses without a legend. */}
+                        {c.wl
+                          ? <span><span style={{ color: WIN }}>W</span>
+                              <span style={{ color: T.muted }}>/</span>
+                              <span style={{ color: LOSS }}>L</span> {c.label}</span>
+                          : c.label}
                         {sortKey === c.sort && <span style={{ marginLeft: 4 }}>{sortDir === 'asc' ? '▲' : '▼'}</span>}
+                        {c.sub && (
+                          <span style={{ display: 'block', fontSize: 8.5, fontWeight: 500,
+                                         letterSpacing: '.02em', textTransform: 'none',
+                                         color: T.muted, marginTop: 1 }}>{c.sub}</span>
+                        )}
                       </th>
                     ))}
                     <th style={{ borderBottom: `1px solid ${T.border}`, width: 24 }}></th>
@@ -309,9 +357,11 @@ export default function EventsTab() {
                           <td style={{ padding: '10px 12px', borderBottom: isOpen ? 'none' : `1px solid ${T.divider}` }}>
                             <span style={{ fontWeight: 600, color: T.ink }}>{clean(e.event_name)}</span>
                             {e.isJunior && <span style={{ ...chip('#3730a3', { fontSize: 9, marginLeft: 7 }) }}>Junior</span>}
-                            <span style={{ display: 'block', fontSize: 11, color: T.muted, marginTop: 1 }}>
-                              {fmtDate(e.last_date)}
-                            </span>
+                            {tops.has(e.event_id) && <span style={{ ...chip(GOLD, { fontSize: 9, marginLeft: 5 }) }}>TOPS</span>}
+                          </td>
+                          <td className="tabnum" style={{ padding: '10px 12px', color: T.slate, whiteSpace: 'nowrap',
+                                                          borderBottom: isOpen ? 'none' : `1px solid ${T.divider}` }}>
+                            {fmtRange(e.first_date, e.last_date)}
                           </td>
                           <td className="tabnum" style={{ textAlign: 'right', padding: '10px 12px', borderBottom: isOpen ? 'none' : `1px solid ${T.divider}` }}>
                             {e.athletes}<span style={{ color: T.muted }}>/{e.field_players ?? '—'}</span>
@@ -325,19 +375,22 @@ export default function EventsTab() {
                           <td className="tabnum" style={{ textAlign: 'right', padding: '10px 12px', borderBottom: isOpen ? 'none' : `1px solid ${T.divider}` }}>
                             {e.contingent_points?.toLocaleString() ?? '—'}
                           </td>
-                          <td style={{ textAlign: 'right', padding: '10px 12px', borderBottom: isOpen ? 'none' : `1px solid ${T.divider}` }}>
+                          <td style={{ textAlign: 'right', padding: '10px 12px', whiteSpace: 'nowrap',
+                                       borderBottom: isOpen ? 'none' : `1px solid ${T.divider}` }}>
                             {(() => {
                               const d = difficultyOf(e.field_median_rank)
                               if (!d) return <span style={{ color: T.muted }}>—</span>
+                              // All three measures, not one with the others buried in a
+                              // tooltip: the best entrant says whether anyone elite came,
+                              // the top quarter describes the sharp end, the typical
+                              // entrant describes the draw a player actually faces.
                               return (
-                                <span title={`Typical entrant ranked #${e.field_median_rank}. `
-                                            + `Best in the draw #${e.field_best_rank}. `
-                                            + `Top quarter inside #${e.field_p25_rank}.`}>
+                                <>
                                   <span style={{ fontWeight: d.weight, color: T.ink }}>{d.label}</span>
-                                  <span className="tabnum" style={{ color: T.muted, marginLeft: 6 }}>
-                                    #{e.field_median_rank}
+                                  <span className="tabnum" style={{ display: 'block', fontSize: 11, color: T.muted, marginTop: 1 }}>
+                                    #{e.field_best_rank ?? '—'} · #{e.field_p25_rank ?? '—'} · #{e.field_median_rank}
                                   </span>
-                                </span>
+                                </>
                               )
                             })()}
                           </td>
@@ -356,7 +409,8 @@ export default function EventsTab() {
                         </tr>
                         {isOpen && (
                           <tr>
-                            <td colSpan={8} style={{ padding: '0 22px', background: 'rgba(0,0,0,0.015)',
+                            {/* COLS (8) plus the caret column = 9 */}
+                            <td colSpan={COLS.length + 1} style={{ padding: '0 22px', background: 'rgba(0,0,0,0.015)',
                                                      borderBottom: `1px solid ${T.divider}` }}>
                               <EventDetail ev={e} onOpenPlayer={id => navigate(`/player/${id}`)} />
                             </td>
