@@ -3,11 +3,10 @@ import { supabase } from '../lib/supabase.js'
 
 const card = { background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(15,23,42,0.08)', borderRadius: 14 }
 
-// tennisexplorer gives "Last First" — show "First Last" where safely possible
-function pretty(name) {
-  const parts = (name || '').trim().split(/\s+/)
-  return parts.length === 2 ? `${parts[1]} ${parts[0]}` : name
-}
+// Sort key: singles rank if the player has one, else doubles rank. Doubles specialists
+// (about half the Indian cohort) have no singles rank at all and would otherwise sink
+// to the bottom of the list.
+const sortRank = r => r.singles_rank ?? r.doubles_rank ?? 99999
 
 export default function TennisView() {
   const [rows, setRows] = useState([])
@@ -18,19 +17,28 @@ export default function TennisView() {
   useEffect(() => {
     let c = false
     ;(async () => {
-      const [{ data: rk }, { data: pl }] = await Promise.all([
-        supabase.from('tennis_rankings').select('tour, player_id, rank, points').order('rank'),
-        supabase.from('tennis_players').select('tour, player_id, name'),
+      // v_current_week_rank is everyone ranked in the latest published week — an
+      // indexed lookup rather than a scan of the 4.2M-row history.
+      const [{ data: pl }, { data: rk }] = await Promise.all([
+        supabase.from('tennis_players')
+          .select('player_id, name, nationality')
+          .eq('nationality', 'IND'),
+        supabase.from('v_current_week_rank')
+          .select('source, player_id, rank_date, singles_rank, singles_points, doubles_rank, doubles_points'),
       ])
-      const nm = Object.fromEntries((pl || []).map(p => [`${p.tour}|${p.player_id}`, p.name]))
-      const merged = (rk || []).map(r => ({ ...r, name: pretty(nm[`${r.tour}|${r.player_id}`] || r.player_id) }))
+
+      const nm = Object.fromEntries((pl || []).map(p => [p.player_id, p.name]))
+      const merged = (rk || [])
+        .filter(r => nm[r.player_id])          // Indians only
+        .map(r => ({ ...r, name: nm[r.player_id] }))
+        .sort((a, b) => sortRank(a) - sortRank(b))
       if (!c) { setRows(merged); setLoading(false) }
     })()
     return () => { c = true }
   }, [])
 
   const list = useMemo(() =>
-    rows.filter(r => r.tour === tour).filter(r => !q || r.name.toLowerCase().includes(q.toLowerCase())),
+    rows.filter(r => r.source === tour).filter(r => !q || r.name.toLowerCase().includes(q.toLowerCase())),
     [rows, tour, q])
 
   if (loading) return <div style={{ textAlign: 'center', padding: '60px 0', color: '#94a3b8' }}>Loading tennis rankings…</div>
@@ -38,7 +46,7 @@ export default function TennisView() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <p style={{ margin: '0 0 2px 2px', fontSize: 11, color: '#94a3b8' }}>
-        Indian players ranked on the ATP / WTA tour. Source: tennisexplorer. Match data and readiness scores come next.
+        Indian players on the ATP / WTA tour. Source: ATP official. Singles and doubles rank, updated weekly.
       </p>
       <div style={{ ...card, padding: '11px 16px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         {['ATP', 'WTA'].map(t => (
@@ -51,12 +59,21 @@ export default function TennisView() {
       </div>
       <div style={{ ...card, overflow: 'hidden' }}>
         {list.length === 0
-          ? <div style={{ padding: '30px 0', textAlign: 'center', color: '#cbd5e1', fontSize: 13 }}>No players.</div>
+          ? <div style={{ padding: '30px 0', textAlign: 'center', color: '#cbd5e1', fontSize: 13 }}>
+              {tour === 'WTA' && !q ? 'WTA data coming soon — ATP is live.' : 'No players.'}
+            </div>
           : list.map((r, i) => (
-              <div key={`${r.tour}-${r.player_id}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 16px', borderTop: i ? '1px solid #f1f5f9' : 'none' }}>
-                <span style={{ width: 52, fontSize: 15, fontWeight: 800, color: '#0f172a' }}>#{r.rank}</span>
+              <div key={`${r.source}-${r.player_id}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 16px', borderTop: i ? '1px solid #f1f5f9' : 'none' }}>
+                <span style={{ width: 52, fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
+                  {r.singles_rank ? `#${r.singles_rank}` : <span style={{ fontSize: 12, color: '#cbd5e1' }}>—</span>}
+                </span>
                 <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
-                <span style={{ fontSize: 12, color: '#94a3b8' }}>{r.points ?? '—'} pts</span>
+                <span style={{ fontSize: 11, color: '#94a3b8', width: 96, textAlign: 'right' }}>
+                  {r.doubles_rank ? `Dbl #${r.doubles_rank}` : ''}
+                </span>
+                <span style={{ fontSize: 12, color: '#94a3b8', width: 64, textAlign: 'right' }}>
+                  {r.singles_points ?? r.doubles_points ?? '—'} pts
+                </span>
               </div>
             ))}
       </div>

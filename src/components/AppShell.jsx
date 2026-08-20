@@ -61,7 +61,6 @@ export default function AppShell() {
             <NavItem key={s.key} to={`/sport/${s.key}`} label={s.name} />
           ))}
           <NavLabel>Tools</NavLabel>
-          <NavItem to="/results" label="Results" />
           <NavItem to="/okr" label="Profiles" />
           <NavItem to="/h2h" label="Compare" />
         </nav>
