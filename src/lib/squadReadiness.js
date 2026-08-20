@@ -80,6 +80,45 @@ export async function loadIndiaUpcomingEvents(limit = 6) {
   return data || []
 }
 
+// Which upcoming events have a squad athlete entered. Used to mark those rows —
+// "10 Indians are going" matters differently when 3 of them are yours.
+export async function loadSquadEventIds(playerIds) {
+  if (!playerIds?.length) return new Set()
+  const { data, error } = await supabase
+    .from('india_upcoming_entry_athletes')
+    .select('event_id, player_id')
+    .in('player_id', playerIds)
+  if (error) { console.error('squad event ids failed', error); return new Set() }
+  return new Set((data || []).map(d => d.event_id))
+}
+
+// One event's Indian athletes with the draws they are entered in. Fetched only when
+// a row is expanded, so the panel stays cheap for the common case.
+export async function loadEventAthletes(eventId, squadIds = []) {
+  const { data, error } = await supabase
+    .from('india_upcoming_entry_athletes')
+    .select('player_id, player_name, sub_event, is_junior')
+    .eq('event_id', eventId)
+  if (error) { console.error('event athletes failed', error); return [] }
+
+  const squad = new Set(squadIds.map(Number))
+  const byPlayer = new Map()
+  for (const r of data || []) {
+    const k = Number(r.player_id)
+    if (!byPlayer.has(k)) {
+      byPlayer.set(k, { id: k, name: r.player_name, junior: false, draws: [], squad: squad.has(k) })
+    }
+    const p = byPlayer.get(k)
+    p.junior = p.junior || r.is_junior
+    if (r.sub_event && !p.draws.includes(r.sub_event)) p.draws.push(r.sub_event)
+  }
+  // Squad first, then most draws, then alphabetical.
+  return [...byPlayer.values()]
+    .map(p => ({ ...p, draws: p.draws.sort() }))
+    .sort((a, b) => (b.squad - a.squad) || (b.draws.length - a.draws.length)
+                    || a.name.localeCompare(b.name))
+}
+
 // India-wide singles rank gainers this week (biggest rank improvements).
 export async function loadIndiaMovers(limit = 6) {
   const { data: latest } = await supabase.from('rankings_singles_normalized')

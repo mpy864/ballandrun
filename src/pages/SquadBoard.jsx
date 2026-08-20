@@ -1,5 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { loadEventAthletes } from '../lib/squadReadiness.js'
 import { ROSTER, DISCIPLINES } from '../lib/topsRoster.js'
 import { makeVerdict } from '../lib/verdict.js'
 import { okrLink } from '../lib/okrLink.js'
@@ -9,6 +10,79 @@ import { computeRetentionRisk } from '../lib/retention.js'
 import { card, chip, T } from '../lib/ui.js'
 
 const TIER_TONE = { Core: '#b45309', Development: '#166534', TAGG: '#3730a3' }
+const SQUAD_TONE = '#b45309'   // matches the Core tier accent
+
+// One upcoming event: headline counts, expanding to the Indian athletes entered and
+// the draws each is in. Athletes load on open — most rows are never expanded, and
+// pulling every entry up front is what makes a panel like this slow as entries grow.
+function UpcomingEvent({ e, hasSquad, squadIds, first }) {
+  const [open, setOpen] = useState(false)
+  const [rows, setRows] = useState(null)      // null = not fetched yet
+
+  async function toggle() {
+    const next = !open
+    setOpen(next)
+    if (next && rows === null) setRows(await loadEventAthletes(e.event_id, squadIds))
+  }
+
+  const parts = []
+  if (e.senior_athletes > 0 && e.junior_athletes > 0) {
+    parts.push(`${e.senior_athletes} senior`, `${e.junior_athletes} junior`)
+  } else if (e.junior_athletes > 0) {
+    parts.push('junior')
+  }
+
+  return (
+    <div style={{ borderTop: first ? 'none' : `1px solid ${T.divider}` }}>
+      <button
+        onClick={toggle}
+        onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(0,0,0,0.022)'}
+        onMouseLeave={ev => ev.currentTarget.style.background = 'transparent'}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+          width: '100%', textAlign: 'left', border: 'none', background: 'transparent',
+          cursor: 'pointer', padding: '12px 20px',
+          // A squad athlete in the draw is the thing worth spotting at a glance.
+          borderLeft: hasSquad ? `3px solid ${SQUAD_TONE}` : '3px solid transparent',
+        }}>
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 13.5, fontWeight: hasSquad ? 650 : 550, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {e.event_name.replace(/\s+20\d\d$/, '')}
+          </span>
+          <span style={{ fontSize: 12, color: T.muted }}>
+            <b style={{ color: T.slate, fontWeight: 700 }}>{e.athletes}</b>
+            {' '}athlete{e.athletes === 1 ? '' : 's'}
+            {parts.length ? ` · ${parts.join(', ')}` : ''}
+            {' · '}{e.entries} entr{e.entries === 1 ? 'y' : 'ies'}
+          </span>
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+          {hasSquad && <span style={chip(SQUAD_TONE, { fontSize: 9.5 })}>squad</span>}
+          <span className="tabnum" style={{ fontSize: 12.5, fontWeight: 600, color: T.slate }}>{fmtDate(e.start_date)}</span>
+          <span style={{ fontSize: 10, color: T.muted, width: 8 }}>{open ? '▾' : '▸'}</span>
+        </span>
+      </button>
+
+      {open && (
+        <div style={{ background: 'rgba(0,0,0,0.015)', padding: '2px 0 6px' }}>
+          {rows === null
+            ? <div style={{ padding: '8px 20px', fontSize: 12, color: T.muted }}>Loading…</div>
+            : rows.length === 0
+              ? <div style={{ padding: '8px 20px', fontSize: 12, color: T.muted }}>No Indian entries.</div>
+              : rows.map(p => (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '5px 20px' }}>
+                    <span style={{ fontSize: 12.5, fontWeight: p.squad ? 650 : 500, color: T.ink, minWidth: 132 }}>
+                      {p.name}
+                      {p.squad && <span style={{ color: SQUAD_TONE, fontWeight: 700 }}> ·</span>}
+                    </span>
+                    <span style={{ fontSize: 11.5, color: T.muted }}>{p.draws.join(' · ')}</span>
+                  </div>
+                ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const fmtDate = d => { if (!d) return ''; const [, m, day] = String(d).split('-').map(Number); return `${day} ${MON[(m || 1) - 1]}` }
@@ -16,7 +90,8 @@ const daysTo = d => Math.round((new Date(d) - new Date()) / 86400000)
 
 // The Squad dashboard for one sport: KPIs, readiness board, upcoming events,
 // India movers, and the watchlist. Typography-only, no icons.
-export default function SquadBoard({ sport, entries, lookup, scores, pairScores, watch = [], movers = [], upcoming = [], loading }) {
+export default function SquadBoard({ sport, entries, lookup, scores, pairScores, watch = [], movers = [],
+                                     upcoming = [], squadEventIds = new Set(), squadIds = [], loading }) {
   const navigate = useNavigate()
 
   const retention = useMemo(
@@ -135,30 +210,10 @@ export default function SquadBoard({ sport, entries, lookup, scores, pairScores,
             {sectionHead('Upcoming events', 'Indian athletes entered')}
             {loading ? <div style={{ padding: 20, color: T.muted, fontSize: 13 }}>…</div>
               : upcoming.length === 0 ? <div style={{ padding: 20, color: T.muted, fontSize: 13 }}>No Indian entries in the next 75 days.</div>
-              : upcoming.map((e, i) => {
-                // Senior/junior split only when both are present — a youth-only event
-                // saying "0 senior" is noise.
-                const parts = []
-                if (e.senior_athletes > 0 && e.junior_athletes > 0) {
-                  parts.push(`${e.senior_athletes} senior`, `${e.junior_athletes} junior`)
-                } else if (e.junior_athletes > 0) {
-                  parts.push('junior')
-                }
-                return (
-                  <div key={e.event_id ?? i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 20px', borderTop: i ? `1px solid ${T.divider}` : 'none' }}>
-                    <span style={{ minWidth: 0 }}>
-                      <span style={{ display: 'block', fontSize: 13.5, fontWeight: 550, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.event_name.replace(/\s+20\d\d$/, '')}</span>
-                      <span style={{ fontSize: 12, color: T.muted }}>
-                        <b style={{ color: T.slate, fontWeight: 700 }}>{e.athletes}</b>
-                        {' '}athlete{e.athletes === 1 ? '' : 's'}
-                        {parts.length ? ` · ${parts.join(', ')}` : ''}
-                        {' · '}{e.entries} entr{e.entries === 1 ? 'y' : 'ies'}
-                      </span>
-                    </span>
-                    <span className="tabnum" style={{ fontSize: 12.5, fontWeight: 600, color: T.slate, whiteSpace: 'nowrap' }}>{fmtDate(e.start_date)}</span>
-                  </div>
-                )
-              })}
+              : upcoming.map((e, i) => (
+                  <UpcomingEvent key={e.event_id ?? i} e={e} first={i === 0}
+                    hasSquad={squadEventIds.has(e.event_id)} squadIds={squadIds} />
+                ))}
           </div>
 
           {movers.length > 0 && (

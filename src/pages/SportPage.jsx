@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase.js'
 import { getSport, CATEGORIES, DISCIPLINES, ROSTER } from '../lib/topsRoster.js'
 import { makeVerdict } from '../lib/verdict.js'
 import { okrLink } from '../lib/okrLink.js'
-import { loadSquadReadiness, loadIndiaMovers, loadIndiaUpcomingEvents } from '../lib/squadReadiness.js'
+import { loadSquadReadiness, loadIndiaMovers, loadIndiaUpcomingEvents, loadSquadEventIds } from '../lib/squadReadiness.js'
 import { loadWatchlist } from '../lib/watchlist.js'
 import SquadBoard from './SquadBoard.jsx'
 import { TalentTab, CompareTab } from './sportTabs.jsx'
@@ -307,6 +307,7 @@ export default function SportPage() {
   const [watch, setWatch] = useState([])
   const [movers, setMovers] = useState([])
   const [upcoming, setUpcoming] = useState([])
+  const [squadEventIds, setSquadEventIds] = useState(new Set())
   const [loading, setLoading] = useState(true)
 
   const entries = ROSTER[sportKey] || []
@@ -337,6 +338,14 @@ export default function SportPage() {
     return [...s]
   }, [sportKey])
 
+  // Roster athletes only — no watchlist rivals. Includes youth/TAGG entries, which
+  // the readiness board skips but which are still squad for this purpose.
+  const squadIds = useMemo(() => {
+    const s = new Set()
+    for (const e of entries) for (const p of e.players || []) if (p.id) s.add(p.id)
+    return [...s]
+  }, [sportKey])
+
   const singlesIds = useMemo(() => {
     if (!sport?.live) return []
     const s = new Set()
@@ -361,10 +370,11 @@ export default function SportPage() {
         if (!cancelled) { setLookup(lookup); setScores(scores); setPairScores(pairScores) }
         // Watchlist + India movers are singles-ranking based → Table Tennis only for now.
         if (sportKey === 'tt') {
-          const [w, mv, ue] = await Promise.all([
+          const [w, mv, ue, sq] = await Promise.all([
             loadWatchlist(), loadIndiaMovers(6), loadIndiaUpcomingEvents(6),
+            loadSquadEventIds(squadIds),
           ])
-          if (!cancelled) { setWatch(w); setMovers(mv); setUpcoming(ue) }
+          if (!cancelled) { setWatch(w); setMovers(mv); setUpcoming(ue); setSquadEventIds(sq) }
         }
       } catch (e) { console.error('squad readiness failed', e) }
       if (!cancelled) setLoading(false)
@@ -433,7 +443,7 @@ export default function SportPage() {
           ) : loading ? (
             <div style={{ textAlign: 'center', padding: '80px 0', color: '#94a3b8', fontSize: 14 }}>Loading {sport.name}…</div>
           ) : tab === 'squad' ? (
-            <SquadBoard sport={sport} entries={entries} lookup={lookup} scores={scores} pairScores={pairScores} watch={watch} movers={movers} upcoming={upcoming} loading={loading} />
+            <SquadBoard sport={sport} entries={entries} lookup={lookup} scores={scores} pairScores={pairScores} watch={watch} movers={movers} upcoming={upcoming} squadEventIds={squadEventIds} squadIds={squadIds} loading={loading} />
           ) : tab === 'talent' ? (
             <TalentTab onOpen={id => navigate(okrLink({ level: 'Senior', kind: 'singles', id }))} navigate={navigate} />
           ) : tab === 'events' ? (
