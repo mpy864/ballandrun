@@ -15,31 +15,12 @@ export async function loadTopsEventIds(sportKey = 'tt') {
   return new Set((data || []).map(r => r.event_id))
 }
 
-// ─── How hard was the draw ────────────────────────────────────────────────────
-
-// A median rank on its own tells nobody anything: "#68" needs translating. These
-// four bands do it.
-//
-// The cut points are not arbitrary. Across 2026 they separate the season cleanly —
-// India won 32%, 52%, 55% and 61% of matches from hardest band to easiest — which is
-// the evidence that they land somewhere real rather than being drawn to look tidy.
-//
-// One caveat the label cannot carry: for a senior draw the median is a WORLD rank,
-// for a junior draw it is a position within that age band. The two distributions
-// happen to be near-identical (senior median-of-medians 159, junior 166), so the same
-// bands read sensibly on both — but they are answering "how deep into their own pool
-// does this field reach", not the same question.
-export const DIFFICULTY = [
-  { max: 50,       label: 'Elite',  weight: 700 },
-  { max: 150,      label: 'Hard',   weight: 650 },
-  { max: 300,      label: 'Medium', weight: 550 },
-  { max: Infinity, label: 'Open',   weight: 400 },
-]
-
-export function difficultyOf(medianRank) {
-  if (medianRank == null) return null
-  return DIFFICULTY.find(d => medianRank < d.max) || DIFFICULTY[DIFFICULTY.length - 1]
-}
+// Difficulty is shown as its three ranks — best in draw, top quarter, typical entrant
+// — and nothing else. An Elite/Hard/Medium/Open label used to sit on top of them, but
+// it was a judgement layered over figures that already say the same thing, and it
+// could not survive the caveat underneath: a senior median is a WORLD rank while a
+// junior median is a position within an age band, so one word cannot mean the same
+// thing in both rows.
 
 // ─── Event list ───────────────────────────────────────────────────────────────
 

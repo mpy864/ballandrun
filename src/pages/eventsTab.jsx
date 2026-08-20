@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { card, chip, T } from '../lib/ui.js'
 import { loadEventList, loadEventYears, loadEventDetail, loadTopsEventIds,
-         SORTS, sortEvents, difficultyOf, DEFAULT_SORT } from '../lib/events.js'
+         SORTS, sortEvents, DEFAULT_SORT } from '../lib/events.js'
 
 const WIN = '#12a150'
 const LOSS = '#dc2626'
@@ -50,15 +50,16 @@ function Section({ title, note, children }) {
 
 function UpsetRow({ r }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 46px 1fr', gap: 10,
-                  padding: '4px 0', fontSize: 12.5, alignItems: 'baseline' }}>
-      <span style={{ color: T.ink, fontWeight: 550 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '170px 42px 1fr', gap: 10,
+                  padding: '3px 0', fontSize: 12, alignItems: 'baseline' }}>
+      <span style={{ color: T.ink, fontWeight: 550, overflow: 'hidden',
+                     textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {r.player_name}
         {r.player_rank != null && <span style={{ color: T.muted, fontWeight: 400 }}> #{r.player_rank}</span>}
       </span>
       <span className="tabnum" style={{ textAlign: 'center', fontWeight: 700,
                                         color: r.won ? WIN : LOSS }}>{r.score}</span>
-      <span style={{ color: T.slate }}>
+      <span style={{ color: T.slate, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {r.opp_name}
         {r.opp_country && <span style={{ fontSize: 10.5, color: T.muted, marginLeft: 5 }}>{r.opp_country}</span>}
         {r.opp_rank != null && <span style={{ color: T.muted }}> #{r.opp_rank}</span>}
@@ -69,6 +70,10 @@ function UpsetRow({ r }) {
 
 function EventDetail({ ev, onOpenPlayer }) {
   const [d, setD] = useState(null)
+  // All matches stays shut. Europe Smash alone is 25 of them across five disciplines,
+  // and opening a row to be met by four screens of scorelines buries the summary that
+  // most readers came for.
+  const [showMatches, setShowMatches] = useState(false)
 
   useEffect(() => {
     let c = false
@@ -78,11 +83,15 @@ function EventDetail({ ev, onOpenPlayer }) {
 
   if (!d) return <div style={{ padding: '14px 2px', fontSize: 12.5, color: T.muted }}>Loading…</div>
 
-  const singles = d.players.filter(p => p.kind === 'singles')
-  const doubles = d.players.filter(p => p.kind !== 'singles')
+  // A single column with the discipline beside each name, rather than singles and
+  // doubles side by side: the two lists are never the same length, so the short one
+  // left a column of empty space next to the long one.
+  const entrants = d.players
 
   return (
-    <div style={{ padding: '14px 2px 20px' }}>
+    // Capped: the table is wide because it has eight columns, but prose and name lists
+    // read badly stretched across all of it.
+    <div style={{ padding: '14px 2px 20px', maxWidth: 940 }}>
 
       {/* header counts */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 30px', fontSize: 12.5, color: T.slate }}>
@@ -90,11 +99,10 @@ function EventDetail({ ev, onOpenPlayer }) {
           {' / '}<b style={{ color: T.ink }}>{ev.field_players ?? '—'}</b> total athletes</span>
         <span><b style={{ color: T.ink }}>{ev.field_countries ?? '—'}</b> countries</span>
         <span>
-          Difficulty <b style={{ color: T.ink }}>{difficultyOf(ev.field_median_rank)?.label ?? '—'}</b>
           <span style={{ color: T.muted }}>
-            {' — best in draw '}<b style={{ color: T.slate }}>#{ev.field_best_rank ?? '—'}</b>
-            {', top quarter inside '}<b style={{ color: T.slate }}>#{ev.field_p25_rank ?? '—'}</b>
-            {', typical entrant '}<b style={{ color: T.slate }}>#{ev.field_median_rank ?? '—'}</b>
+            {'Best in draw '}<b style={{ color: T.ink }}>#{ev.field_best_rank ?? '—'}</b>
+            {', top quarter inside '}<b style={{ color: T.ink }}>#{ev.field_p25_rank ?? '—'}</b>
+            {', typical entrant '}<b style={{ color: T.ink }}>#{ev.field_median_rank ?? '—'}</b>
           </span>
           {/* A median over a fraction of the draw is not the draw's median. Say so
               rather than presenting it as if every entrant were ranked. */}
@@ -105,49 +113,49 @@ function EventDetail({ ev, onOpenPlayer }) {
       </div>
 
       {/* deepest runs */}
-      <Section title="Best results" note="deepest round reached, and everyone from the semifinals on">
+      <Section title="Best results" note="deepest round, plus everyone from the semifinals on">
         {d.runs.length === 0
           ? <div style={{ fontSize: 12.5, color: T.muted }}>No completed runs.</div>
           : d.runs.map((p, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '112px 1fr 150px',
-                                  gap: 10, padding: '4px 0', fontSize: 12.5, alignItems: 'baseline' }}>
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '128px 1fr 132px',
+                                  gap: 12, padding: '3px 0', fontSize: 12.5, alignItems: 'baseline' }}>
               <span style={{ fontWeight: 700, color: p.depth >= 9 ? GOLD : T.ink }}>{p.round}</span>
               <span style={{ fontWeight: 550, color: T.ink }}>{p.name}</span>
-              <span style={{ color: T.muted }}>{p.discipline}</span>
+              <span style={{ color: T.muted, fontSize: 11.5 }}>{p.discipline}</span>
             </div>
           ))}
       </Section>
 
       {/* how far everyone got */}
       <Section title="Every entrant" note="round reached">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 28px' }}>
-          {[['Singles', singles], ['Doubles', doubles]].map(([label, list]) => (
-            <div key={label}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: T.slate, margin: '4px 0 3px' }}>{label}</div>
-              {list.length === 0
-                ? <div style={{ fontSize: 12, color: T.muted }}>—</div>
-                : list.map((p, i) => (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 96px 44px',
-                                        gap: 8, padding: '3px 0', fontSize: 12, alignItems: 'baseline' }}>
-                    <span
-                      onClick={() => p.kind === 'singles' && p.playerId && onOpenPlayer(p.playerId)}
-                      style={{ color: T.ink, cursor: p.kind === 'singles' && p.playerId ? 'pointer' : 'default',
-                               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {p.name}
-                      {p.rank != null && <span style={{ color: T.muted }}> #{p.rank}</span>}
-                    </span>
-                    <span style={{ color: T.slate }}>{p.round}</span>
-                    <span className="tabnum" style={{ color: T.muted, textAlign: 'right' }}>{p.w}–{p.l}</span>
-                  </div>
-                ))}
-            </div>
-          ))}
-        </div>
+        {entrants.map((p, i) => (
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '210px 128px 132px 40px',
+                                gap: 12, padding: '2px 0', fontSize: 12, alignItems: 'baseline' }}>
+            <span
+              onClick={() => p.kind === 'singles' && p.playerId && onOpenPlayer(p.playerId)}
+              style={{ color: T.ink, cursor: p.kind === 'singles' && p.playerId ? 'pointer' : 'default',
+                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {p.name}
+              {p.rank != null && <span style={{ color: T.muted }}> #{p.rank}</span>}
+            </span>
+            {/* nowrap: "Qualifying Round 3" was breaking across two lines and doubling
+                the height of half the list */}
+            <span style={{ color: T.slate, whiteSpace: 'nowrap' }}>{p.round}</span>
+            <span style={{ color: T.muted, fontSize: 11.5, overflow: 'hidden',
+                           textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.discipline}</span>
+            <span className="tabnum" style={{ color: T.muted, textAlign: 'right' }}>{p.w}–{p.l}</span>
+          </div>
+        ))}
       </Section>
 
-      {/* all matches */}
-      <Section title="All matches">
-        {d.groups.map(g => (
+      {/* all matches — behind a toggle */}
+      <Section title={`All matches · ${d.groups.reduce((n, g) => n + g.played, 0)}`}>
+        <button onClick={() => setShowMatches(v => !v)}
+          style={{ appearance: 'none', border: 'none', background: 'transparent', padding: 0,
+                   cursor: 'pointer', fontSize: 12, color: T.slate, textDecoration: 'underline' }}>
+          {showMatches ? 'Hide every scoreline' : 'Show every scoreline'}
+        </button>
+        {showMatches && d.groups.map(g => (
           <div key={g.discipline} style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 11.5, fontWeight: 600, color: T.ink, margin: '6px 0 2px' }}>
               {g.discipline}
@@ -156,11 +164,14 @@ function EventDetail({ ev, onOpenPlayer }) {
               <div key={r.round}>
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.05em',
                               textTransform: 'uppercase', color: T.muted, margin: '5px 0 1px' }}>{r.round}</div>
+                {/* Fixed widths, not 1fr: stretching name columns to fill an eight-column
+                    table pushed the game scores half a screen away from the result. */}
                 {r.matches.map(m => (
                   <div key={m.match_id} style={{ display: 'grid',
-                        gridTemplateColumns: '1fr 46px 1fr 148px', gap: 10, padding: '2px 0',
+                        gridTemplateColumns: '210px 46px 230px 1fr', gap: 12, padding: '2px 0',
                         fontSize: 12, alignItems: 'baseline' }}>
-                    <span style={{ color: T.ink, fontWeight: 550 }}>
+                    <span style={{ color: T.ink, fontWeight: 550, overflow: 'hidden',
+                                   textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {m.player_name}
                       {m.player_rank != null && <span style={{ color: T.muted, fontWeight: 400 }}> #{m.player_rank}</span>}
                     </span>
@@ -168,12 +179,13 @@ function EventDetail({ ev, onOpenPlayer }) {
                                                       color: m.won ? WIN : LOSS }}>
                       {m.score && m.score !== '0-0' ? m.score : '—'}
                     </span>
-                    <span style={{ color: T.slate }}>
+                    <span style={{ color: T.slate, overflow: 'hidden',
+                                   textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {m.opp_name}
                       {m.opp_country && <span style={{ fontSize: 10.5, color: T.muted, marginLeft: 5 }}>{m.opp_country}</span>}
                       {m.opp_rank != null && <span style={{ color: T.muted }}> #{m.opp_rank}</span>}
                     </span>
-                    <span className="tabnum" style={{ fontSize: 10.5, color: T.muted, textAlign: 'right',
+                    <span className="tabnum" style={{ fontSize: 10.5, color: T.muted,
                                                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {m.game_scores || ''}
                     </span>
@@ -219,7 +231,10 @@ export default function EventsTab() {
   const navigate = useNavigate()
   const [all, setAll] = useState(null)
   const [years, setYears] = useState([])
-  const [year, setYear] = useState(null)
+  // undefined = years not fetched yet; null = "All years"; a string = that season.
+  // These are three different states and collapsing the last two stopped All years
+  // ever loading.
+  const [year, setYear] = useState(undefined)
   const [showSenior, setShowSenior] = useState(true)
   const [showJunior, setShowJunior] = useState(true)
   const [sortKey, setSortKey] = useState(DEFAULT_SORT.key)
@@ -242,7 +257,7 @@ export default function EventsTab() {
   }, [])
 
   useEffect(() => {
-    if (year === null) return
+    if (year === undefined) return          // years not fetched yet
     let c = false
     setAll(null)
     ;(async () => { const e = await loadEventList({ year }); if (!c) setAll(e) })()
@@ -296,9 +311,13 @@ export default function EventsTab() {
         )}
 
         <span style={{ flex: 1 }} />
-        <select value={year ?? ''} onChange={e => setYear(e.target.value)}
+        {/* "All years" is what makes cross-season comparison possible: pick it, then
+            sort by points or difficulty and 2024, 2025 and 2026 rank against each
+            other in one list. A single-year filter can only ever answer one season. */}
+        <select value={year ?? ''} onChange={e => setYear(e.target.value || null)}
           style={{ fontSize: 12.5, padding: '5px 9px', border: `1px solid ${T.border}`,
                    background: 'transparent', color: T.ink, borderRadius: 0 }}>
+          <option value="">All years</option>
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
@@ -375,24 +394,19 @@ export default function EventsTab() {
                           <td className="tabnum" style={{ textAlign: 'right', padding: '10px 12px', borderBottom: isOpen ? 'none' : `1px solid ${T.divider}` }}>
                             {e.contingent_points?.toLocaleString() ?? '—'}
                           </td>
-                          <td style={{ textAlign: 'right', padding: '10px 12px', whiteSpace: 'nowrap',
+                          {/* Just the three ranks. The Elite/Hard/Medium/Open labels were
+                              a judgement stacked on top of the numbers, and the numbers
+                              already say it. */}
+                          <td className="tabnum" style={{ textAlign: 'right', padding: '10px 12px',
+                                       whiteSpace: 'nowrap', color: T.slate,
                                        borderBottom: isOpen ? 'none' : `1px solid ${T.divider}` }}>
-                            {(() => {
-                              const d = difficultyOf(e.field_median_rank)
-                              if (!d) return <span style={{ color: T.muted }}>—</span>
-                              // All three measures, not one with the others buried in a
-                              // tooltip: the best entrant says whether anyone elite came,
-                              // the top quarter describes the sharp end, the typical
-                              // entrant describes the draw a player actually faces.
-                              return (
-                                <>
-                                  <span style={{ fontWeight: d.weight, color: T.ink }}>{d.label}</span>
-                                  <span className="tabnum" style={{ display: 'block', fontSize: 11, color: T.muted, marginTop: 1 }}>
-                                    #{e.field_best_rank ?? '—'} · #{e.field_p25_rank ?? '—'} · #{e.field_median_rank}
-                                  </span>
-                                </>
-                              )
-                            })()}
+                            {e.field_median_rank == null
+                              ? <span style={{ color: T.muted }}>—</span>
+                              : <>#{e.field_best_rank ?? '—'}
+                                  <span style={{ color: T.muted }}> · </span>#{e.field_p25_rank ?? '—'}
+                                  <span style={{ color: T.muted }}> · </span>
+                                  <span style={{ color: T.ink, fontWeight: 600 }}>#{e.field_median_rank}</span>
+                                </>}
                           </td>
                           <td className="tabnum" style={{ textAlign: 'right', padding: '10px 12px', borderBottom: isOpen ? 'none' : `1px solid ${T.divider}` }}>
                             {e.field_countries ?? '—'}
