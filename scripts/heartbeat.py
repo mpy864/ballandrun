@@ -37,6 +37,9 @@ FEEDS = {
     # than about a job running. Every feed above can be green while the tables behind
     # them go stale — which is exactly what happened for 26 days in July 2026.
     "data-quality":  ("Data quality checks", 1560), # daily, after the sync
+    # The first ingest that reports in. Points publish weekly with the rankings, but it
+    # runs daily and is idempotent, so silence beyond a day means the job is stuck.
+    "wtt-ranking-points": ("WTT ranking points", 1560),
 }
 
 

@@ -44,6 +44,8 @@ jobs:
             cmd: fetch_youth_rankings.py
           - name: Upcoming entries
             cmd: fetch_entries.py --days-fwd 75
+          - name: Ranking points
+            cmd: fetch_ranking_points.py
 
     steps:
       - name: Checkout repo
