@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { card, chip, T } from '../lib/ui.js'
-import { loadEventList, loadEventYears, loadEventDetail, SORTS, sortEvents } from '../lib/events.js'
+import { loadEventList, loadEventYears, loadEventDetail, SORTS, sortEvents, difficultyOf } from '../lib/events.js'
 
 const WIN = '#12a150'
 const LOSS = '#dc2626'
@@ -71,11 +71,17 @@ function EventDetail({ ev, onOpenPlayer }) {
         <span><b style={{ color: T.ink }}>{ev.athletes}</b> Indian
           {' / '}<b style={{ color: T.ink }}>{ev.field_players ?? '—'}</b> total athletes</span>
         <span><b style={{ color: T.ink }}>{ev.field_countries ?? '—'}</b> countries</span>
-        <span>Field: best <b style={{ color: T.ink }}>#{ev.field_best_rank ?? '—'}</b>
-          {' · '}median <b style={{ color: T.ink }}>#{ev.field_median_rank ?? '—'}</b>
-          {' · '}top-25% <b style={{ color: T.ink }}>#{ev.field_p25_rank ?? '—'}</b>
+        <span>
+          Difficulty <b style={{ color: T.ink }}>{difficultyOf(ev.field_median_rank)?.label ?? '—'}</b>
+          <span style={{ color: T.muted }}>
+            {' — best in draw '}<b style={{ color: T.slate }}>#{ev.field_best_rank ?? '—'}</b>
+            {', top quarter inside '}<b style={{ color: T.slate }}>#{ev.field_p25_rank ?? '—'}</b>
+            {', typical entrant '}<b style={{ color: T.slate }}>#{ev.field_median_rank ?? '—'}</b>
+          </span>
+          {/* A median over a fraction of the draw is not the draw's median. Say so
+              rather than presenting it as if every entrant were ranked. */}
           {ev.rank_coverage_pct != null && ev.rank_coverage_pct < 80 &&
-            <span style={{ color: T.muted }}> ({ev.rank_coverage_pct}% ranked)</span>}
+            <span style={{ color: LOSS }}> · only {ev.rank_coverage_pct}% of the draw is ranked</span>}
         </span>
         <span>Points <b style={{ color: T.ink }}>{ev.contingent_points?.toLocaleString() ?? '—'}</b></span>
       </div>
@@ -185,7 +191,7 @@ const COLS = [
   { key: 'athletes',  label: 'Indians',    sort: 'athletes',  align: 'right' },
   { key: 'record',    label: 'Record',     sort: 'record',    align: 'right' },
   { key: 'points',    label: 'Points',     sort: 'points',    align: 'right' },
-  { key: 'field',     label: 'Field',      sort: 'field',     align: 'right' },
+  { key: 'field',     label: 'Difficulty', sort: 'field',     align: 'right' },
   { key: 'countries', label: 'Countries',  sort: 'countries', align: 'right' },
   { key: 'upsets',    label: 'Upsets',     sort: 'upsets',    align: 'right' },
 ]
@@ -319,11 +325,21 @@ export default function EventsTab() {
                           <td className="tabnum" style={{ textAlign: 'right', padding: '10px 12px', borderBottom: isOpen ? 'none' : `1px solid ${T.divider}` }}>
                             {e.contingent_points?.toLocaleString() ?? '—'}
                           </td>
-                          <td className="tabnum" style={{ textAlign: 'right', padding: '10px 12px', borderBottom: isOpen ? 'none' : `1px solid ${T.divider}` }}>
-                            {e.field_median_rank != null
-                              ? <span title={`best #${e.field_best_rank} · top-25% #${e.field_p25_rank}`}>
-                                  #{e.field_median_rank}</span>
-                              : '—'}
+                          <td style={{ textAlign: 'right', padding: '10px 12px', borderBottom: isOpen ? 'none' : `1px solid ${T.divider}` }}>
+                            {(() => {
+                              const d = difficultyOf(e.field_median_rank)
+                              if (!d) return <span style={{ color: T.muted }}>—</span>
+                              return (
+                                <span title={`Typical entrant ranked #${e.field_median_rank}. `
+                                            + `Best in the draw #${e.field_best_rank}. `
+                                            + `Top quarter inside #${e.field_p25_rank}.`}>
+                                  <span style={{ fontWeight: d.weight, color: T.ink }}>{d.label}</span>
+                                  <span className="tabnum" style={{ color: T.muted, marginLeft: 6 }}>
+                                    #{e.field_median_rank}
+                                  </span>
+                                </span>
+                              )
+                            })()}
                           </td>
                           <td className="tabnum" style={{ textAlign: 'right', padding: '10px 12px', borderBottom: isOpen ? 'none' : `1px solid ${T.divider}` }}>
                             {e.field_countries ?? '—'}
