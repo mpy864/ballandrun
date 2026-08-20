@@ -1,6 +1,5 @@
-import { useState, useEffect, useMemo } from 'react'
+﻿import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
 import { getSport, CATEGORIES, DISCIPLINES, ROSTER } from '../lib/topsRoster.js'
 import { makeVerdict } from '../lib/verdict.js'
 import { okrLink } from '../lib/okrLink.js'
@@ -8,16 +7,17 @@ import { loadSquadReadiness, loadIndiaMovers, loadIndiaUpcomingEvents, loadSquad
 import { loadWatchlist } from '../lib/watchlist.js'
 import SquadBoard from './SquadBoard.jsx'
 import { TalentTab, CompareTab } from './sportTabs.jsx'
+import EventsTab from './eventsTab.jsx'
 import TennisView from './tennisView.jsx'
 
-// ─── Atoms ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Atoms â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function RankMove({ diff }) {
   if (diff == null || diff === 0) return null
   const n = Number(diff)
   return n < 0
-    ? <span style={{ color: '#22c55e', fontSize: 10, fontWeight: 700 }}>▲{Math.abs(n)}</span>
-    : <span style={{ color: '#f87171', fontSize: 10, fontWeight: 700 }}>▼{n}</span>
+    ? <span style={{ color: '#22c55e', fontSize: 10, fontWeight: 700 }}>â–²{Math.abs(n)}</span>
+    : <span style={{ color: '#f87171', fontSize: 10, fontWeight: 700 }}>â–¼{n}</span>
 }
 
 function DiscBadge({ disc }) {
@@ -26,7 +26,7 @@ function DiscBadge({ disc }) {
     <span style={{
       fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 99,
       background: `${c}15`, color: c, border: `1px solid ${c}30`, letterSpacing: '0.05em', whiteSpace: 'nowrap',
-    }}>{disc?.short || '—'}</span>
+    }}>{disc?.short || 'â€”'}</span>
   )
 }
 
@@ -40,10 +40,10 @@ function TagPill({ v }) {
 }
 
 function ScoreNum({ score }) {
-  if (!score) return <span style={{ fontSize: 13, fontWeight: 800, color: '#cbd5e1' }}>—</span>
+  if (!score) return <span style={{ fontSize: 13, fontWeight: 800, color: '#cbd5e1' }}>â€”</span>
   const v = Number(score.score)
-  const tip = `Rank ${score.rank_pts}/45 · Trajectory ${score.traj_pts}/20 · Form ${score.form_pts}/35`
-    + (score.stale ? ' · STALE −10' : '')
+  const tip = `Rank ${score.rank_pts}/45 Â· Trajectory ${score.traj_pts}/20 Â· Form ${score.form_pts}/35`
+    + (score.stale ? ' Â· STALE âˆ’10' : '')
   return <span title={`Readiness ${v}/100\n${tip}`} style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>{v}</span>
 }
 
@@ -57,7 +57,7 @@ function cleanEventLabel(name) {
   return (name || '').replace(/\s+presented\s+by\s+.*/i, '').replace(/\s+20\d\d$/, '').trim()
 }
 
-// ─── Athlete / pair card (verdict-first) ─────────────────────────────────────
+// â”€â”€â”€ Athlete / pair card (verdict-first) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function EntryCard({ entry, lookup, score, live, onOpen, onOpenEntry }) {
   const [open, setOpen] = useState(false)
@@ -89,17 +89,17 @@ function EntryCard({ entry, lookup, score, live, onOpen, onOpenEntry }) {
               </span>
             )}
           </div>
-          {/* age · next tournament */}
+          {/* age Â· next tournament */}
           {live && score && (
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 3 }}>
               {score.age != null && <span>Age {score.age}</span>}
-              {score.age != null && ' · '}
+              {score.age != null && ' Â· '}
               {score.next
                 ? <span>Next: <b style={{ color: '#334155', fontWeight: 600 }}>{cleanEventLabel(score.next.name)}</b>
                     {' '}<span style={{ color: '#94a3b8' }}>
-                      {fmtShortDate(score.next.date)}{score.next.seed ? ` · seed ${score.next.seed}` : ''}{score.next.qual ? ' · Q' : ''}
+                      {fmtShortDate(score.next.date)}{score.next.seed ? ` Â· seed ${score.next.seed}` : ''}{score.next.qual ? ' Â· Q' : ''}
                     </span>
-                    {score.next.provisional && <span style={{ color: '#a855f7', fontStyle: 'italic' }}> · provisional</span>}</span>
+                    {score.next.provisional && <span style={{ color: '#a855f7', fontStyle: 'italic' }}> Â· provisional</span>}</span>
                 : <span style={{ color: '#94a3b8' }}>No upcoming entry</span>}
             </div>
           )}
@@ -108,13 +108,13 @@ function EntryCard({ entry, lookup, score, live, onOpen, onOpenEntry }) {
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
               {score.achievements.runs.map((r, i) => (
                 <span key={i} style={{ fontSize: 9.5, fontWeight: 700, color: '#0369a1', background: '#e0f2fe', border: '1px solid #bae6fd', padding: '2px 7px', borderRadius: 99 }}>
-                  {r.label} · {r.event}{r.year ? ` ${r.year}` : ''}
+                  {r.label} Â· {r.event}{r.year ? ` ${r.year}` : ''}
                 </span>
               ))}
               {score.achievements.bestWin && (
                 <span style={{ fontSize: 9.5, fontWeight: 700, color: '#15803d', background: '#dcfce7', border: '1px solid #bbf7d0', padding: '2px 7px', borderRadius: 99 }}>
                   beat #{score.achievements.bestWin.rank} {score.achievements.bestWin.name}
-                  {score.achievements.bestWin.event ? ` · ${score.achievements.bestWin.event}` : ''}
+                  {score.achievements.bestWin.event ? ` Â· ${score.achievements.bestWin.event}` : ''}
                   {score.achievements.bestWin.year ? ` ${score.achievements.bestWin.year}` : ''}
                 </span>
               )}
@@ -139,7 +139,7 @@ function EntryCard({ entry, lookup, score, live, onOpen, onOpenEntry }) {
               border: '1px solid #e2e8f0', cursor: 'pointer',
               background: open ? '#0f172a' : '#f8fafc', color: open ? '#fff' : '#475569',
             }}
-          >Watch · {watch.length}</button>
+          >Watch Â· {watch.length}</button>
         )}
       </div>
 
@@ -151,7 +151,7 @@ function EntryCard({ entry, lookup, score, live, onOpen, onOpenEntry }) {
           {watch.sort((a, b) => (a.rank || 9999) - (b.rank || 9999)).map(w => (
             <div key={w.id} onClick={() => onOpen(w.id)}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', cursor: 'pointer', borderTop: '1px solid #f1f5f9' }}>
-              <span style={{ width: 42, textAlign: 'center', fontSize: 13, fontWeight: 800, color: '#334155' }}>{w.rank ? `#${w.rank}` : '—'}</span>
+              <span style={{ width: 42, textAlign: 'center', fontSize: 13, fontWeight: 800, color: '#334155' }}>{w.rank ? `#${w.rank}` : 'â€”'}</span>
               <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: '#334155' }}>{w.name}</span>
               {w.country && <span style={{ fontSize: 9, fontWeight: 700, color: '#64748b', background: '#f1f5f9', padding: '2px 6px', borderRadius: 99 }}>{w.country}</span>}
             </div>
@@ -162,7 +162,7 @@ function EntryCard({ entry, lookup, score, live, onOpen, onOpenEntry }) {
   )
 }
 
-// ─── Youth (TAGG) card ────────────────────────────────────────────────────────
+// â”€â”€â”€ Youth (TAGG) card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const YOUTH_EVENT_COLOR = { BS: '#3b82f6', GS: '#ec4899', BD: '#8b5cf6', GD: '#f59e0b', XD: '#10b981' }
 
@@ -193,7 +193,7 @@ function YouthCard({ entry, onOpenEntry }) {
   )
 }
 
-// ─── Category column ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Category column â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function pairKey(players) {
   return (players || []).map(p => p.id).filter(Boolean).sort((a, b) => a - b).join('_')
@@ -234,61 +234,10 @@ function CategoryColumn({ cat, entries, lookup, scores, pairScores, live, onOpen
   )
 }
 
-// ─── Team-performance table ──────────────────────────────────────────────────
-
-function TeamPerformance({ rows }) {
-  if (!rows) return null
-  return (
-    <div style={{ background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(15,23,42,0.08)', borderRadius: 14, overflow: 'hidden', marginTop: 18 }}>
-      <div style={{ padding: '13px 18px', borderBottom: '1px solid #f1f5f9' }}>
-        <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a' }}>India — results by tournament</div>
-        <div style={{ fontSize: 11, color: '#94a3b8' }}>Singles, 2026 season · newest first</div>
-      </div>
-      {rows.length === 0
-        ? <div style={{ padding: '40px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No tournament data.</div>
-        : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead>
-                <tr style={{ background: '#f8fafc', color: '#64748b', textAlign: 'left' }}>
-                  <th style={{ padding: '8px 18px', fontWeight: 700 }}>Tournament</th>
-                  <th style={{ padding: '8px 10px', fontWeight: 700 }}>Date</th>
-                  <th style={{ padding: '8px 10px', fontWeight: 700, textAlign: 'center' }}>W–L</th>
-                  <th style={{ padding: '8px 18px', fontWeight: 700, width: 120 }}>Win %</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(r => {
-                  const losses = Number(r.matches) - Number(r.wins)
-                  const pct = Number(r.win_pct) || 0
-                  return (
-                    <tr key={r.event_id} style={{ borderTop: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '9px 18px', color: '#0f172a', fontWeight: 600 }}>{r.event_name}</td>
-                      <td style={{ padding: '9px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>{r.start_date || '—'}</td>
-                      <td style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 700, color: '#0f172a' }}>{r.wins}–{losses}</td>
-                      <td style={{ padding: '9px 18px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ flex: 1, height: 7, background: '#f1f5f9', borderRadius: 99, overflow: 'hidden' }}>
-                            <div style={{ width: `${pct}%`, height: '100%', background: pct >= 50 ? '#22c55e' : '#f59e0b' }} />
-                          </div>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: '#475569', width: 30, textAlign: 'right' }}>{pct}%</span>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-    </div>
-  )
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const TABS = [
-  { key: 'squad',   label: 'TOPS' },   // key stays 'squad' — internal, not shown
+  { key: 'squad',   label: 'TOPS' },   // key stays 'squad' â€” internal, not shown
   { key: 'talent',  label: 'Talent' },
   { key: 'events',  label: 'Events' },
   { key: 'compare', label: 'Compare' },
@@ -303,7 +252,6 @@ export default function SportPage() {
   const [lookup, setLookup] = useState({})
   const [scores, setScores] = useState({})
   const [pairScores, setPairScores] = useState({})
-  const [tournaments, setTournaments] = useState(null)
   const [watch, setWatch] = useState([])
   const [movers, setMovers] = useState([])
   const [upcoming, setUpcoming] = useState([])
@@ -318,7 +266,7 @@ export default function SportPage() {
     const disc = DISCIPLINES[entry.discipline] || {}
     const ids = (entry.players || []).map(p => p.id).filter(Boolean)
     if (entry.youth) {
-      // Youth cards are player-centric → youth-singles OKR profile.
+      // Youth cards are player-centric â†’ youth-singles OKR profile.
       if (ids[0]) return navigate(okrLink({ level: entry.age, kind: 'singles', id: ids[0] }))
       return
     }
@@ -338,7 +286,7 @@ export default function SportPage() {
     return [...s]
   }, [sportKey])
 
-  // Roster athletes only — no watchlist rivals. Includes youth/TAGG entries, which
+  // Roster athletes only â€” no watchlist rivals. Includes youth/TAGG entries, which
   // the readiness board skips but which are still squad for this purpose.
   const squadIds = useMemo(() => {
     const s = new Set()
@@ -360,15 +308,14 @@ export default function SportPage() {
     let cancelled = false
     async function load() {
       setLoading(true)
-      if (!cancelled) setTournaments(null)   // cleared per sport; Events tab refetches lazily
       if (!(sport.live && allIds.length)) {
-        if (!cancelled) { setLookup({}); setScores({}); setPairScores({}); setTournaments(null); setLoading(false) }
+        if (!cancelled) { setLookup({}); setScores({}); setPairScores({}); setLoading(false) }
         return
       }
       try {
         const { lookup, scores, pairScores } = await loadSquadReadiness(entries)
         if (!cancelled) { setLookup(lookup); setScores(scores); setPairScores(pairScores) }
-        // Watchlist + India movers are singles-ranking based → Table Tennis only for now.
+        // Watchlist + India movers are singles-ranking based â†’ Table Tennis only for now.
         if (sportKey === 'tt') {
           const [w, mv, ue, sq] = await Promise.all([
             loadWatchlist(), loadIndiaMovers(6), loadIndiaUpcomingEvents(6),
@@ -382,18 +329,6 @@ export default function SportPage() {
     load()
     return () => { cancelled = true }
   }, [sportKey])
-
-  // India tournament table is only for the Events tab — load it lazily (1.6s RPC),
-  // once, when the tab is first opened, so it never blocks the Squad.
-  useEffect(() => {
-    if (tab !== 'events' || !sport?.live || tournaments !== null) return
-    let cancelled = false
-    ;(async () => {
-      const { data } = await supabase.rpc('india_tournament_performance')
-      if (!cancelled) setTournaments(data || [])
-    })()
-    return () => { cancelled = true }
-  }, [tab, sportKey, tournaments])
 
   if (!sport) {
     return (
@@ -413,7 +348,7 @@ export default function SportPage() {
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
               <div>
                 <button onClick={() => navigate('/')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: 'var(--tops-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                  ← TOPS Intelligence
+                  â† TOPS Intelligence
                 </button>
                 <h1 style={{ margin: '4px 0 0', fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--tops-ink)' }}>{sport.name}</h1>
               </div>
@@ -441,13 +376,13 @@ export default function SportPage() {
           {sportKey === 'tennis' ? (
             <TennisView />
           ) : loading ? (
-            <div style={{ textAlign: 'center', padding: '80px 0', color: '#94a3b8', fontSize: 14 }}>Loading {sport.name}…</div>
+            <div style={{ textAlign: 'center', padding: '80px 0', color: '#94a3b8', fontSize: 14 }}>Loading {sport.name}â€¦</div>
           ) : tab === 'squad' ? (
             <SquadBoard sport={sport} entries={entries} lookup={lookup} scores={scores} pairScores={pairScores} watch={watch} movers={movers} upcoming={upcoming} squadEventIds={squadEventIds} squadIds={squadIds} loading={loading} />
           ) : tab === 'talent' ? (
             <TalentTab onOpen={id => navigate(okrLink({ level: 'Senior', kind: 'singles', id }))} navigate={navigate} />
           ) : tab === 'events' ? (
-            <TeamPerformance rows={tournaments} />
+            <EventsTab />
           ) : (
             <CompareTab navigate={navigate} />
           )}
