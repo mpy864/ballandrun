@@ -63,99 +63,114 @@ function Progression({ scale, players }) {
   const [hover, setHover] = useState(null)
   if (!scale.length || !players.length) return null
 
-  const LANE = 20, LEFT = 196, RIGHT = 128, TOP = 22
-  const cols = scale.length
-  const colW = 100 / cols                       // percent per round
+  const LANE = 20, LEFT = 178, TOP = 20
+  const colW = 100 / scale.length                // percent per round
   const at = depth => {                          // centre of a round's column, in %
     const i = scale.findIndex(s => s.depth === depth)
     return (i < 0 ? 0 : i) * colW + colW / 2
   }
 
+  // One block per event, in the order the loader already put them. The event name is a
+  // heading over its own lines rather than a column repeated beside every mark — the
+  // repetition was the caption competing with the thing it captioned.
+  const blocks = []
+  for (const p of players) {
+    if (!blocks.length || blocks[blocks.length - 1].discipline !== p.discipline)
+      blocks.push({ discipline: p.discipline, rows: [] })
+    blocks[blocks.length - 1].rows.push(p)
+  }
+
+  const Grid = () => scale.map(s => (
+    <span key={s.round} style={{
+      position: 'absolute', left: `${at(s.depth)}%`, top: 0, bottom: 0,
+      width: 1, background: 'rgba(0,0,0,0.05)',
+    }} />
+  ))
+
   return (
-    <div style={{ position: 'relative', background: '#fff', padding: '4px 0 2px' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: `${LEFT}px 1fr ${RIGHT}px`, gap: 12 }}>
+    <div style={{ position: 'relative', padding: '2px 0' }}>
+      {/* axis: deepest round at the right, so a longer bar is always a better run */}
+      <div style={{ display: 'grid', gridTemplateColumns: `${LEFT}px 1fr`, gap: 10 }}>
         <div />
-        {/* axis */}
         <div style={{ position: 'relative', height: TOP }}>
           {scale.map(s => (
             <span key={s.round} style={{
               position: 'absolute', left: `${at(s.depth)}%`, transform: 'translateX(-50%)',
-              fontSize: 9.5, fontWeight: 700, letterSpacing: '.04em',
+              fontSize: 9, fontWeight: 700, letterSpacing: '.03em',
               color: T.muted, whiteSpace: 'nowrap',
             }}>{shortRound(s.round)}</span>
           ))}
         </div>
-        <div />
       </div>
 
-      {players.map((p, i) => {
-        const x1 = at(p.fromDepth), x2 = at(p.depth)
-        const on = hover === i
-        // players arrives grouped by event, so the label goes on the first line of each
-        // block only. Printed on every line it became a column of repeated text next to
-        // the marks it was supposed to caption.
-        const first = i === 0 || players[i - 1].discipline !== p.discipline
-        return (
-          <div key={i}
-            onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}
-            style={{ display: 'grid', gridTemplateColumns: `${LEFT}px 1fr ${RIGHT}px`, gap: 12,
-                     alignItems: 'center', height: LANE, marginTop: first && i ? 10 : 0,
-                     background: on ? 'rgba(0,0,0,0.03)' : 'transparent' }}>
-            <span style={{ fontSize: 11.5, color: T.ink, overflow: 'hidden',
-                           textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>
-              {p.name}
-              {p.rank != null && <span style={{ color: T.muted }}> #{p.rank}</span>}
-            </span>
-
-            <div style={{ position: 'relative', height: LANE }}>
-              {/* hairline grid, solid, one step off surface */}
-              {scale.map(s => (
-                <span key={s.round} style={{
-                  position: 'absolute', left: `${at(s.depth)}%`, top: 0, bottom: 0,
-                  width: 1, background: 'rgba(0,0,0,0.05)',
-                }} />
-              ))}
-              {/* 2px connector, round cap */}
-              <span style={{
-                position: 'absolute', left: `${Math.min(x1, x2)}%`, width: `${Math.abs(x2 - x1)}%`,
-                top: '50%', height: 2, marginTop: -1, borderRadius: 2,
-                background: T.muted,
-              }} />
-              {/* entry: the lighter of the two shades */}
-              <span style={{
-                position: 'absolute', left: `${x1}%`, top: '50%',
-                width: 8, height: 8, marginLeft: -4, marginTop: -4, borderRadius: 99,
-                background: T.muted, boxShadow: '0 0 0 2px #fff',
-              }} />
-              {/* exit: the darker shade, or the status colour when the run ended in an upset */}
-              <span style={{
-                position: 'absolute', left: `${x2}%`, top: '50%',
-                width: 10, height: 10, marginLeft: -5, marginTop: -5, borderRadius: 99,
-                background: p.exitUpset ? LOSS : T.ink, boxShadow: '0 0 0 2px #fff',
-              }} />
-            </div>
-
-            <span style={{ fontSize: 10.5, color: T.muted, overflow: 'hidden',
-                           textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                           fontWeight: first ? 700 : 400 }}>{first ? p.discipline : ''}</span>
+      {blocks.map(b => (
+        <div key={b.discipline} style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.05em',
+                        textTransform: 'uppercase', color: T.ink, padding: '4px 0 3px' }}>
+            {b.discipline}
           </div>
-        )
-      })}
 
-      {hover != null && (
-        <div style={{ fontSize: 11.5, color: T.slate, padding: '7px 0 2px', marginLeft: LEFT + 12 }}>
-          <b style={{ color: T.ink }}>{players[hover].name}</b>
-          {' · '}{players[hover].discipline}
-          {' — entered at '}{players[hover].fromRound}
-          {', out at '}{players[hover].round}
-          {' · '}{players[hover].w}–{players[hover].l}
-          {players[hover].exitUpset && <span style={{ color: LOSS }}> · lost to a lower-ranked opponent</span>}
+          {b.rows.map(p => {
+            const id = `${p.name}||${p.discipline}`
+            const x1 = at(p.fromDepth), x2 = at(p.depth)
+            const on = hover === id
+            return (
+              <div key={id}
+                onMouseEnter={() => setHover(id)} onMouseLeave={() => setHover(null)}
+                style={{ display: 'grid', gridTemplateColumns: `${LEFT}px 1fr`, gap: 10,
+                         alignItems: 'center', height: LANE,
+                         background: on ? 'rgba(0,0,0,0.035)' : 'transparent' }}>
+                <span title={p.name}
+                  style={{ fontSize: 11, color: T.ink, overflow: 'hidden',
+                           textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>
+                  {p.name}
+                  {p.rank != null && <span style={{ color: T.muted }}> #{p.rank}</span>}
+                </span>
+
+                <div style={{ position: 'relative', height: LANE }}>
+                  <Grid />
+                  {/* 2px connector — its length IS the number of wins */}
+                  <span style={{
+                    position: 'absolute', left: `${Math.min(x1, x2)}%`, width: `${Math.abs(x2 - x1)}%`,
+                    top: '50%', height: 2, marginTop: -1, borderRadius: 2, background: T.muted,
+                  }} />
+                  {/* entered the draw */}
+                  <span style={{
+                    position: 'absolute', left: `${x1}%`, top: '50%',
+                    width: 8, height: 8, marginLeft: -4, marginTop: -4, borderRadius: 99,
+                    background: T.muted, boxShadow: '0 0 0 2px #fff',
+                  }} />
+                  {/* went out — status colour only when the exit was a loss to a lower rank */}
+                  <span style={{
+                    position: 'absolute', left: `${x2}%`, top: '50%',
+                    width: 10, height: 10, marginLeft: -5, marginTop: -5, borderRadius: 99,
+                    background: p.exitUpset ? LOSS : T.ink, boxShadow: '0 0 0 2px #fff',
+                  }} />
+                </div>
+              </div>
+            )
+          })}
         </div>
-      )}
+      ))}
 
-      <div style={{ fontSize: 10.5, color: T.muted, marginLeft: LEFT + 12, paddingTop: 6 }}>
-        Left dot is where they entered the draw, right dot where they went out.
-        <span style={{ color: LOSS, marginLeft: 6 }}>●</span> exit was a loss to a lower-ranked opponent.
+      {/* Reserved height: without it the caption jumped every time the pointer moved
+          onto a bar, which shifted the whole column under the reader's cursor. */}
+      <div style={{ fontSize: 11, color: T.slate, minHeight: 30, paddingTop: 4,
+                    borderTop: '1px solid rgba(0,0,0,0.07)' }}>
+        {hover
+          ? (() => {
+              const p = players.find(x => `${x.name}||${x.discipline}` === hover)
+              if (!p) return null
+              return <>
+                <b style={{ color: T.ink }}>{p.name}</b>
+                {' — in at '}{p.fromRound}{', out at '}{p.round}{' · '}{p.w}–{p.l}
+                {p.exitUpset && <span style={{ color: LOSS }}> · lost to a lower-ranked opponent</span>}
+              </>
+            })()
+          : <span style={{ color: T.muted }}>
+              Left dot = entered the draw, right dot = went out; bar length = wins.
+              <span style={{ color: LOSS, marginLeft: 5 }}>●</span> exit was a loss to a lower rank.
+            </span>}
       </div>
     </div>
   )
@@ -186,7 +201,7 @@ function EventDetail({ ev, onOpenPlayer }) {
   // All matches stays shut. Europe Smash alone is 25 of them across five disciplines,
   // and opening a row to be met by four screens of scorelines buries the summary that
   // most readers came for.
-  const [showMatches, setShowMatches] = useState(false)
+  const [showMatches, setShowMatches] = useState(true)
   // The chart is the default read; the list is the same numbers in a form that
   // survives a screen reader, a printout and colour blindness. Both stay reachable.
   const [asTable, setAsTable] = useState(false)
@@ -205,9 +220,10 @@ function EventDetail({ ev, onOpenPlayer }) {
   const entrants = d.players
 
   return (
-    // Capped: the table is wide because it has eight columns, but prose and name lists
-    // read badly stretched across all of it.
-    <div style={{ padding: '14px 2px 20px', maxWidth: 940 }}>
+    // Full width, not the old 940 cap: the point of this panel is that one tournament
+    // fits on one screen, and that only works if the chart and the scorelines can sit
+    // side by side instead of one below the other.
+    <div style={{ padding: '14px 2px 20px' }}>
 
       {/* header counts */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 30px', fontSize: 12.5, color: T.slate }}>
@@ -242,6 +258,11 @@ function EventDetail({ ev, onOpenPlayer }) {
           ))}
       </Section>
 
+      {/* The two detail panels, side by side. auto-fit means they stack by themselves on
+          a narrow screen rather than each being squeezed to half of nothing. */}
+      <div style={{ display: 'grid', gap: '0 32px', alignItems: 'start',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))' }}>
+
       {/* how far everyone got — chart by default, table always one click away */}
       <Section title="Every entrant" note={asTable ? 'round reached' : 'entered → went out'}>
         <button onClick={() => setAsTable(v => !v)}
@@ -254,8 +275,9 @@ function EventDetail({ ev, onOpenPlayer }) {
         {!asTable
           ? <Progression scale={d.scale} players={entrants} />
           : entrants.map((p, i) => (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: '210px 128px 132px 40px',
-                                gap: 12, padding: '2px 0', fontSize: 12, alignItems: 'baseline',
+          <div key={i} style={{ display: 'grid',
+                                gridTemplateColumns: 'minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr) 38px',
+                                gap: 10, padding: '2px 0', fontSize: 11.5, alignItems: 'baseline',
                                 // same event blocks as the chart, so the two views read alike
                                 marginTop: i && entrants[i - 1].discipline !== p.discipline ? 8 : 0 }}>
             <span
@@ -275,13 +297,18 @@ function EventDetail({ ev, onOpenPlayer }) {
         ))}
       </Section>
 
-      {/* all matches — behind a toggle */}
-      <Section title={`All matches · ${d.groups.reduce((n, g) => n + g.played, 0)}`}>
+      {/* every scoreline, in its own scroll pane beside the chart. It used to be shut by
+          default because 25 matches buried the summary underneath it; in a column of its
+          own it buries nothing, so it opens with the row. */}
+      <Section title={`All matches · ${d.groups.reduce((n, g) => n + g.played, 0)}`}
+               note="deepest round first">
         <button onClick={() => setShowMatches(v => !v)}
           style={{ appearance: 'none', border: 'none', background: 'transparent', padding: 0,
-                   cursor: 'pointer', fontSize: 12, color: T.slate, textDecoration: 'underline' }}>
+                   cursor: 'pointer', fontSize: 11.5, color: T.slate, textDecoration: 'underline',
+                   marginBottom: 6 }}>
           {showMatches ? 'Hide every scoreline' : 'Show every scoreline'}
         </button>
+        <div style={{ maxHeight: showMatches ? 560 : 0, overflowY: 'auto', overflowX: 'hidden' }}>
         {showMatches && d.groups.map(g => (
           <div key={g.discipline} style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 11.5, fontWeight: 600, color: T.ink, margin: '6px 0 2px' }}>
@@ -291,12 +318,13 @@ function EventDetail({ ev, onOpenPlayer }) {
               <div key={r.round}>
                 <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.05em',
                               textTransform: 'uppercase', color: T.muted, margin: '5px 0 1px' }}>{r.round}</div>
-                {/* Fixed widths, not 1fr: stretching name columns to fill an eight-column
-                    table pushed the game scores half a screen away from the result. */}
+                {/* Fluid now that this lives in half the width — fixed 210/46/230/1fr
+                    columns overflowed the pane. The game scores wrap rather than being
+                    clipped: a five-game scoreline is the one most worth reading. */}
                 {r.matches.map(m => (
                   <div key={m.match_id} style={{ display: 'grid',
-                        gridTemplateColumns: '210px 46px 230px 1fr', gap: 12, padding: '2px 0',
-                        fontSize: 12, alignItems: 'baseline' }}>
+                        gridTemplateColumns: 'minmax(0,1fr) 42px minmax(0,1.05fr) minmax(76px,0.7fr)',
+                        gap: 10, padding: '2px 0', fontSize: 11.5, alignItems: 'baseline' }}>
                     <span style={{ color: T.ink, fontWeight: 550, overflow: 'hidden',
                                    textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {m.player_name}
@@ -312,8 +340,8 @@ function EventDetail({ ev, onOpenPlayer }) {
                       {m.opp_country && <span style={{ fontSize: 10.5, color: T.muted, marginLeft: 5 }}>{m.opp_country}</span>}
                       {m.opp_rank != null && <span style={{ color: T.muted }}> #{m.opp_rank}</span>}
                     </span>
-                    <span className="tabnum" style={{ fontSize: 10.5, color: T.muted,
-                                                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span className="tabnum" style={{ fontSize: 10, color: T.muted,
+                                                      lineHeight: 1.35, wordBreak: 'break-word' }}>
                       {m.game_scores || ''}
                     </span>
                   </div>
@@ -322,10 +350,14 @@ function EventDetail({ ev, onOpenPlayer }) {
             ))}
           </div>
         ))}
+        </div>
       </Section>
 
+      </div>{/* end of the two detail columns */}
+
       {/* upsets last, as asked */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28 }}>
+      <div style={{ display: 'grid', gap: '0 32px',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))' }}>
         <Section title={`Upsets given · ${d.upsetsGiven.length}`} note="beat a better-ranked opponent">
           {d.upsetsGiven.length === 0
             ? <div style={{ fontSize: 12.5, color: T.muted }}>None.</div>

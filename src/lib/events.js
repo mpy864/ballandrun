@@ -114,17 +114,19 @@ export async function loadEventDetail(eventId) {
     }
     if (r.round_depth < e.fromDepth) { e.fromDepth = r.round_depth; e.fromRound = r.round }
   }
-  // Event first, then rank inside it. Sorting purely by depth mixed the five events
-  // together, so a Men's Doubles quarterfinal sat above a Women's Singles Round of 32
-  // that took twice as many wins — two different draws being read as one ladder.
-  // Grouped by event, every line in a block shares a draw and is comparable.
-  // Unranked entrants sink within their block: no rank is not rank zero.
+  // Event first, then deepest run first inside it — the pyramid: the best outcome of
+  // each draw sits at the top of its block and the qualifiers fall away below it.
+  // Sorting by depth ALONE was wrong for a different reason: it pooled five separate
+  // draws into one ladder, so a Men's Doubles quarterfinal sat above a Women's Singles
+  // Round of 32 that had taken twice as many wins. Grouped by event, every line in a
+  // block shares a draw and is comparable; rank breaks ties inside a round, and
+  // unranked entrants sink there — no rank is not rank zero.
   const players = [...byEntrant.values()].sort((a, b) =>
     disciplineOrder(a.discipline) - disciplineOrder(b.discipline) ||
     String(a.discipline).localeCompare(String(b.discipline)) ||
+    b.depth - a.depth ||
     (a.rank == null) - (b.rank == null) ||
     (a.rank ?? 0) - (b.rank ?? 0) ||
-    b.depth - a.depth ||
     String(a.name).localeCompare(String(b.name)))
 
   // The rounds this event actually had, in draw order. Built from the data rather than
@@ -172,7 +174,10 @@ export async function loadEventDetail(eventId) {
       rounds: [...rounds.values()].sort((a, b) => b.depth - a.depth),
       played: [...rounds.values()].reduce((n, r) => n + r.matches.length, 0),
     }))
-    .sort((a, b) => b.played - a.played)
+    // Same event order as the entrant chart beside it, not busiest-first: the two
+    // panels are read together, so they have to run down the page in step.
+    .sort((a, b) => disciplineOrder(a.discipline) - disciplineOrder(b.discipline) ||
+                    String(a.discipline).localeCompare(String(b.discipline)))
 
   return { runs, players, upsetsGiven, upsetsTaken, groups, scale }
 }
