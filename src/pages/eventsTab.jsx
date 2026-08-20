@@ -91,11 +91,15 @@ function Progression({ scale, players }) {
       {players.map((p, i) => {
         const x1 = at(p.fromDepth), x2 = at(p.depth)
         const on = hover === i
+        // players arrives grouped by event, so the label goes on the first line of each
+        // block only. Printed on every line it became a column of repeated text next to
+        // the marks it was supposed to caption.
+        const first = i === 0 || players[i - 1].discipline !== p.discipline
         return (
           <div key={i}
             onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}
             style={{ display: 'grid', gridTemplateColumns: `${LEFT}px 1fr ${RIGHT}px`, gap: 12,
-                     alignItems: 'center', height: LANE,
+                     alignItems: 'center', height: LANE, marginTop: first && i ? 10 : 0,
                      background: on ? 'rgba(0,0,0,0.03)' : 'transparent' }}>
             <span style={{ fontSize: 11.5, color: T.ink, overflow: 'hidden',
                            textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>
@@ -132,7 +136,8 @@ function Progression({ scale, players }) {
             </div>
 
             <span style={{ fontSize: 10.5, color: T.muted, overflow: 'hidden',
-                           textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.discipline}</span>
+                           textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                           fontWeight: first ? 700 : 400 }}>{first ? p.discipline : ''}</span>
           </div>
         )
       })}
@@ -140,6 +145,7 @@ function Progression({ scale, players }) {
       {hover != null && (
         <div style={{ fontSize: 11.5, color: T.slate, padding: '7px 0 2px', marginLeft: LEFT + 12 }}>
           <b style={{ color: T.ink }}>{players[hover].name}</b>
+          {' · '}{players[hover].discipline}
           {' — entered at '}{players[hover].fromRound}
           {', out at '}{players[hover].round}
           {' · '}{players[hover].w}–{players[hover].l}
@@ -249,7 +255,9 @@ function EventDetail({ ev, onOpenPlayer }) {
           ? <Progression scale={d.scale} players={entrants} />
           : entrants.map((p, i) => (
           <div key={i} style={{ display: 'grid', gridTemplateColumns: '210px 128px 132px 40px',
-                                gap: 12, padding: '2px 0', fontSize: 12, alignItems: 'baseline' }}>
+                                gap: 12, padding: '2px 0', fontSize: 12, alignItems: 'baseline',
+                                // same event blocks as the chart, so the two views read alike
+                                marginTop: i && entrants[i - 1].discipline !== p.discipline ? 8 : 0 }}>
             <span
               onClick={() => p.kind === 'singles' && p.playerId && onOpenPlayer(p.playerId)}
               style={{ color: T.ink, cursor: p.kind === 'singles' && p.playerId ? 'pointer' : 'default',

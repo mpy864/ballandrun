@@ -1,5 +1,6 @@
 import { supabase } from './supabase.js'
 import { ROSTER } from './topsRoster.js'
+import { disciplineOrder } from './matchFormat.js'
 
 // Which events had a TOPS athlete in them. "10 Indians went" reads differently when
 // three of them are on the programme, so the table marks those rows.
@@ -74,7 +75,11 @@ export async function loadEventDetail(eventId) {
     .limit(DETAIL_LIMIT)
 
   if (error) { console.error('event detail failed', error); return null }
-  const rows = data || []
+  // round_depth is a Postgres numeric, and PostgREST sends numerics as STRINGS to keep
+  // their precision — "10", "9", "1.03000000000000000000". Left as strings, `>` compares
+  // them character by character, so "10" > "9" is false and every finalist was recorded
+  // as having gone out in the semifinal. Coerce once, here, rather than at each use.
+  const rows = (data || []).map(r => ({ ...r, round_depth: Number(r.round_depth) }))
 
   // The largest event on record returns 969 rows, so the limit has ample headroom —
   // but a truncated fetch would quietly drop matches and understate every round and
@@ -109,7 +114,18 @@ export async function loadEventDetail(eventId) {
     }
     if (r.round_depth < e.fromDepth) { e.fromDepth = r.round_depth; e.fromRound = r.round }
   }
-  const players = [...byEntrant.values()].sort((a, b) => b.depth - a.depth || b.w - a.w)
+  // Event first, then rank inside it. Sorting purely by depth mixed the five events
+  // together, so a Men's Doubles quarterfinal sat above a Women's Singles Round of 32
+  // that took twice as many wins — two different draws being read as one ladder.
+  // Grouped by event, every line in a block shares a draw and is comparable.
+  // Unranked entrants sink within their block: no rank is not rank zero.
+  const players = [...byEntrant.values()].sort((a, b) =>
+    disciplineOrder(a.discipline) - disciplineOrder(b.discipline) ||
+    String(a.discipline).localeCompare(String(b.discipline)) ||
+    (a.rank == null) - (b.rank == null) ||
+    (a.rank ?? 0) - (b.rank ?? 0) ||
+    b.depth - a.depth ||
+    String(a.name).localeCompare(String(b.name)))
 
   // The rounds this event actually had, in draw order. Built from the data rather than
   // a fixed list so a Feeder with no Round of 128 shows no empty column for it.
@@ -120,9 +136,13 @@ export async function loadEventDetail(eventId) {
   // Headline runs: everyone who reached the deepest round of the whole event, plus
   // anyone who reached a semifinal or better even if someone else went further.
   // SEMI_DEPTH matches india_player_matches.round_depth, where Semifinal is 9.
+  // `players` is no longer in depth order, so take the maximum rather than the head of
+  // the list, and keep this section deepest-first — it is the one place that IS a ladder.
   const SEMI_DEPTH = 9
-  const top = players.length ? players[0].depth : -1
+  const top = players.reduce((m, p) => Math.max(m, p.depth), -1)
   const runs = players.filter(p => p.depth === top || p.depth >= SEMI_DEPTH)
+    .sort((a, b) => b.depth - a.depth ||
+                    disciplineOrder(a.discipline) - disciplineOrder(b.discipline))
 
   // ── upsets ──
   const upsetsGiven = rows.filter(r => r.upset_given)

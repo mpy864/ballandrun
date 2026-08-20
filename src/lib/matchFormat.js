@@ -60,6 +60,28 @@ export function hasScore(m) {
   return !!m && !!m.score && m.score !== '0-0'
 }
 
+// Draw order for the events inside a tournament, so the entrant list reads like an
+// order of play rather than a jumble. Labels in india_player_matches are an optional
+// age prefix plus the event: "Men's Singles", "U17 Girls' Singles", "U19 Mixed Doubles".
+// Seniors first, then the age bands oldest to youngest; inside each band, singles
+// before doubles and men before women. "Unknown" and "Mixed" — 233 rows whose
+// round_phase had no event segment — sink to the bottom rather than sorting under U.
+export function disciplineOrder(label = '') {
+  const band = /^U(\d+)\s/.exec(label)
+  // Senior = 0. U19 → 1 … U11 → 5, so higher age sits nearer the seniors.
+  const b = !band ? 0 : ({ 19: 1, 17: 2, 15: 3, 13: 4, 11: 5 }[Number(band[1])] ?? 8)
+
+  const rest = label.replace(/^U\d+\s+/, '')
+  const t =
+    /^Mixed Doubles/i.test(rest)          ? 4 :
+    /^(Men|Boys)'?s? Singles/i.test(rest) ? 0 :
+    /^(Women|Girls)'?s? Singles/i.test(rest) ? 1 :
+    /^(Men|Boys)'?s? Doubles/i.test(rest) ? 2 :
+    /^(Women|Girls)'?s? Doubles/i.test(rest) ? 3 : 7
+
+  return (b === 8 || t === 7 ? 90 : 0) + b * 10 + t
+}
+
 // Axis-length round names. "Qualifying Round 3" is eighteen characters and there may
 // be nine rounds across the width of a chart, so the axis gets the short form and the
 // tooltip keeps the full one.
