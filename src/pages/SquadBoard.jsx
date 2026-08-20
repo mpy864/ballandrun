@@ -42,8 +42,6 @@ function UpcomingEvent({ e, hasSquad, squadIds, first }) {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
           width: '100%', textAlign: 'left', border: 'none', background: 'transparent',
           cursor: 'pointer', padding: '12px 20px',
-          // A squad athlete in the draw is the thing worth spotting at a glance.
-          borderLeft: hasSquad ? `3px solid ${SQUAD_TONE}` : '3px solid transparent',
         }}>
         <span style={{ minWidth: 0 }}>
           <span style={{ display: 'block', fontSize: 13.5, fontWeight: hasSquad ? 650 : 550, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
