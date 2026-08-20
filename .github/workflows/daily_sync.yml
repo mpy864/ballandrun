@@ -122,3 +122,9 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: python -c "import os;from supabase import create_client;create_client(os.environ['SUPABASE_URL'],os.environ['SUPABASE_SERVICE_KEY']).rpc('refresh_india_tournament_mv').execute();print('tournament snapshot refreshed')"
+
+      # india_event_report is NOT refreshed here. It rebuilds ~50k as-of rank
+      # resolutions, which PostgREST cancels after ~8s, and statement_timeout cannot be
+      # raised from inside the call — it is armed when the outer statement begins.
+      # A pg_cron job runs it at 01:15 UTC instead, inside the database where no HTTP
+      # request is waiting. See migration 011.
