@@ -66,6 +66,20 @@ export function rosterPairKey(players) {
   return (players || []).map(p => p.id).filter(Boolean).sort((a, b) => a - b).join('_')
 }
 
+// Indian participation in upcoming events — every Indian athlete, senior and junior,
+// not just the scored squad. Reads the india_upcoming_entries view, which aggregates
+// in the database; counting distinct players here would mean pulling every Indian
+// entry row into the browser on each load.
+export async function loadIndiaUpcomingEvents(limit = 6) {
+  const { data, error } = await supabase
+    .from('india_upcoming_entries')
+    .select('event_id, event_name, start_date, days_away, athletes, entries, senior_athletes, junior_athletes')
+    .order('start_date', { ascending: true })
+    .limit(limit)
+  if (error) { console.error('upcoming india entries failed', error); return [] }
+  return data || []
+}
+
 // India-wide singles rank gainers this week (biggest rank improvements).
 export async function loadIndiaMovers(limit = 6) {
   const { data: latest } = await supabase.from('rankings_singles_normalized')

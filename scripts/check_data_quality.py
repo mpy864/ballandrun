@@ -185,6 +185,50 @@ def check_upstream_gap(db):
         fail("upstream gap", f"senior doubles: could not reach WTT — {type(e).__name__}: {e}")
 
 
+def check_entries(db):
+    """Entries are the one feed that must SHRINK as well as grow.
+
+    Players withdraw up to the first ball. The ingest was upsert-only until
+    2026-08-20, so withdrawals were never removed and counts only ever rose — WTT
+    Feeder Olomouc carried 25 phantom entries four days before it started, four of
+    them Indian athletes who had pulled out.
+
+    Two things can go wrong now, and neither shows up as a stale publish_date:
+      * the refresh stops running, so entries drift from reality
+      * an imminent event has no Indian entries at all, which is possible but is
+        much more often a sign the fetch is failing for it
+    """
+    print("\nentries")
+    try:
+        rows = (db.table("india_upcoming_entries")
+                .select("event_name,start_date,days_away,athletes,entries_refreshed_at")
+                .order("start_date").limit(20).execute().data or [])
+    except Exception as e:
+        fail("entries", f"could not read india_upcoming_entries: {type(e).__name__}: {e}")
+        return
+
+    if not rows:
+        fail("entries", "no Indian entries for any upcoming event — the fetch is not landing")
+        return
+
+    stale = [r for r in rows if (age_days(r.get("entries_refreshed_at")) or 99) > 2]
+    if stale:
+        worst = max(stale, key=lambda r: age_days(r["entries_refreshed_at"]) or 0)
+        fail("entries", f"{len(stale)} upcoming event(s) not refreshed in over 2 days "
+                        f"(worst: {worst['event_name']}, "
+                        f"{age_days(worst['entries_refreshed_at']):.0f}d)")
+    else:
+        ok(f"{len(rows)} upcoming events, all refreshed within 2 days")
+
+    imminent = [r for r in rows if (r.get("days_away") or 99) <= 7]
+    empty = [r for r in imminent if not r.get("athletes")]
+    if empty:
+        fail("entries", f"event(s) within 7 days with zero Indian entries: "
+                        f"{', '.join(r['event_name'] for r in empty)}")
+    elif imminent:
+        ok(f"{len(imminent)} event(s) within 7 days, all with Indian entries")
+
+
 def check_freshness(db):
     print("\nfreshness")
     for label, table, col, limit in FRESHNESS:
@@ -269,9 +313,10 @@ def main():
     if db is None:
         sys.exit("Missing SUPABASE_URL / SUPABASE_SERVICE_KEY")
 
-    if not args.publish_date:        # both are meaningless for a named past week
+    if not args.publish_date:        # all three are meaningless for a named past week
         check_freshness(db)
         check_upstream_gap(db)
+        check_entries(db)
 
     for table, subs in (("youth_rankings_singles", SINGLE_EVENTS),
                         ("youth_rankings_doubles", DOUBLES_EVENTS)):

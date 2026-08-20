@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase.js'
 import { getSport, CATEGORIES, DISCIPLINES, ROSTER } from '../lib/topsRoster.js'
 import { makeVerdict } from '../lib/verdict.js'
 import { okrLink } from '../lib/okrLink.js'
-import { loadSquadReadiness, loadIndiaMovers } from '../lib/squadReadiness.js'
+import { loadSquadReadiness, loadIndiaMovers, loadIndiaUpcomingEvents } from '../lib/squadReadiness.js'
 import { loadWatchlist } from '../lib/watchlist.js'
 import SquadBoard from './SquadBoard.jsx'
 import { TalentTab, CompareTab } from './sportTabs.jsx'
@@ -306,6 +306,7 @@ export default function SportPage() {
   const [tournaments, setTournaments] = useState(null)
   const [watch, setWatch] = useState([])
   const [movers, setMovers] = useState([])
+  const [upcoming, setUpcoming] = useState([])
   const [loading, setLoading] = useState(true)
 
   const entries = ROSTER[sportKey] || []
@@ -360,8 +361,10 @@ export default function SportPage() {
         if (!cancelled) { setLookup(lookup); setScores(scores); setPairScores(pairScores) }
         // Watchlist + India movers are singles-ranking based → Table Tennis only for now.
         if (sportKey === 'tt') {
-          const [w, mv] = await Promise.all([loadWatchlist(), loadIndiaMovers(6)])
-          if (!cancelled) { setWatch(w); setMovers(mv) }
+          const [w, mv, ue] = await Promise.all([
+            loadWatchlist(), loadIndiaMovers(6), loadIndiaUpcomingEvents(6),
+          ])
+          if (!cancelled) { setWatch(w); setMovers(mv); setUpcoming(ue) }
         }
       } catch (e) { console.error('squad readiness failed', e) }
       if (!cancelled) setLoading(false)
@@ -430,7 +433,7 @@ export default function SportPage() {
           ) : loading ? (
             <div style={{ textAlign: 'center', padding: '80px 0', color: '#94a3b8', fontSize: 14 }}>Loading {sport.name}…</div>
           ) : tab === 'squad' ? (
-            <SquadBoard sport={sport} entries={entries} lookup={lookup} scores={scores} pairScores={pairScores} watch={watch} movers={movers} loading={loading} />
+            <SquadBoard sport={sport} entries={entries} lookup={lookup} scores={scores} pairScores={pairScores} watch={watch} movers={movers} upcoming={upcoming} loading={loading} />
           ) : tab === 'talent' ? (
             <TalentTab onOpen={id => navigate(okrLink({ level: 'Senior', kind: 'singles', id }))} navigate={navigate} />
           ) : tab === 'events' ? (

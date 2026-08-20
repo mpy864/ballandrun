@@ -16,14 +16,14 @@ const daysTo = d => Math.round((new Date(d) - new Date()) / 86400000)
 
 // The Squad dashboard for one sport: KPIs, readiness board, upcoming events,
 // India movers, and the watchlist. Typography-only, no icons.
-export default function SquadBoard({ sport, entries, lookup, scores, pairScores, watch = [], movers = [], loading }) {
+export default function SquadBoard({ sport, entries, lookup, scores, pairScores, watch = [], movers = [], upcoming = [], loading }) {
   const navigate = useNavigate()
 
   const retention = useMemo(
     () => computeRetentionRisk({ entries, scores, pairScores, lookup }),
     [entries, scores, pairScores, lookup])
 
-  const { board, kpis, events } = useMemo(() => {
+  const { board, kpis } = useMemo(() => {
     const rows = []
     for (const e of entries || []) {
       if (e.youth) continue
@@ -53,19 +53,15 @@ export default function SquadBoard({ sport, entries, lookup, scores, pairScores,
       avg: rows.length ? Math.round(rows.reduce((s, r) => s + r.score, 0) / rows.length) : 0,
     }
 
-    const today = new Date().toISOString().slice(0, 10)
-    const evMap = {}
-    for (const r of rows) {
-      if (!r.next || r.next.date < today) continue
-      const k = `${r.next.name}__${r.next.date}`
-      if (!evMap[k]) evMap[k] = { name: r.next.name, date: r.next.date, count: 0 }
-      evMap[k].count++
-    }
-    const events = Object.values(evMap).sort((a, b) => a.date.localeCompare(b.date))
-    kpis.next = events[0] || null
-
-    return { board: rows, kpis, events: events.slice(0, 6) }
+    return { board: rows, kpis }
   }, [entries, lookup, scores, pairScores])
+
+  // Upcoming events come from the india_upcoming_entries view — every Indian athlete
+  // entered, senior and junior. This panel used to count how many of the scored SQUAD
+  // had each event as their NEXT fixture, so its numbers always summed to the squad
+  // size and were labelled "entered", which they never were: Almaty read 4 against 10
+  // Indians actually entered, and juniors were absent because the board skips them.
+  const nextEvent = upcoming[0] || null
 
   const open = (r) => navigate(r.kind === 'doubles' && r.ids.length === 2
     ? okrLink({ level: 'Senior', kind: 'doubles', ids: r.ids })
@@ -99,7 +95,7 @@ export default function SquadBoard({ sport, entries, lookup, scores, pairScores,
         <div style={{ width: 1, background: T.divider }} />
         <Kpi label="Avg readiness" value={kpis?.avg ?? '—'} sub="across squad" />
         <div style={{ width: 1, background: T.divider }} />
-        <Kpi label="Next event" value={kpis?.next ? `${daysTo(kpis.next.date)}d` : '—'} sub={kpis?.next ? kpis.next.name.replace(/\s+20\d\d$/, '') : '—'} />
+        <Kpi label="Next event" value={nextEvent ? `${daysTo(nextEvent.start_date)}d` : '—'} sub={nextEvent ? nextEvent.event_name.replace(/\s+20\d\d$/, '') : '—'} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) minmax(0, 1fr)', gap: 20, marginTop: 20, alignItems: 'start' }}>
@@ -136,18 +132,33 @@ export default function SquadBoard({ sport, entries, lookup, scores, pairScores,
         {/* right rail */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div style={{ ...card, overflow: 'hidden' }}>
-            {sectionHead('Upcoming events')}
+            {sectionHead('Upcoming events', 'Indian athletes entered')}
             {loading ? <div style={{ padding: 20, color: T.muted, fontSize: 13 }}>…</div>
-              : events.length === 0 ? <div style={{ padding: 20, color: T.muted, fontSize: 13 }}>No upcoming entries.</div>
-              : events.map((e, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 20px', borderTop: i ? `1px solid ${T.divider}` : 'none' }}>
-                  <span style={{ minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 13.5, fontWeight: 550, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name.replace(/\s+20\d\d$/, '')}</span>
-                    <span style={{ fontSize: 12, color: T.muted }}>{e.count} entered</span>
-                  </span>
-                  <span className="tabnum" style={{ fontSize: 12.5, fontWeight: 600, color: T.slate, whiteSpace: 'nowrap' }}>{fmtDate(e.date)}</span>
-                </div>
-              ))}
+              : upcoming.length === 0 ? <div style={{ padding: 20, color: T.muted, fontSize: 13 }}>No Indian entries in the next 75 days.</div>
+              : upcoming.map((e, i) => {
+                // Senior/junior split only when both are present — a youth-only event
+                // saying "0 senior" is noise.
+                const parts = []
+                if (e.senior_athletes > 0 && e.junior_athletes > 0) {
+                  parts.push(`${e.senior_athletes} senior`, `${e.junior_athletes} junior`)
+                } else if (e.junior_athletes > 0) {
+                  parts.push('junior')
+                }
+                return (
+                  <div key={e.event_id ?? i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 20px', borderTop: i ? `1px solid ${T.divider}` : 'none' }}>
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 13.5, fontWeight: 550, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.event_name.replace(/\s+20\d\d$/, '')}</span>
+                      <span style={{ fontSize: 12, color: T.muted }}>
+                        <b style={{ color: T.slate, fontWeight: 700 }}>{e.athletes}</b>
+                        {' '}athlete{e.athletes === 1 ? '' : 's'}
+                        {parts.length ? ` · ${parts.join(', ')}` : ''}
+                        {' · '}{e.entries} entr{e.entries === 1 ? 'y' : 'ies'}
+                      </span>
+                    </span>
+                    <span className="tabnum" style={{ fontSize: 12.5, fontWeight: 600, color: T.slate, whiteSpace: 'nowrap' }}>{fmtDate(e.start_date)}</span>
+                  </div>
+                )
+              })}
           </div>
 
           {movers.length > 0 && (
