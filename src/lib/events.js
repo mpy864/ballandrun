@@ -15,8 +15,8 @@ export async function loadTopsEventIds(sportKey = 'tt') {
   return new Set((data || []).map(r => r.event_id))
 }
 
-// Difficulty is shown as its three ranks — best in draw, top quarter, typical entrant
-// — and nothing else. An Elite/Hard/Medium/Open label used to sit on top of them, but
+// Difficulty is shown as its three ranks — best in draw, top quarter, median — and
+// nothing else. An Elite/Hard/Medium/Open label used to sit on top of them, but
 // it was a judgement layered over figures that already say the same thing, and it
 // could not survive the caveat underneath: a senior median is a WORLD rank while a
 // junior median is a position within an age band, so one word cannot mean the same

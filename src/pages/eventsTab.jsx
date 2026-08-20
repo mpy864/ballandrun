@@ -102,7 +102,7 @@ function EventDetail({ ev, onOpenPlayer }) {
           <span style={{ color: T.muted }}>
             {'Best in draw '}<b style={{ color: T.ink }}>#{ev.field_best_rank ?? '—'}</b>
             {', top quarter inside '}<b style={{ color: T.ink }}>#{ev.field_p25_rank ?? '—'}</b>
-            {', typical entrant '}<b style={{ color: T.ink }}>#{ev.field_median_rank ?? '—'}</b>
+            {', median '}<b style={{ color: T.ink }}>#{ev.field_median_rank ?? '—'}</b>
           </span>
           {/* A median over a fraction of the draw is not the draw's median. Say so
               rather than presenting it as if every entrant were ranked. */}
@@ -222,7 +222,7 @@ const COLS = [
   { key: 'athletes',  label: 'Indians',    sort: 'athletes',  align: 'right', sub: 'of total' },
   { key: 'record',    label: 'record',     sort: 'record',    align: 'right', wl: true },
   { key: 'points',    label: 'Points',     sort: 'points',    align: 'right' },
-  { key: 'field',     label: 'Difficulty', sort: 'field',     align: 'right', sub: 'best · top25 · typical' },
+  { key: 'field',     label: 'Difficulty', sort: 'field',     align: 'right', sub: 'best · top25 · median' },
   { key: 'countries', label: 'Countries',  sort: 'countries', align: 'right' },
   { key: 'upsets',    label: 'Upsets',     sort: 'upsets',    align: 'right', sub: 'given · taken' },
 ]
