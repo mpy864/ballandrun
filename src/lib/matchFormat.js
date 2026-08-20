@@ -59,3 +59,22 @@ export function gamesFor(m) {
 export function hasScore(m) {
   return !!m && !!m.score && m.score !== '0-0'
 }
+
+// Axis-length round names. "Qualifying Round 3" is eighteen characters and there may
+// be nine rounds across the width of a chart, so the axis gets the short form and the
+// tooltip keeps the full one.
+export function shortRound(round = '') {
+  const q = /^Qualifying Round\s+(\d+)/i.exec(round)
+  if (q) return `Q${q[1]}`
+  const g = /^Group\s+(\d+)/i.exec(round)
+  if (g) return `G${g[1]}`
+  const r = /^Round of\s+(\d+)/i.exec(round)
+  if (r) return `R${r[1]}`
+  return {
+    'Qualification Elimination Round': 'QER',
+    'Quarterfinal': 'QF', 'Quarterfinals': 'QF',
+    'Semifinal': 'SF', 'Semifinals': 'SF',
+    'Final': 'F', '3rd Place': '3rd', 'Bronze': '3rd',
+    'Preliminary': 'Prelim', 'Other': '—',
+  }[round] || round
+}

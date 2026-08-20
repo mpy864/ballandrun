@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { card, chip, T } from '../lib/ui.js'
 import { loadEventList, loadEventYears, loadEventDetail, loadTopsEventIds,
          SORTS, sortEvents, DEFAULT_SORT } from '../lib/events.js'
+import { shortRound } from '../lib/matchFormat.js'
 
 const WIN = '#12a150'
 const LOSS = '#dc2626'
@@ -48,6 +49,112 @@ function Section({ title, note, children }) {
   )
 }
 
+// ─── progression chart ───────────────────────────────────────────────────────
+
+// A dumbbell per entrant: where they joined the draw, where they went out.
+//
+// The form comes from the data's job — entry-to-exit per item — so it is one hue in
+// two shades, not a categorical palette. Colour is spent on exactly one thing: an
+// exit that was an upset, which is a status, not an identity.
+//
+// The table view below is not a fallback. It is the same numbers in a form that
+// survives a screen reader, a printout and colour blindness, and it stays reachable.
+function Progression({ scale, players }) {
+  const [hover, setHover] = useState(null)
+  if (!scale.length || !players.length) return null
+
+  const LANE = 20, LEFT = 196, RIGHT = 128, TOP = 22
+  const cols = scale.length
+  const colW = 100 / cols                       // percent per round
+  const at = depth => {                          // centre of a round's column, in %
+    const i = scale.findIndex(s => s.depth === depth)
+    return (i < 0 ? 0 : i) * colW + colW / 2
+  }
+
+  return (
+    <div style={{ position: 'relative', background: '#fff', padding: '4px 0 2px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `${LEFT}px 1fr ${RIGHT}px`, gap: 12 }}>
+        <div />
+        {/* axis */}
+        <div style={{ position: 'relative', height: TOP }}>
+          {scale.map(s => (
+            <span key={s.round} style={{
+              position: 'absolute', left: `${at(s.depth)}%`, transform: 'translateX(-50%)',
+              fontSize: 9.5, fontWeight: 700, letterSpacing: '.04em',
+              color: T.muted, whiteSpace: 'nowrap',
+            }}>{shortRound(s.round)}</span>
+          ))}
+        </div>
+        <div />
+      </div>
+
+      {players.map((p, i) => {
+        const x1 = at(p.fromDepth), x2 = at(p.depth)
+        const on = hover === i
+        return (
+          <div key={i}
+            onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}
+            style={{ display: 'grid', gridTemplateColumns: `${LEFT}px 1fr ${RIGHT}px`, gap: 12,
+                     alignItems: 'center', height: LANE,
+                     background: on ? 'rgba(0,0,0,0.03)' : 'transparent' }}>
+            <span style={{ fontSize: 11.5, color: T.ink, overflow: 'hidden',
+                           textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>
+              {p.name}
+              {p.rank != null && <span style={{ color: T.muted }}> #{p.rank}</span>}
+            </span>
+
+            <div style={{ position: 'relative', height: LANE }}>
+              {/* hairline grid, solid, one step off surface */}
+              {scale.map(s => (
+                <span key={s.round} style={{
+                  position: 'absolute', left: `${at(s.depth)}%`, top: 0, bottom: 0,
+                  width: 1, background: 'rgba(0,0,0,0.05)',
+                }} />
+              ))}
+              {/* 2px connector, round cap */}
+              <span style={{
+                position: 'absolute', left: `${Math.min(x1, x2)}%`, width: `${Math.abs(x2 - x1)}%`,
+                top: '50%', height: 2, marginTop: -1, borderRadius: 2,
+                background: T.muted,
+              }} />
+              {/* entry: the lighter of the two shades */}
+              <span style={{
+                position: 'absolute', left: `${x1}%`, top: '50%',
+                width: 8, height: 8, marginLeft: -4, marginTop: -4, borderRadius: 99,
+                background: T.muted, boxShadow: '0 0 0 2px #fff',
+              }} />
+              {/* exit: the darker shade, or the status colour when the run ended in an upset */}
+              <span style={{
+                position: 'absolute', left: `${x2}%`, top: '50%',
+                width: 10, height: 10, marginLeft: -5, marginTop: -5, borderRadius: 99,
+                background: p.exitUpset ? LOSS : T.ink, boxShadow: '0 0 0 2px #fff',
+              }} />
+            </div>
+
+            <span style={{ fontSize: 10.5, color: T.muted, overflow: 'hidden',
+                           textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.discipline}</span>
+          </div>
+        )
+      })}
+
+      {hover != null && (
+        <div style={{ fontSize: 11.5, color: T.slate, padding: '7px 0 2px', marginLeft: LEFT + 12 }}>
+          <b style={{ color: T.ink }}>{players[hover].name}</b>
+          {' — entered at '}{players[hover].fromRound}
+          {', out at '}{players[hover].round}
+          {' · '}{players[hover].w}–{players[hover].l}
+          {players[hover].exitUpset && <span style={{ color: LOSS }}> · lost to a lower-ranked opponent</span>}
+        </div>
+      )}
+
+      <div style={{ fontSize: 10.5, color: T.muted, marginLeft: LEFT + 12, paddingTop: 6 }}>
+        Left dot is where they entered the draw, right dot where they went out.
+        <span style={{ color: LOSS, marginLeft: 6 }}>●</span> exit was a loss to a lower-ranked opponent.
+      </div>
+    </div>
+  )
+}
+
 function UpsetRow({ r }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '170px 42px 1fr', gap: 10,
@@ -74,6 +181,9 @@ function EventDetail({ ev, onOpenPlayer }) {
   // and opening a row to be met by four screens of scorelines buries the summary that
   // most readers came for.
   const [showMatches, setShowMatches] = useState(false)
+  // The chart is the default read; the list is the same numbers in a form that
+  // survives a screen reader, a printout and colour blindness. Both stay reachable.
+  const [asTable, setAsTable] = useState(false)
 
   useEffect(() => {
     let c = false
@@ -126,9 +236,18 @@ function EventDetail({ ev, onOpenPlayer }) {
           ))}
       </Section>
 
-      {/* how far everyone got */}
-      <Section title="Every entrant" note="round reached">
-        {entrants.map((p, i) => (
+      {/* how far everyone got — chart by default, table always one click away */}
+      <Section title="Every entrant" note={asTable ? 'round reached' : 'entered → went out'}>
+        <button onClick={() => setAsTable(v => !v)}
+          style={{ appearance: 'none', border: 'none', background: 'transparent', padding: 0,
+                   cursor: 'pointer', fontSize: 11.5, color: T.slate, textDecoration: 'underline',
+                   marginBottom: 6 }}>
+          {asTable ? 'Show chart' : 'Show as table'}
+        </button>
+
+        {!asTable
+          ? <Progression scale={d.scale} players={entrants} />
+          : entrants.map((p, i) => (
           <div key={i} style={{ display: 'grid', gridTemplateColumns: '210px 128px 132px 40px',
                                 gap: 12, padding: '2px 0', fontSize: 12, alignItems: 'baseline' }}>
             <span

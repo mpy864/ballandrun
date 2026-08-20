@@ -83,23 +83,39 @@ export async function loadEventDetail(eventId) {
   if (rows.length >= DETAIL_LIMIT) {
     console.error(`event ${eventId}: hit the ${DETAIL_LIMIT}-row limit — results below are incomplete`)
   }
-  if (!rows.length) return { runs: [], players: [], upsetsGiven: [], upsetsTaken: [], groups: [] }
+  if (!rows.length) return { runs: [], players: [], upsetsGiven: [], upsetsTaken: [], groups: [], scale: [] }
 
   // ── how far each competitor went ──
+  // Entry as well as exit: doubles draws often start at the Round of 32 while singles
+  // start in qualifying, so where a competitor JOINED is half the story. A doubles
+  // "Quarterfinal" can be one win; a singles "Round of 32" can be four.
   const byEntrant = new Map()
   for (const r of rows) {
     const key = `${r.player_name}||${r.discipline}`
     let e = byEntrant.get(key)
     if (!e) {
       e = { name: r.player_name, playerId: r.player_id, discipline: r.discipline,
-            kind: r.kind, rank: r.player_rank, depth: -1, round: null, w: 0, l: 0 }
+            kind: r.kind, rank: r.player_rank,
+            depth: -Infinity, round: null, fromDepth: Infinity, fromRound: null,
+            w: 0, l: 0, exitUpset: false }
       byEntrant.set(key, e)
     }
     if (r.won) e.w++; else e.l++
     if (r.player_rank != null && (e.rank == null || r.player_rank < e.rank)) e.rank = r.player_rank
-    if (r.round_depth > e.depth) { e.depth = r.round_depth; e.round = r.round }
+    if (r.round_depth > e.depth) {
+      e.depth = r.round_depth; e.round = r.round
+      // Whether the run ENDED in an upset — lost to someone ranked below them.
+      e.exitUpset = !r.won && r.upset_taken
+    }
+    if (r.round_depth < e.fromDepth) { e.fromDepth = r.round_depth; e.fromRound = r.round }
   }
   const players = [...byEntrant.values()].sort((a, b) => b.depth - a.depth || b.w - a.w)
+
+  // The rounds this event actually had, in draw order. Built from the data rather than
+  // a fixed list so a Feeder with no Round of 128 shows no empty column for it.
+  const scale = [...new Map(rows.map(r => [r.round, r.round_depth])).entries()]
+    .map(([round, depth]) => ({ round, depth }))
+    .sort((a, b) => a.depth - b.depth)
 
   // Headline runs: everyone who reached the deepest round of the whole event, plus
   // anyone who reached a semifinal or better even if someone else went further.
@@ -138,7 +154,7 @@ export async function loadEventDetail(eventId) {
     }))
     .sort((a, b) => b.played - a.played)
 
-  return { runs, players, upsetsGiven, upsetsTaken, groups }
+  return { runs, players, upsetsGiven, upsetsTaken, groups, scale }
 }
 
 // ─── Sorting the table ────────────────────────────────────────────────────────
