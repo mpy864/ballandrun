@@ -288,7 +288,7 @@ function TeamPerformance({ rows }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { key: 'squad',   label: 'Squad' },
+  { key: 'squad',   label: 'TOPS' },   // key stays 'squad' — internal, not shown
   { key: 'talent',  label: 'Talent' },
   { key: 'events',  label: 'Events' },
   { key: 'compare', label: 'Compare' },

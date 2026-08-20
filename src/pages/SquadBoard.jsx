@@ -57,7 +57,7 @@ function UpcomingEvent({ e, hasSquad, squadIds, first }) {
           </span>
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
-          {hasSquad && <span style={chip(SQUAD_TONE, { fontSize: 9.5 })}>squad</span>}
+          {hasSquad && <span style={chip(SQUAD_TONE, { fontSize: 9.5 })}>TOPS</span>}
           <span className="tabnum" style={{ fontSize: 12.5, fontWeight: 600, color: T.slate }}>{fmtDate(e.start_date)}</span>
           <span style={{ fontSize: 10, color: T.muted, width: 8 }}>{open ? '▾' : '▸'}</span>
         </span>
@@ -168,7 +168,7 @@ export default function SquadBoard({ sport, entries, lookup, scores, pairScores,
         <div style={{ width: 1, background: T.divider }} />
         <Kpi label="Rising" value={kpis?.rising ?? '—'} sub="on the up" />
         <div style={{ width: 1, background: T.divider }} />
-        <Kpi label="Avg readiness" value={kpis?.avg ?? '—'} sub="across squad" />
+        <Kpi label="Avg readiness" value={kpis?.avg ?? '—'} sub="across TOPS" />
         <div style={{ width: 1, background: T.divider }} />
         <Kpi label="Next event" value={nextEvent ? `${daysTo(nextEvent.start_date)}d` : '—'} sub={nextEvent ? nextEvent.event_name.replace(/\s+20\d\d$/, '') : '—'} />
       </div>

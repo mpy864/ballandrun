@@ -14,7 +14,7 @@ export default function HomePage() {
         TOPS Intelligence
       </h1>
       <p style={{ margin: '8px 0 0', fontSize: 15, color: T.slate }}>
-        Select a sport to view its squad and podium readiness.
+        Select a sport to view its TOPS athletes and podium readiness.
       </p>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 28 }}>
