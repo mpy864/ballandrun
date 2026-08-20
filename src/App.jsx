@@ -12,6 +12,7 @@ import IndiaPage from './pages/IndiaPage.jsx'
 import ForecastPage from './pages/ForecastPage.jsx'
 import TopsPlatformPage from './pages/TopsPlatformPage.jsx'
 import HomePage from './pages/HomePage.jsx'
+import ResultsPage from './pages/ResultsPage.jsx'
 import SportPage from './pages/SportPage.jsx'
 import PairProfile from './pages/PairProfile.jsx'
 import PageBackground from './components/PageBackground.jsx'
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/platform" element={<TopsPlatformPage />} />
           <Route path="/rankings" element={<IndiaDashboard />} />
+          <Route path="/results" element={<ResultsPage />} />
           <Route path="/okr" element={<DynamicOKRDashboard />} />
           <Route path="/h2h" element={<H2HDashboard />} />
           <Route path="/youth" element={<YouthPipelinePage />} />
