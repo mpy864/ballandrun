@@ -37,6 +37,10 @@ from tg_common import get_db, record_health                      # noqa: E402
 # be missing from one of them for nineteen months.
 from fetch_youth_rankings import (BANDS, SINGLE_EVENTS, DOUBLES_EVENTS,   # noqa: E402
                                   latest_available_week, HEADERS as WTT_HEADERS)
+# Same rule for the event lists: the check asks about the events the ingests actually
+# fetch, so it reads their dicts rather than keeping a third copy that can drift.
+from fetch_matches import WTT_2026_EVENT_IDS                      # noqa: E402
+from fetch_ittf_matches import ITTF_2026_EVENTS                   # noqa: E402
 
 # Senior publish list. Served with Content-Encoding: br regardless of Accept-Encoding,
 # so `brotli` must be installed wherever this runs.
@@ -229,6 +233,71 @@ def check_entries(db):
         ok(f"{len(imminent)} event(s) within 7 days, all with Indian entries")
 
 
+EVENT_GRACE_DAYS = 4      # results settle a day or two after the last ball
+
+# Not "zero matches": London 2026 held 5 doubles rows for a 262-tie championship and
+# would have passed a zero test. Across the 90 listed events that have finished, every
+# properly ingested one has at least 60 matches and the only two below that are the
+# broken ones — 0 and 5. Anywhere in that gap is a safe floor.
+MIN_EVENT_MATCHES = 20
+
+
+def listed_events():
+    """Every event the two match ingests are told to fetch, as (id, name, end_date).
+
+    fetch_matches.py stores (name, end_date); fetch_ittf_matches.py stores
+    (name, start, end, base_url).
+    """
+    out = [(eid, v[0], v[1]) for eid, v in WTT_2026_EVENT_IDS.items()]
+    out += [(eid, v[0], v[2]) for eid, v in ITTF_2026_EVENTS.items()]
+    return out
+
+
+def check_finished_events(db):
+    """An event that finished and produced no matches at all.
+
+    Both ingests exit 0 whether or not they bring anything back, so an event can be
+    fetched every single day for a fortnight, 404 every time, and never be mentioned
+    again. Six had done exactly that before this check existed, and the largest was
+    the one that matters most: ITTF World Team Championships London 2026 — India's
+    biggest team event of the year, absent from the Events tab, absent from every
+    player's record, and nothing anywhere said so.
+
+    Its cause is worth writing down, because the check cannot fix it: event 3216 sits
+    in the ITTF list, which reads results.ittf.com, and that host has no TTE3216 —
+    every request returns BlobNotFound. WTT's own API does have the event, but only as
+    262 team ties, not the individual rubbers underneath them.
+    """
+    print("\nfinished events")
+    today = date.today()
+    due = [(eid, name, end) for eid, name, end in listed_events()
+           if end and (today - date.fromisoformat(end)).days > EVENT_GRACE_DAYS]
+    if not due:
+        ok("no finished events to check yet")
+        return
+
+    empty = []
+    for eid, name, end in due:
+        n = 0
+        try:
+            for table in ("wtt_matches_singles", "wtt_matches_doubles"):
+                n += (db.table(table).select("match_id", count="exact")
+                      .eq("event_id", eid).limit(1).execute().count or 0)
+        except Exception as e:
+            fail("finished events", f"could not count matches for {eid}: {type(e).__name__}: {e}")
+            continue
+        if n < MIN_EVENT_MATCHES:
+            empty.append((eid, name, end, n))
+
+    if empty:
+        empty.sort(key=lambda r: r[2])
+        for eid, name, end, n in empty:
+            fail("finished events",
+                 f"{name} ({eid}) ended {end} with {n} match(es)")
+    else:
+        ok(f"{len(due)} finished events, all with matches")
+
+
 def check_freshness(db):
     print("\nfreshness")
     for label, table, col, limit in FRESHNESS:
@@ -317,6 +386,7 @@ def main():
         check_freshness(db)
         check_upstream_gap(db)
         check_entries(db)
+        check_finished_events(db)
 
     for table, subs in (("youth_rankings_singles", SINGLE_EVENTS),
                         ("youth_rankings_doubles", DOUBLES_EVENTS)):
