@@ -134,8 +134,17 @@ export default function SquadBoard({ sport, entries, lookup, scores, pairScores,
   // mixed event answers to both switches rather than being forced into one.
   const nSenior = (upcoming || []).filter(e => e.senior_athletes > 0).length
   const nJunior = (upcoming || []).filter(e => e.junior_athletes > 0).length
-  const shownEvents = (upcoming || []).filter(e =>
+  const matching = (upcoming || []).filter(e =>
     (showSenior && e.senior_athletes > 0) || (showJunior && e.junior_athletes > 0))
+
+  // The loader now returns the whole 75-day window rather than a screenful, so the
+  // switches above count something true. The rail still opens at a readable height and
+  // says plainly how much it is holding back — a list that silently stops at six is how
+  // the filter came to be wrong in the first place.
+  const [allEvents, setAllEvents] = useState(false)
+  const EVENT_PREVIEW = 8
+  const shownEvents = allEvents ? matching : matching.slice(0, EVENT_PREVIEW)
+  const hiddenEvents = matching.length - shownEvents.length
 
   const open = (r) => navigate(r.kind === 'doubles' && r.ids.length === 2
     ? okrLink({ level: 'Senior', kind: 'doubles', ids: r.ids })
@@ -222,6 +231,18 @@ export default function SquadBoard({ sport, entries, lookup, scores, pairScores,
                   <UpcomingEvent key={e.event_id ?? i} e={e} first={i === 0}
                     hasSquad={squadEventIds.has(e.event_id)} squadIds={squadIds} />
                 ))}
+            {(hiddenEvents > 0 || allEvents) && (
+              <button onClick={() => setAllEvents(v => !v)}
+                onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(0,0,0,0.022)'}
+                onMouseLeave={ev => ev.currentTarget.style.background = 'transparent'}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
+                  border: 'none', borderTop: `1px solid ${T.divider}`, background: 'transparent',
+                  padding: '10px 20px', fontSize: 12, fontWeight: 600, color: T.slate,
+                }}>
+                {allEvents ? 'Show fewer' : `${hiddenEvents} more`}
+              </button>
+            )}
           </div>
 
           {movers.length > 0 && (

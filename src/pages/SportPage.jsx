@@ -318,7 +318,7 @@ export default function SportPage() {
         // Watchlist + India movers are singles-ranking based â†’ Table Tennis only for now.
         if (sportKey === 'tt') {
           const [w, mv, ue, sq] = await Promise.all([
-            loadWatchlist(), loadIndiaMovers(6), loadIndiaUpcomingEvents(6),
+            loadWatchlist(), loadIndiaMovers(6), loadIndiaUpcomingEvents(),
             loadSquadEventIds(squadIds),
           ])
           if (!cancelled) { setWatch(w); setMovers(mv); setUpcoming(ue); setSquadEventIds(sq) }

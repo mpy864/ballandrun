@@ -70,7 +70,12 @@ export function rosterPairKey(players) {
 // not just the scored squad. Reads the india_upcoming_entries view, which aggregates
 // in the database; counting distinct players here would mean pulling every Indian
 // entry row into the browser on each load.
-export async function loadIndiaUpcomingEvents(limit = 6) {
+// The default fetches the whole window, not a screenful. A Senior/Junior filter over a
+// truncated list silently lies: with the old limit of 6 there were 18 events in the view,
+// and choosing Junior showed whichever juniors happened to fall in the first six by date
+// rather than the nine that exist. How many rows to DISPLAY is the panel's decision;
+// how many exist is not.
+export async function loadIndiaUpcomingEvents(limit = 60) {
   const { data, error } = await supabase
     .from('india_upcoming_entries')
     .select('event_id, event_name, start_date, days_away, athletes, entries, senior_athletes, junior_athletes')
