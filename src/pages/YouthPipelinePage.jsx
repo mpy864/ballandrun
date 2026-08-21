@@ -112,14 +112,14 @@ function Top64Chart({ ageGroup }) {
 
       // Find players who were ever in top 64
       const inTop64 = new Set(
-        rows.filter(r => (r.age_cat_rank || r.current_rank) <= 64).map(r => r.id)
+        rows.filter(r => r.age_cat_rank <= 64).map(r => r.id)
       )
       const top64Rows = rows.filter(r => inTop64.has(r.id))
 
       // Unique players sorted by best rank
       const playerMap = {}
       for (const r of top64Rows) {
-        const rank = r.age_cat_rank || r.current_rank
+        const rank = r.age_cat_rank
         if (!playerMap[r.id]) playerMap[r.id] = { id: r.id, name: r.name, best: 9999 }
         if (rank < playerMap[r.id].best) playerMap[r.id].best = rank
       }
@@ -130,7 +130,7 @@ function Top64Chart({ ageGroup }) {
       for (const r of top64Rows) {
         const d = r.publish_date
         if (!byDate[d]) byDate[d] = { date: d }
-        byDate[d][r.id] = r.age_cat_rank || r.current_rank
+        byDate[d][r.id] = r.age_cat_rank
       }
       const formatted = Object.values(byDate)
         .sort((a, b) => a.date.localeCompare(b.date))
@@ -281,7 +281,7 @@ function SparkLine({ data }) {
 
 function PlayerCard({ player, isDoubles, onClick, selected }) {
   const badge = PIPELINE_BADGE[player.age_category] || PIPELINE_BADGE.U11
-  const rank  = player.age_cat_rank || player.current_rank
+  const rank  = player.age_cat_rank
   const diff  = player.rank_diff
   const name  = isDoubles
     ? `${player.player_name1} / ${player.player_name2}`
@@ -333,8 +333,11 @@ function PlayerCard({ player, isDoubles, onClick, selected }) {
           )}
         </div>
         <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+          {/* The rank of the band you are looking at. current_rank is WTT's position in
+              the whole youth list — that is the U19 number, so on a U17 screen it named
+              a different competition than the one on the card. */}
           <div style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 }}>World Rank</div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>#{player.current_rank ?? '—'}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>#{rank ?? '—'}</div>
         </div>
       </div>
 
@@ -521,13 +524,12 @@ function PlayerProfile({ player, isDoubles, onClose }) {
 
   const chartData = history.map(h => ({
     label: `W${h.ranking_week}/${h.ranking_year}`,
-    rank:  h.age_cat_rank || h.current_rank,
-    world: h.current_rank,
+    rank:  h.age_cat_rank,
   })).filter(d => d.rank)
 
-  const bestRank  = history.length ? Math.min(...history.map(h => h.age_cat_rank || h.current_rank).filter(Boolean)) : null
-  const firstRank = history[0]?.age_cat_rank || history[0]?.current_rank
-  const lastRank  = history[history.length - 1]?.age_cat_rank || history[history.length - 1]?.current_rank
+  const bestRank  = history.length ? Math.min(...history.map(h => h.age_cat_rank).filter(Boolean)) : null
+  const firstRank = history[0]?.age_cat_rank
+  const lastRank  = history[history.length - 1]?.age_cat_rank
   const improvement = firstRank && lastRank ? firstRank - lastRank : null
 
   const wins = isDoubles
@@ -579,8 +581,10 @@ function PlayerProfile({ player, isDoubles, onClose }) {
           {/* Quick stats */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
             {[
-              { label: 'Current Age Cat Rank', value: `#${player.age_cat_rank ?? '—'}` },
-              { label: 'Current World Rank',   value: `#${player.current_rank ?? '—'}` },
+              // One rank, and it is the selected band's. The second tile used to show
+              // current_rank labelled "World" — WTT's position in the whole youth list,
+              // i.e. the U19 number — so a U17 player read as #13 and #24 at once.
+              { label: 'Current World Rank',   value: `#${player.age_cat_rank ?? '—'}` },
               { label: 'Best Rank (history)',  value: bestRank ? `#${bestRank}` : '—' },
               { label: 'Improvement (all time)', value: improvement != null
                 ? (improvement > 0 ? `↑${improvement}` : improvement < 0 ? `↓${Math.abs(improvement)}` : '—')
@@ -731,7 +735,7 @@ export default function YouthPipelinePage() {
         for (const h of (hist || [])) {
           const key = `${h.ittf_id}__${h.sub_event}`
           if (!map[key]) map[key] = []
-          map[key].push({ rank: h.age_cat_rank || h.current_rank })
+          map[key].push({ rank: h.age_cat_rank })
         }
         setSparklines(map)
       }
@@ -775,7 +779,7 @@ export default function YouthPipelinePage() {
   const totalIndia   = allPlayers.length
   const singlesCount = singles.length
   const doublesCount = doubles.length
-  const topRanked    = allPlayers.filter(p => (p.age_cat_rank || p.current_rank) <= 10).length
+  const topRanked    = allPlayers.filter(p => p.age_cat_rank <= 10).length
 
   return (
     <>

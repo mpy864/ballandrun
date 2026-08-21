@@ -126,23 +126,23 @@ export async function loadYouthDoublesPairMetrics(supabase, pair, ageCategory) {
     }
   }
 
-  // Opponent senior pair ranks — fallback.
+  // Senior pair table, for the TEAM NAME only. It used to supply a rank as well, which
+  // is where the mixed scale came from; the name is safe because it identifies the pair
+  // rather than measuring it.
   const seniorMap = {};
   for (let i = 0; i < oppIdArr.length; i += 250) {
     const chunk = oppIdArr.slice(i, i + 250).join(',');
     const { data } = await supabase.from('rankings_doubles_teams')
-      .select('p1_ittf_id,p2_ittf_id,team_name,current_rank,publish_date')
+      .select('p1_ittf_id,p2_ittf_id,team_name,publish_date')
       .or(`p1_ittf_id.in.(${chunk}),p2_ittf_id.in.(${chunk})`)
       .gte('publish_date', cutoffStr)
       .limit(20000);
     for (const r of (data || [])) {
       const k = pairKey(r.p1_ittf_id, r.p2_ittf_id);
-      if (!seniorMap[k]) seniorMap[k] = { history: [], name: r.team_name };
-      seniorMap[k].history.push({ ranking_date: r.publish_date, rank: r.current_rank });
+      if (!seniorMap[k]) seniorMap[k] = { name: r.team_name };
     }
   }
   for (const k in youthMap)  youthMap[k].history.sort((x, y) => new Date(y.ranking_date) - new Date(x.ranking_date));
-  for (const k in seniorMap) seniorMap[k].history.sort((x, y) => new Date(y.ranking_date) - new Date(x.ranking_date));
 
   // Opponent player names / country (final fallback + country tag).
   const playerMap = {};
@@ -159,10 +159,16 @@ export async function loadYouthDoublesPairMetrics(supabase, pair, ageCategory) {
     const matchDate = new Date(m.event_date);
     const k        = pairKey(m.__o1, m.__o2);
     const yInfo = youthMap[k], sInfo = seniorMap[k];
+    // Age-band rank only. This used to fall back to the senior world pair rank when a
+    // pair was missing from the youth list, which put two different scales in the same
+    // field: the same opponent could read #6 (U17) or #180 (senior world), and every
+    // comparison downstream — upset or not, which rank bucket, average rank beaten —
+    // treated them as the same units. An opponent with no rank IN THIS BAND is
+    // unranked here, and 999 already means exactly that. The senior team name is still
+    // used below, because a name is identity rather than a measurement.
     const opponentRank =
-      yInfo?.history.find(r => new Date(r.ranking_date) <= matchDate)?.rank ??
-      sInfo?.history.find(r => new Date(r.ranking_date) <= matchDate)?.rank ?? 999;
-    const opponentCurrentRank = yInfo?.history[0]?.rank ?? sInfo?.history[0]?.rank ?? 999;
+      yInfo?.history.find(r => new Date(r.ranking_date) <= matchDate)?.rank ?? 999;
+    const opponentCurrentRank = yInfo?.history[0]?.rank ?? 999;
     const playerRankAtMatch   = rankingHistory.find(r => new Date(r.ranking_date) <= matchDate)?.rank ?? currentRank;
     const { gamesWon, gamesLost, pointsWon, pointsLost, totalGames } =
       parseScoresForPlayer(m.game_scores, isComp1);
