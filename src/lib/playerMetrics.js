@@ -305,11 +305,17 @@ export function computeWindowData(matchLedger, rankingHistory, windowMonths, pla
       winPct: bt > 0 ? (t.wins / bt) * 100 : 0, matches: t.matches };
   }).sort((a, b) => a.tier === 'Unknown' ? 1 : b.tier === 'Unknown' ? -1 : parseInt(a.tier) - parseInt(b.tier));
 
+  // Group by opponent identity, falling back to the name only where a ledger carries no
+  // id. Keyed on the name alone, every opponent the profile table could not name landed
+  // in one bucket called "Unknown": Syndrela Das's U17 page showed six different players
+  // as a single 4W/3L opponent, and that phantom had enough matches to take the top slot
+  // from a real one.
   const cmap = {};
   for (const m of filtered) {
-    if (!cmap[m.opponent]) cmap[m.opponent] = { name: m.opponent, wins: 0, losses: 0, currentRank: m.opponentCurrentRank, matches: [] };
-    if (m.result === 'W') cmap[m.opponent].wins++; else cmap[m.opponent].losses++;
-    cmap[m.opponent].matches.push(m);
+    const key = m.opponentKey != null ? `id:${m.opponentKey}` : `name:${m.opponent}`;
+    if (!cmap[key]) cmap[key] = { name: m.opponent, wins: 0, losses: 0, currentRank: m.opponentCurrentRank, matches: [] };
+    if (m.result === 'W') cmap[key].wins++; else cmap[key].losses++;
+    cmap[key].matches.push(m);
   }
   const topCompetitors = Object.values(cmap)
     .map(c => { const bt = c.wins + c.losses; return { ...c, total: bt, winPct: bt > 0 ? (c.wins / bt) * 100 : 0 }; })

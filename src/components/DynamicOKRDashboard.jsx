@@ -169,7 +169,9 @@ function MatchRow({ match: m }) {
   const comp     = cleanCompetitionName(m.tournament);
   const round    = cleanRound(m.round);
   const games    = parseDisplayGames(m.score, m.isComp1);
-  const isUnknown = !m.opponent || m.opponent === 'Unknown';
+  // "Unknown #220834" is the same nameless case as plain "Unknown" — the id is there to
+  // keep two of them apart when grouping, not to be read as a name.
+  const isUnknown = !m.opponent || /^Unknown(\s|$)/.test(m.opponent);
   const hasDetail = !isUnknown;
   const row1Bg   = open ? { backgroundColor: 'rgba(239,246,255,0.6)' } : {};
   const row2Bg   = { backgroundColor: 'var(--row2-bg, #f8fafc)' };

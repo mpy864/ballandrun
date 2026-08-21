@@ -86,6 +86,24 @@ export async function loadYouthSinglesPlayerMetrics(supabase, player, ageCategor
     for (const p of (data || [])) oppProfiles[parseInt(p.ittf_id)] = p;
   }
 
+  // wtt_players does not have every junior in it — for Syndrela Das's U17 record, six
+  // opponents were missing, and each one rendered as "Opponent unavailable". Four of the
+  // six are named in the youth ranking lists, so ask there before giving up. Any band
+  // will do: a name is a name, whichever list it was read from.
+  const unnamed = oppIdStrs.filter(id => !oppProfiles[parseInt(id)]);
+  for (let i = 0; i < unnamed.length; i += 400) {
+    const { data } = await supabase.from('youth_rankings_singles')
+      .select('ittf_id,player_name,country_code')
+      .in('ittf_id', unnamed.slice(i, i + 400))
+      .limit(4000);
+    for (const p of (data || [])) {
+      const k = parseInt(p.ittf_id);
+      if (!oppProfiles[k] && p.player_name) {
+        oppProfiles[k] = { player_name: p.player_name, country_code: p.country_code };
+      }
+    }
+  }
+
   // Opponent age-category rank history (same band).
   const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 20);
   const cutoffStr = cutoff.toISOString().slice(0, 10);
@@ -124,7 +142,10 @@ export async function loadYouthSinglesPlayerMetrics(supabase, player, ageCategor
     const eventInfo = events?.find(e => e.event_id === m.event_id);
     return {
       rawDate: matchDate,
-      opponent: oppP?.player_name || 'Unknown',
+      // Identity for grouping is the id, never the name: two opponents nobody could name
+      // are still two opponents, and keying on the label merged them into one.
+      opponentKey: oppId,
+      opponent: oppP?.player_name || `Unknown #${oppId}`,
       opponentCountry: oppP?.country_code || null,
       opponentDob: oppP?.dob || null,
       opponentHandedness: oppP?.handedness || null,
