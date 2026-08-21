@@ -79,6 +79,26 @@ function Rings({ animate }) {
   )
 }
 
+// ─── The scheme's name, in the flag ──────────────────────────────────────────
+
+// The middle band of the tricolour is white, which is invisible on a #fbfbfd page, so it
+// is carried by the navy of the Ashoka Chakra — the usual way the flag is set on a light
+// ground. Four words, three bands: the first takes saffron, the last takes green, and the
+// two in the middle hold the navy, so the name reads as bookended rather than striped.
+//
+// These are the flag's hues deepened, not the flag's exact values, and the reason is
+// measured rather than felt: against this background #FF9933 lands at 2.06:1 and #138808
+// at 4.46:1, both short of the 4.5:1 that 12px bold type needs. The flag's colours are
+// specified for a flag flying against the sky, not for small text on near-white. Deepened
+// they reach 4.68 and 5.34 and still read unmistakably as saffron and green.
+const FLAG = { saffron: '#B35900', navy: '#000080', green: '#0F7A06' }
+const SCHEME = [
+  ['Target',  FLAG.saffron],
+  ['Olympic', FLAG.navy],
+  ['Podium',  FLAG.navy],
+  ['Scheme',  FLAG.green],
+]
+
 // 40 × 2px, drawn from the left. --tops-gold has sat in index.css commented
 // "mission accent" and unused; this is what it was reserved for.
 function GoldRule({ variants }) {
@@ -103,23 +123,32 @@ export default function HomePage() {
     <div style={{
       position: 'relative', minHeight: '100vh',
       display: 'flex', flexDirection: 'column',
-      maxWidth: 'var(--tops-content)', margin: '0 auto', padding: '72px 40px 44px',
+      maxWidth: 'var(--tops-content)', margin: '0 auto', padding: '72px 40px 76px',
     }}>
       <Rings animate={!still} />
 
-      {/* ── Vision ── the masthead. The sentence carries the size, not the wordmark:
-          "TOPS" is already the brand at top-left of the sidebar, so setting it huge here
-          would be the third time the same word introduces the same page. */}
-      <motion.section {...anim} style={{ position: 'relative', zIndex: 1, maxWidth: 620 }}>
+      {/* ── Vision ── the masthead. The sentence carries the size, not the name: the
+          sidebar already says TOPS twice, as the brand and as a nav item. */}
+      <motion.section {...anim} style={{ position: 'relative', zIndex: 1 }}>
         <motion.p variants={v} style={{
           margin: 0, fontSize: 12, fontWeight: 700, letterSpacing: '0.18em',
-          textTransform: 'uppercase', color: 'var(--tops-gold)',
+          textTransform: 'uppercase',
+          // A word gap wide enough that four short words read as one institutional mark
+          // rather than four coloured labels.
+          display: 'flex', flexWrap: 'wrap', gap: '0 8px',
         }}>
-          TOPS
+          {SCHEME.map(([word, colour]) => (
+            <span key={word} style={{ color: colour }}>{word}</span>
+          ))}
         </motion.p>
+        {/* One line on a normal display, as asked. It is not forced with nowrap — that
+            would push the sentence off the right edge on a laptop instead of wrapping.
+            The size is tied to the viewport so it fits, and text-wrap: balance makes the
+            break even on the narrow screens where it must happen anyway. */}
         <motion.h1 variants={v} style={{
-          margin: '18px 0 0', fontSize: 'clamp(30px, 4.4vw, 46px)', fontWeight: 600,
+          margin: '18px 0 0', fontSize: 'clamp(24px, 3.1vw, 42px)', fontWeight: 600,
           letterSpacing: '-0.032em', lineHeight: 1.1, color: T.ink,
+          textWrap: 'balance',
         }}>
           Building the nation by winning Olympic medals.
         </motion.h1>
@@ -133,33 +162,50 @@ export default function HomePage() {
         </motion.p>
       </motion.section>
 
-      {/* ── Mission ── the closing credo, on the bottom edge of a tall screen and after
-          the content on a short one. Gold appears twice on this page and never the same
-          way — the wordmark above, a drawn rule here — which is what makes the two blocks
-          read as a pair without repeating a device. */}
+      {/* ── Mission ── the closing credo. It sits clear of the bottom edge rather than
+          against it: a statement pressed into the last few pixels of the window reads as
+          overflow, not as a close. */}
       <motion.section
         {...(still
           ? { initial: false }
           : { variants: group, initial: 'hidden', whileInView: 'show',
               viewport: { once: true, amount: 0.6 } })}
         style={{
-          position: 'relative', zIndex: 1, marginTop: 'auto', paddingTop: 30,
-          borderTop: `1px solid ${T.divider}`, maxWidth: 640,
+          position: 'relative', zIndex: 1, marginTop: 'auto', paddingTop: 34,
+          borderTop: `1px solid ${T.divider}`, maxWidth: 720,
         }}>
         <GoldRule variants={vWipe} />
-        {/* One sentence over two lines: same size so they read as a couplet, weight and
-            colour carrying the hierarchy instead of a size step. */}
+
+        {/* Four parts, four treatments, and the split is the meaning: each line is a
+            lead-in followed by its payload. "Measure" is the act and "what Matters" is
+            the filter on it — same size, opposite weights, so the pair reads as one
+            phrase with a hinge in the middle. Line two then inverts the whole
+            arrangement: its lead-in is set small and muted so the eye lands on
+            "Elite Humans", which is the only place a person is named on this page. */}
         <motion.p variants={v} style={{
-          margin: '20px 0 0', fontSize: 'clamp(24px, 3vw, 32px)', fontWeight: 600,
-          letterSpacing: '-0.025em', lineHeight: 1.18, color: T.ink,
+          margin: '22px 0 0', fontSize: 'clamp(24px, 3vw, 34px)',
+          letterSpacing: '-0.025em', lineHeight: 1.16, color: T.ink,
         }}>
-          Measure what Matters
+          <span style={{ fontWeight: 600 }}>Measure</span>
+          {' '}
+          <span style={{ fontWeight: 300 }}>what Matters</span>
         </motion.p>
         <motion.p variants={v} style={{
-          margin: 0, fontSize: 'clamp(24px, 3vw, 32px)', fontWeight: 400,
-          letterSpacing: '-0.025em', lineHeight: 1.18, color: T.slate,
+          margin: '4px 0 0', lineHeight: 1.16,
+          display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '0 10px',
         }}>
-          Performed by Elite Humans
+          <span style={{
+            fontSize: 'clamp(13px, 1.25vw, 16px)', fontWeight: 500,
+            letterSpacing: '0.1em', textTransform: 'uppercase', color: T.muted,
+          }}>
+            Performed by
+          </span>
+          <span style={{
+            fontSize: 'clamp(24px, 3vw, 34px)', fontWeight: 600,
+            letterSpacing: '-0.025em', color: T.ink,
+          }}>
+            Elite Humans
+          </span>
         </motion.p>
       </motion.section>
     </div>
