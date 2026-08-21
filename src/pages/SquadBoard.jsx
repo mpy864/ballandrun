@@ -84,9 +84,8 @@ function UpcomingEvent({ e, hasSquad, squadIds, first }) {
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const fmtDate = d => { if (!d) return ''; const [, m, day] = String(d).split('-').map(Number); return `${day} ${MON[(m || 1) - 1]}` }
-const daysTo = d => Math.round((new Date(d) - new Date()) / 86400000)
 
-// The Squad dashboard for one sport: KPIs, readiness board, upcoming events,
+// The Squad dashboard for one sport: readiness board, upcoming events,
 // India movers, and the watchlist. Typography-only, no icons.
 export default function SquadBoard({ sport, entries, lookup, scores, pairScores, watch = [], movers = [],
                                      upcoming = [], squadEventIds = new Set(), squadIds = [], loading }) {
@@ -96,7 +95,7 @@ export default function SquadBoard({ sport, entries, lookup, scores, pairScores,
     () => computeRetentionRisk({ entries, scores, pairScores, lookup }),
     [entries, scores, pairScores, lookup])
 
-  const { board, kpis } = useMemo(() => {
+  const board = useMemo(() => {
     const rows = []
     for (const e of entries || []) {
       if (e.youth) continue
@@ -118,15 +117,7 @@ export default function SquadBoard({ sport, entries, lookup, scores, pairScores,
       })
     }
     rows.sort((a, b) => b.score - a.score)
-
-    const kpis = {
-      ready: rows.length,
-      contenders: rows.filter(r => r.verdict?.tag === 'Contender').length,
-      rising: rows.filter(r => r.verdict?.tag === 'Rising').length,
-      avg: rows.length ? Math.round(rows.reduce((s, r) => s + r.score, 0) / rows.length) : 0,
-    }
-
-    return { board: rows, kpis }
+    return rows
   }, [entries, lookup, scores, pairScores])
 
   // Upcoming events come from the india_upcoming_entries view — every Indian athlete
@@ -134,19 +125,10 @@ export default function SquadBoard({ sport, entries, lookup, scores, pairScores,
   // had each event as their NEXT fixture, so its numbers always summed to the squad
   // size and were labelled "entered", which they never were: Almaty read 4 against 10
   // Indians actually entered, and juniors were absent because the board skips them.
-  const nextEvent = upcoming[0] || null
 
   const open = (r) => navigate(r.kind === 'doubles' && r.ids.length === 2
     ? okrLink({ level: 'Senior', kind: 'doubles', ids: r.ids })
     : okrLink({ level: 'Senior', kind: 'singles', id: r.ids[0] }))
-
-  const Kpi = ({ label, value, sub }) => (
-    <div style={{ flex: 1, padding: '4px 20px' }}>
-      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: T.muted }}>{label}</div>
-      <div className="tabnum" style={{ fontSize: 30, fontWeight: 700, color: T.ink, letterSpacing: '-0.02em', marginTop: 4 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11.5, color: T.muted, marginTop: 1 }}>{sub}</div>}
-    </div>
-  )
 
   const sectionHead = (title, sub, right) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '15px 22px', borderBottom: `1px solid ${T.divider}` }}>
@@ -158,20 +140,11 @@ export default function SquadBoard({ sport, entries, lookup, scores, pairScores,
 
   return (
     <div>
-      {/* KPI band */}
-      <div style={{ ...card, display: 'flex', alignItems: 'stretch', padding: '16px 4px', borderTop: `1px solid ${T.border}`, borderBottom: `1px solid ${T.border}` }}>
-        <Kpi label="Podium-ready" value={kpis?.ready ?? '—'} sub="athletes scored" />
-        <div style={{ width: 1, background: T.divider }} />
-        <Kpi label="Contenders" value={kpis?.contenders ?? '—'} sub="medal-level" />
-        <div style={{ width: 1, background: T.divider }} />
-        <Kpi label="Rising" value={kpis?.rising ?? '—'} sub="on the up" />
-        <div style={{ width: 1, background: T.divider }} />
-        <Kpi label="Avg readiness" value={kpis?.avg ?? '—'} sub="across TOPS" />
-        <div style={{ width: 1, background: T.divider }} />
-        <Kpi label="Next event" value={nextEvent ? `${daysTo(nextEvent.start_date)}d` : '—'} sub={nextEvent ? nextEvent.event_name.replace(/\s+20\d\d$/, '') : '—'} />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) minmax(0, 1fr)', gap: 20, marginTop: 20, alignItems: 'start' }}>
+      {/* No KPI band. Every figure in it was a count of the board directly underneath —
+          podium-ready was its row count, contenders and rising were its own tags tallied,
+          the average was the average of the scores already listed beside each name. The
+          board says all of it, in the same screenful, per athlete. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) minmax(0, 1fr)', gap: 20, alignItems: 'start' }}>
         {/* Readiness board */}
         <div style={{ ...card, overflow: 'hidden' }}>
           <div style={{ padding: '15px 22px', borderBottom: `1px solid ${T.divider}`, fontSize: 14, fontWeight: 600, color: T.ink }}>Readiness board</div>
