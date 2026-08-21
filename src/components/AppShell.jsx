@@ -60,9 +60,12 @@ export default function AppShell() {
           {SPORTS.map(s => (
             <NavItem key={s.key} to={`/sport/${s.key}`} label={s.name} />
           ))}
-          <NavLabel>Tools</NavLabel>
-          <NavItem to="/okr" label="Profiles" />
-          <NavItem to="/h2h" label="Compare" />
+          {/* No TOOLS section. Profiles was /okr, which is the player screen every
+              athlete click already opens through okrLink() — from the sidebar it opened
+              with nobody selected. Compare was /h2h, which each sport page's Compare tab
+              already links to as "Full head-to-head (match history) →"; the tab is the
+              summary and /h2h is the depth behind it, and a sidebar link short-circuited
+              that. Both routes stay live and stay reachable. */}
         </nav>
 
         {/* footer / user */}
