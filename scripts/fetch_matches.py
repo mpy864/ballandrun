@@ -5,7 +5,9 @@ Fetches match results for any event not yet fully loaded in Supabase.
 Runs daily via GitHub Actions.
 """
 
+import argparse
 import os
+import sys
 import time
 import requests
 from datetime import date, timedelta, datetime, timezone
@@ -79,6 +81,13 @@ WTT_2026_EVENT_IDS = {
     3255: ("WTT Finals Hong Kong 2026",            "2026-12-13"),
     # ── ITTF Major Events (on WTT API) ────────────────────────────
     3379: ("ITTF World Cup Macao 2026",            "2026-04-05"),
+    # London sat only in fetch_ittf_matches.py, which reads results.ittf.com — and that
+    # host has no TTE3216, so all thirteen days returned BlobNotFound and India's biggest
+    # team event of the year was missing from the dashboard entirely. The WTT API does
+    # have it: 262 team ties, each carrying its five rubbers under
+    # match_card.teamParentData.extended_info.matches, which fetch_event_matches below
+    # already knows how to unwrap. 863 individual matches, 26 of them India's.
+    3216: ("ITTF World Team Championships London 2026", "2026-05-10"),
     # ── WTT Youth Series ──────────────────────────────────────────
     3273: ("WTT Youth Contender Vadodara 2026",    "2026-01-05"),
     3274: ("WTT Youth Contender San Francisco 2026","2026-01-05"),
@@ -576,11 +585,34 @@ def ensure_players_in_db(supabase: Client, matches: list[dict]) -> None:
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
+    # An event only gets fetched while it sits inside the lookback window, so anything
+    # that was broken at the time and fixed later is unreachable by the daily run —
+    # London finished 104 days before its cause was found. These two flags are how a
+    # past event is recovered, without editing the window every other feed depends on.
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--event-id", type=int, action="append", metavar="ID",
+                    help="fetch only this event, ignoring the lookback window "
+                         "(repeatable)")
+    ap.add_argument("--lookback-days", type=int, default=LOOKBACK_DAYS,
+                    help=f"days back to look for finished events (default {LOOKBACK_DAYS})")
+    args = ap.parse_args()
+
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-    print(f"[Matches] Discovering events from last {LOOKBACK_DAYS} days...")
-    recent = get_recent_event_ids(LOOKBACK_DAYS)
-    print(f"[Matches] Found {len(recent)} recent events.")
+    if args.event_id:
+        recent = []
+        for eid in args.event_id:
+            if eid not in WTT_2026_EVENT_IDS:
+                sys.exit(f"Event {eid} is not in WTT_2026_EVENT_IDS — add it there first, "
+                         f"so the daily run keeps it too.")
+            name, end = WTT_2026_EVENT_IDS[eid]
+            recent.append({"event_id": eid, "event_name": name,
+                           "start_date": None, "end_date": end})
+        print(f"[Matches] Explicit event(s): {len(recent)}")
+    else:
+        print(f"[Matches] Discovering events from last {args.lookback_days} days...")
+        recent = get_recent_event_ids(args.lookback_days)
+        print(f"[Matches] Found {len(recent)} recent events.")
 
     to_fetch = events_needing_fetch(supabase, recent)
     print(f"[Matches] {len(to_fetch)} events need fetching.")

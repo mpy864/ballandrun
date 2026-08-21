@@ -33,7 +33,12 @@ PROFILE_HEADERS = {
 ITTF_2026_EVENTS = {
     # ── ITTF Major Events ─────────────────────────────────────────
     3379: ("ITTF World Cup Macao 2026", "2026-03-30", "2026-04-05", WORLDCUP_BASE),
-    3216: ("ITTF World Team Championships London 2026", "2026-04-28", "2026-05-10", None),
+    # World Team Championships London 2026 was here and fetched nothing for thirteen
+    # days: results.ittf.com has no TTE3216, so every request returned BlobNotFound.
+    # It lives in fetch_matches.py now, under "ITTF Major Events (on WTT API)", because
+    # WTT publishes it with the individual rubbers nested inside each team tie.
+    # Being listed in the wrong script is not a harmless duplicate — it is thirteen days
+    # of 404s that nothing reports.
     3377: ("ITTF World Youth Championships 2026",       "2026-11-21", "2026-11-28", None),
     3378: ("ITTF Mixed Team World Cup Chengdu 2026",    "2026-11-29", "2026-12-06", None),
     # ── Asian Events ──────────────────────────────────────────────
