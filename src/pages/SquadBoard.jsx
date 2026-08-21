@@ -125,10 +125,33 @@ export default function SquadBoard({ sport, entries, lookup, scores, pairScores,
   // had each event as their NEXT fixture, so its numbers always summed to the squad
   // size and were labelled "entered", which they never were: Almaty read 4 against 10
   // Indians actually entered, and juniors were absent because the board skips them.
+  const [showSenior, setShowSenior] = useState(true)
+  const [showJunior, setShowJunior] = useState(true)
+
+  // An event counts as senior if any senior went and as junior if any junior did, so a
+  // mixed event answers to both switches rather than being forced into one.
+  const nSenior = (upcoming || []).filter(e => e.senior_athletes > 0).length
+  const nJunior = (upcoming || []).filter(e => e.junior_athletes > 0).length
+  const shownEvents = (upcoming || []).filter(e =>
+    (showSenior && e.senior_athletes > 0) || (showJunior && e.junior_athletes > 0))
 
   const open = (r) => navigate(r.kind === 'doubles' && r.ids.length === 2
     ? okrLink({ level: 'Senior', kind: 'doubles', ids: r.ids })
     : okrLink({ level: 'Senior', kind: 'singles', id: r.ids[0] }))
+
+  // Same control as the Events tab, so the two places you filter by level behave alike:
+  // both on by default, and each independent — an event can carry seniors and juniors at
+  // once (Almaty has ten of one and two of the other), so these are not two halves of a
+  // whole and a three-way All/Senior/Junior switch would misdescribe them.
+  const levelToggle = (on, set, label, count) => (
+    <button onClick={() => set(v => !v)} style={{
+      appearance: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600,
+      padding: '3px 9px', borderRadius: 0,
+      border: `1px solid ${on ? T.ink : T.border}`,
+      background: on ? T.ink : 'transparent',
+      color: on ? '#fff' : T.slate,
+    }}>{label}{count != null && <span style={{ opacity: .65 }}> {count}</span>}</button>
+  )
 
   const sectionHead = (title, sub, right) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '15px 22px', borderBottom: `1px solid ${T.divider}` }}>
@@ -178,10 +201,15 @@ export default function SquadBoard({ sport, entries, lookup, scores, pairScores,
         {/* right rail */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div style={{ ...card, overflow: 'hidden' }}>
-            {sectionHead('Upcoming events', 'Indian athletes entered')}
+            {sectionHead('Upcoming events', 'Indian athletes entered',
+              <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                {levelToggle(showSenior, setShowSenior, 'Senior', nSenior)}
+                {levelToggle(showJunior, setShowJunior, 'Junior', nJunior)}
+              </span>)}
             {loading ? <div style={{ padding: 20, color: T.muted, fontSize: 13 }}>…</div>
               : upcoming.length === 0 ? <div style={{ padding: 20, color: T.muted, fontSize: 13 }}>No Indian entries in the next 75 days.</div>
-              : upcoming.map((e, i) => (
+              : shownEvents.length === 0 ? <div style={{ padding: 20, color: T.muted, fontSize: 13 }}>Nothing in the selected level.</div>
+              : shownEvents.map((e, i) => (
                   <UpcomingEvent key={e.event_id ?? i} e={e} first={i === 0}
                     hasSquad={squadEventIds.has(e.event_id)} squadIds={squadIds} />
                 ))}
