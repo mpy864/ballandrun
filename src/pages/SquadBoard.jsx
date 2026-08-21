@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { loadEventAthletes } from '../lib/squadReadiness.js'
 import { ROSTER, DISCIPLINES } from '../lib/topsRoster.js'
-import { makeVerdict } from '../lib/verdict.js'
 import { okrLink } from '../lib/okrLink.js'
 import { rosterPairKey } from '../lib/squadReadiness.js'
 import { MANUAL_NOTE } from '../lib/watchlist.js'
@@ -100,25 +99,28 @@ export default function SquadBoard({ sport, entries, lookup, scores, pairScores,
     for (const e of entries || []) {
       if (e.youth) continue
       const disc = DISCIPLINES[e.discipline] || {}
-      let sc, name, rank, ids
+      let name, rank, ids
       if (disc.kind === 'doubles') {
-        sc = pairScores[rosterPairKey(e.players)]
         name = e.players.map(p => lookup[p.id]?.name || p.name).join(' / ')
-        rank = sc?.pair_rank; ids = e.players.map(p => p.id)
+        rank = pairScores[rosterPairKey(e.players)]?.pair_rank
+        ids = e.players.map(p => p.id)
       } else {
         const pid = e.players[0]?.id
-        sc = scores[pid]; name = lookup[pid]?.name || e.players[0]?.name
-        rank = sc?.world_rank; ids = [pid]
+        name = lookup[pid]?.name || e.players[0]?.name
+        // From the ranking table, not from the readiness row. Both hold the same number,
+        // but taking it from the score would keep this list depending on the score.
+        rank = lookup[pid]?.rank
+        ids = [pid]
       }
-      if (!sc) continue
-      rows.push({
-        name, short: disc.short, dcolor: disc.color, kind: disc.kind, rank,
-        score: sc.score, verdict: makeVerdict({ kind: disc.kind, score: sc }), ids, next: sc.next,
-      })
+      // No `if (!score) continue` any more. A panel titled "TOPS athletes" that quietly
+      // omits a TOPS athlete because a readiness row was missing for them is a title that
+      // lies; unranked simply shows a dash.
+      rows.push({ name, short: disc.short, dcolor: disc.color, kind: disc.kind, rank, ids })
     }
-    rows.sort((a, b) => b.score - a.score)
+    // World rank, best first. Unranked sink rather than sorting as rank zero.
+    rows.sort((a, b) => (a.rank == null) - (b.rank == null) || (a.rank ?? 0) - (b.rank ?? 0))
     return rows
-  }, [entries, lookup, scores, pairScores])
+  }, [entries, lookup, pairScores])
 
   // Upcoming events come from the india_upcoming_entries view — every Indian athlete
   // entered, senior and junior. This panel used to count how many of the scored SQUAD
@@ -168,32 +170,39 @@ export default function SquadBoard({ sport, entries, lookup, scores, pairScores,
           the average was the average of the scores already listed beside each name. The
           board says all of it, in the same screenful, per athlete. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) minmax(0, 1fr)', gap: 20, alignItems: 'start' }}>
-        {/* Readiness board */}
+        {/* TOPS athletes — the roster, ordered by world rank.
+            The readiness score is parked, not deleted: podium_readiness still runs and
+            still feeds this list, but nothing here is drawn from it. It cannot be, half
+            way: the score set the bar's length, the Contender/Rising/Plateaued tag and
+            the row order all at once, so showing the list in score order under hidden
+            tags would leave an opinion nobody currently trusts driving the page while
+            being invisible. Rank is a number that means one thing and says where it came
+            from. When the score's basis is settled, the bar, tag and ordering come back
+            together. */}
         <div style={{ ...card, overflow: 'hidden' }}>
-          <div style={{ padding: '15px 22px', borderBottom: `1px solid ${T.divider}`, fontSize: 14, fontWeight: 600, color: T.ink }}>Readiness board</div>
-          {loading ? <div style={{ padding: 28, color: T.muted, fontSize: 14 }}>Computing readiness…</div>
-            : board.length === 0 ? <div style={{ padding: 28, color: T.muted, fontSize: 14 }}>No scored athletes.</div>
+          <div style={{ padding: '15px 22px', borderBottom: `1px solid ${T.divider}`, fontSize: 14, fontWeight: 600, color: T.ink }}>
+            TOPS athletes
+            <span style={{ fontSize: 12.5, fontWeight: 400, color: T.muted, marginLeft: 8 }}>by world rank</span>
+          </div>
+          {loading ? <div style={{ padding: 28, color: T.muted, fontSize: 14 }}>Loading…</div>
+            : board.length === 0 ? <div style={{ padding: 28, color: T.muted, fontSize: 14 }}>No athletes.</div>
             : board.map((r, i) => (
               <button key={i} onClick={() => open(r)}
                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.022)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 style={{
-                  display: 'grid', gridTemplateColumns: '22px 210px 1fr auto 34px', alignItems: 'center', gap: 14,
+                  display: 'grid', gridTemplateColumns: '22px minmax(0, 1fr) auto', alignItems: 'center', gap: 14,
                   width: '100%', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'pointer',
                   padding: '12px 22px', borderTop: i ? `1px solid ${T.divider}` : 'none',
                 }}>
                 <span className="tabnum" style={{ fontSize: 12.5, fontWeight: 600, color: T.muted, textAlign: 'center' }}>{i + 1}</span>
                 <span style={{ minWidth: 0 }}>
                   <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
-                  <span style={{ fontSize: 11.5, color: T.muted }}>
-                    <span style={{ color: r.dcolor, fontWeight: 600 }}>{r.short}</span>{r.rank ? ` · #${r.rank}` : ''}
-                  </span>
+                  <span style={{ fontSize: 11.5, color: r.dcolor, fontWeight: 600 }}>{r.short}</span>
                 </span>
-                <span style={{ height: 5, background: 'rgba(0,0,0,0.07)', overflow: 'hidden' }}>
-                  <span style={{ display: 'block', height: '100%', width: `${r.score}%`, background: r.verdict?.dot || T.muted }} />
+                <span className="tabnum" style={{ fontSize: 15, fontWeight: 600, color: r.rank ? T.ink : T.muted }}>
+                  {r.rank ? `#${r.rank}` : '—'}
                 </span>
-                <span style={chip(r.verdict?.dot || '#86868b', { fontSize: 10 })}>{r.verdict?.tag}</span>
-                <span className="tabnum" style={{ fontSize: 19, fontWeight: 700, color: T.ink, textAlign: 'right' }}>{r.score}</span>
               </button>
             ))}
         </div>
