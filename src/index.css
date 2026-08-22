@@ -113,6 +113,22 @@ html, body {
 
 .tops-rail-scrim { display: none; }
 
+/* The top bar carrying the menu button; shown only below the breakpoint.
+   This base rule MUST come before the media query, not after it. Both selectors have
+   the same specificity, so whichever is written last wins — with `display: none`
+   declared afterwards it beat the `display: flex` inside the query, and the menu button
+   did not exist on a phone. There was then no way to navigate at all. */
+.tops-railbar {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  position: sticky; top: 0; z-index: 20;
+  padding: 10px var(--tops-gutter);
+  background: color-mix(in srgb, var(--tops-bg-2) 88%, transparent);
+  backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--tops-border);
+}
+
 @media (max-width: 900px) {
   .tops-rail {
     position: fixed;
@@ -135,18 +151,6 @@ html, body {
   .tops-rail-scrim[data-open="true"] { opacity: 1; pointer-events: auto; }
 
   .tops-railbar { display: flex; }
-}
-
-/* The top bar that carries the menu button. Only exists below the breakpoint. */
-.tops-railbar {
-  display: none;
-  align-items: center;
-  gap: 12px;
-  position: sticky; top: 0; z-index: 20;
-  padding: 10px var(--tops-gutter);
-  background: color-mix(in srgb, var(--tops-bg-2) 88%, transparent);
-  backdrop-filter: saturate(180%) blur(12px);
-  border-bottom: 1px solid var(--tops-border);
 }
 
 @media (prefers-reduced-motion: reduce) {
