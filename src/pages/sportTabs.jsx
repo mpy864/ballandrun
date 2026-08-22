@@ -261,10 +261,23 @@ export function CompareTab({ navigate }) {
     )
   }
 
+  // One block per player — its selector and its card together — rather than a row of
+  // selectors above a row of cards. Two parallel grids look identical side by side, but
+  // the moment they stack you get both selectors, then both cards, and each player's
+  // choice is separated from the result it produced. Stacking as a unit keeps them joined.
+  const Player = ({ k, val, set }) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {sel(val, set)}
+      <Col k={k} />
+    </div>
+  )
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>{sel(a, setA)}{sel(b, setB)}</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}><Col k="a" /><Col k="b" /></div>
+      <div className="tops-cols" style={{ ['--col']: '240px', gap: 12 }}>
+        <Player k="a" val={a} set={setA} />
+        <Player k="b" val={b} set={setB} />
+      </div>
       <button onClick={() => navigate('/h2h')} style={{ alignSelf: 'center', fontSize: 12, fontWeight: 700, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer' }}>Full head-to-head (match history) →</button>
     </div>
   )

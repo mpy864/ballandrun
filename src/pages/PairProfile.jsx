@@ -148,7 +148,8 @@ export default function PairProfile() {
               <div style={{ ...card, padding: '16px 22px', marginBottom: 14 }}>
                 <div style={{ fontSize: 10, fontWeight: 800, color: '#8b5cf6', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{disc}{country ? ` · ${country}` : ''}</div>
                 <h1 style={{ margin: '2px 0 12px', fontSize: 22, fontWeight: 900, color: '#0f172a' }}>{nameStr}</h1>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
+                <div style={{ display: 'grid', gap: 10,
+                              gridTemplateColumns: 'repeat(auto-fit, minmax(min(120px, 100%), 1fr))' }}>
                   <Stat label="World Rank" value={latest?.current_rank ? `#${latest.current_rank}` : '—'} />
                   <Stat label="Readiness" value={score ? score.score : '—'} />
                   <Stat label="Win Rate" value={metrics ? `${metrics.winRate.toFixed(0)}%` : '—'} sub={metrics ? `${metrics.wins}W ${metrics.losses}L` : null} />

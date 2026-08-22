@@ -581,7 +581,10 @@ export default function LiveProbability() {
       <StyleInjector />
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))',
+        // min(…, 100%): a bare 380px floor is wider than a 360px phone, so the column
+        // could not shrink and the page scrolled sideways instead. /live is the one
+        // route most likely to be opened on a phone, courtside.
+        gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))',
         gap: 16,
       }}>
         {sortedMatches.map(m => (

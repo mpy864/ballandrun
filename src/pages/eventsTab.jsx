@@ -63,7 +63,12 @@ function Progression({ scale, players }) {
   const [hover, setHover] = useState(null)
   if (!scale.length || !players.length) return null
 
-  const LANE = 20, LEFT = 178, TOP = 20
+  const LANE = 20, TOP = 20
+  // The name column shrinks with the screen instead of holding 178px. At a fixed width
+  // it left roughly 150px of plot on a phone, so every dumbbell collapsed into the same
+  // short stub and the chart stopped saying anything. Both the axis row and every lane
+  // read the same variable, so they cannot drift apart.
+  const LEFT = 'clamp(92px, 30vw, 178px)'
   const colW = 100 / scale.length                // percent per round
   const at = depth => {                          // centre of a round's column, in %
     const i = scale.findIndex(s => s.depth === depth)
@@ -90,7 +95,7 @@ function Progression({ scale, players }) {
   return (
     <div style={{ position: 'relative', padding: '2px 0' }}>
       {/* axis: deepest round at the right, so a longer bar is always a better run */}
-      <div style={{ display: 'grid', gridTemplateColumns: `${LEFT}px 1fr`, gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `${LEFT} 1fr`, gap: 10 }}>
         <div />
         <div style={{ position: 'relative', height: TOP }}>
           {scale.map(s => (
@@ -117,7 +122,7 @@ function Progression({ scale, players }) {
             return (
               <div key={id}
                 onMouseEnter={() => setHover(id)} onMouseLeave={() => setHover(null)}
-                style={{ display: 'grid', gridTemplateColumns: `${LEFT}px 1fr`, gap: 10,
+                style={{ display: 'grid', gridTemplateColumns: `${LEFT} 1fr`, gap: 10,
                          alignItems: 'center', height: LANE,
                          background: on ? 'rgba(0,0,0,0.035)' : 'transparent' }}>
                 <span title={p.name}
@@ -178,7 +183,8 @@ function Progression({ scale, players }) {
 
 function UpsetRow({ r }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '170px 42px 1fr', gap: 10,
+    <div style={{ display: 'grid',
+                  gridTemplateColumns: 'minmax(0, 170px) 42px minmax(0, 1fr)', gap: 10,
                   padding: '3px 0', fontSize: 12, alignItems: 'baseline' }}>
       <span style={{ color: T.ink, fontWeight: 550, overflow: 'hidden',
                      textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -249,7 +255,8 @@ function EventDetail({ ev, onOpenPlayer }) {
         {d.runs.length === 0
           ? <div style={{ fontSize: 12.5, color: T.muted }}>No completed runs.</div>
           : d.runs.map((p, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '128px 1fr 132px',
+            <div key={i} style={{ display: 'grid',
+                                  gridTemplateColumns: 'minmax(90px, 128px) minmax(0, 1fr) minmax(0, 132px)',
                                   gap: 12, padding: '3px 0', fontSize: 12.5, alignItems: 'baseline' }}>
               <span style={{ fontWeight: 700, color: p.depth >= 9 ? GOLD : T.ink }}>{p.round}</span>
               <span style={{ fontWeight: 550, color: T.ink }}>{p.name}</span>
@@ -260,8 +267,10 @@ function EventDetail({ ev, onOpenPlayer }) {
 
       {/* The two detail panels, side by side. auto-fit means they stack by themselves on
           a narrow screen rather than each being squeezed to half of nothing. */}
-      <div style={{ display: 'grid', gap: '0 32px', alignItems: 'start',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))' }}>
+      {/* tops-cols, not a bare minmax(460px, 1fr): without its min(…, 100%) guard a
+          460px floor forces a 460px column inside a 360px phone, and the whole PAGE
+          scrolls sideways rather than the column narrowing. */}
+      <div className="tops-cols" style={{ ['--col']: '460px', gap: '0 32px' }}>
 
       {/* how far everyone got — chart by default, table always one click away */}
       <Section title="Every entrant" note={asTable ? 'round reached' : 'entered → went out'}>
@@ -356,8 +365,7 @@ function EventDetail({ ev, onOpenPlayer }) {
       </div>{/* end of the two detail columns */}
 
       {/* upsets last, as asked */}
-      <div style={{ display: 'grid', gap: '0 32px',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))' }}>
+      <div className="tops-cols" style={{ ['--col']: '460px', gap: '0 32px' }}>
         <Section title={`Upsets given · ${d.upsetsGiven.length}`} note="beat a better-ranked opponent">
           {d.upsetsGiven.length === 0
             ? <div style={{ fontSize: 12.5, color: T.muted }}>None.</div>
