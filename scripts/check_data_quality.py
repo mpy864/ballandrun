@@ -253,20 +253,48 @@ def listed_events():
     return out
 
 
+WTT_RESULTS_URL = (
+    "https://wtt-website-live-events-api-prod-cmfzgabgbzhphabb.eastasia-01"
+    ".azurewebsites.net/api/cms/GetOfficialResult"
+)
+
+
+def source_has_results(eid):
+    """Does WTT actually publish results for this event?
+
+    True / False, or None when the question could not be asked (network, timeout) —
+    which is not the same as "no", and must not be alerted on.
+    """
+    try:
+        r = requests.get(WTT_RESULTS_URL,
+                         params={"EventId": eid, "include_match_card": "true", "take": 1},
+                         headers=WTT_HEADERS, timeout=20)
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        return bool(data)
+    except Exception:
+        return None
+
+
 def check_finished_events(db):
-    """An event that finished and produced no matches at all.
+    """An event that finished without producing the matches its source is publishing.
 
     Both ingests exit 0 whether or not they bring anything back, so an event can be
-    fetched every single day for a fortnight, 404 every time, and never be mentioned
-    again. Six had done exactly that before this check existed, and the largest was
-    the one that matters most: ITTF World Team Championships London 2026 — India's
-    biggest team event of the year, absent from the Events tab, absent from every
-    player's record, and nothing anywhere said so.
+    fetched every day for a fortnight, 404 every time, and never be mentioned again.
+    That is how ITTF World Team Championships London 2026 — India's biggest team event
+    of the year — stayed off the dashboard for three months with nothing anywhere
+    saying so.
 
-    Its cause is worth writing down, because the check cannot fix it: event 3216 sits
-    in the ITTF list, which reads results.ittf.com, and that host has no TTE3216 —
-    every request returns BlobNotFound. WTT's own API does have the event, but only as
-    262 team ties, not the individual rubbers underneath them.
+    The check asks TWO questions, not one, and the second is what keeps it usable.
+    An empty event is only a failure if the results exist to be collected. Its first
+    version asked only the first question and failed every day on five events that WTT
+    has never published and India never entered — an alarm that is always red is an
+    alarm nobody reads, which is worse than no alarm at all.
+
+    So: no matches AND the source has results → we are broken, say so loudly.
+        No matches AND the source is empty too → cancelled or unpublished, stay quiet.
+        Could not reach the source → say that, but do not call it a failure.
     """
     print("\nfinished events")
     today = date.today()
@@ -289,13 +317,30 @@ def check_finished_events(db):
         if n < MIN_EVENT_MATCHES:
             empty.append((eid, name, end, n))
 
-    if empty:
-        empty.sort(key=lambda r: r[2])
-        for eid, name, end, n in empty:
-            fail("finished events",
-                 f"{name} ({eid}) ended {end} with {n} match(es)")
-    else:
+    if not empty:
         ok(f"{len(due)} finished events, all with matches")
+        return
+
+    # Only now, and only for the handful that came up short, ask the source. One request
+    # per empty event keeps this cheap — asking for all 90 every day would not be.
+    empty.sort(key=lambda r: r[2])
+    quiet, unknown = [], []
+    for eid, name, end, n in empty:
+        has = source_has_results(eid)
+        if has is True:
+            fail("finished events",
+                 f"{name} ({eid}) ended {end} with {n} match(es), but WTT is publishing "
+                 f"results for it — the ingest is not collecting them")
+        elif has is False:
+            quiet.append(name)
+        else:
+            unknown.append(name)
+
+    if quiet:
+        ok(f"{len(quiet)} finished event(s) empty at the source too, so not our gap: "
+           f"{', '.join(quiet[:4])}{'…' if len(quiet) > 4 else ''}")
+    if unknown:
+        ok(f"could not reach WTT for {len(unknown)} event(s): {', '.join(unknown[:4])}")
 
 
 def check_freshness(db):
