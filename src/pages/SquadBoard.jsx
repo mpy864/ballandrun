@@ -178,7 +178,10 @@ export default function SquadBoard({ sport, entries, lookup, scores, pairScores,
           podium-ready was its row count, contenders and rising were its own tags tallied,
           the average was the average of the scores already listed beside each name. The
           board says all of it, in the same screenful, per athlete. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) minmax(0, 1fr)', gap: 20, alignItems: 'start' }}>
+      {/* tops-cols reflows on its own — no breakpoint to keep in step. --col is the
+          narrowest a column may get before it drops to the next row, and the class caps
+          it at 100% so a 360px phone never gets a 340px column forcing a sideways page. */}
+      <div className="tops-cols" style={{ ['--col']: '340px' }}>
         {/* TOPS athletes — the roster, ordered by world rank.
             The readiness score is parked, not deleted: podium_readiness still runs and
             still feeds this list, but nothing here is drawn from it. It cannot be, half

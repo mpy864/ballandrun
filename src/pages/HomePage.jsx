@@ -120,10 +120,13 @@ export default function HomePage() {
   const vWipe = still ? undefined : wipe
 
   return (
-    <div style={{
-      position: 'relative', minHeight: '100vh',
+    // tops-fill subtracts the small-screen top bar, so the vision lands on the bottom
+    // edge of the window on both layouts rather than 57px below it on a phone.
+    <div className="tops-fill" style={{
+      position: 'relative',
       display: 'flex', flexDirection: 'column',
-      maxWidth: 'var(--tops-content)', margin: '0 auto', padding: '72px 40px 76px',
+      maxWidth: 'var(--tops-content)', margin: '0 auto',
+      padding: '72px var(--tops-gutter) 76px',
     }}>
       <Rings animate={!still} />
 

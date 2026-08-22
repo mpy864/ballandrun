@@ -24,6 +24,18 @@
   /* widths */
   --tops-content:   1240px;    /* reading width (landing / OKR) */
   --tops-wide:      1500px;    /* wide grids (Squad) */
+  /* layout — one place that decides where the shell changes shape.
+     Only ONE breakpoint exists on purpose. Every other adaptation in this app is
+     intrinsic (auto-fit / minmax / clamp / container queries) and therefore needs no
+     breakpoint at all; a breakpoint is spent only where BEHAVIOUR changes, which here is
+     the sidebar becoming a drawer. Two more breakpoints would mean three places to keep
+     in step every time a panel is added. */
+  --tops-rail:      248px;     /* sidebar width on desktop */
+  --tops-gutter:    40px;      /* page padding on desktop */
+  /* Height of the small-screen top bar, 0 where there is none. Pages that want to fill
+     the window subtract this instead of hardcoding a number that would be wrong on one
+     of the two layouts. */
+  --tops-railbar-h: 0px;
   /* type */
   --tops-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
 }
@@ -39,6 +51,107 @@ html, body {
 
 /* stats / scores read as Apple-style aligned figures */
 .tabnum { font-variant-numeric: tabular-nums; }
+
+/* ── Responsive layout system ──────────────────────────────────────────────────
+   Inline styles cannot hold a media query — that is a CSS limitation, not a habit —
+   and this app styles almost everything inline. So layout that must CHANGE with the
+   viewport lives here as a class, and everything else is built to need no breakpoint:
+
+     .tops-cols    a grid that reflows on its own via auto-fit; set --col to the
+                   narrowest a column may be before it wraps to the next row
+     .tops-scroll  a horizontal scroll container for anything wider than the screen
+                   (tables, wide rows) so the PAGE never scrolls sideways
+     .tops-page    page padding that tightens on small screens
+
+   Reach for these before writing a media query. A layout that adapts by arithmetic
+   cannot fall out of step with a breakpoint someone forgot to update.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.tops-cols {
+  display: grid;
+  gap: 20px;
+  align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(min(var(--col, 420px), 100%), 1fr));
+}
+
+/* min(…, 100%) is what keeps this safe on a phone: without it a 420px minimum forces a
+   420px column inside a 390px screen and the whole page scrolls sideways. */
+
+.tops-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.tops-page {
+  max-width: var(--tops-content);
+  margin: 0 auto;
+  padding: 64px var(--tops-gutter) 44px;
+}
+
+@media (max-width: 900px) {
+  :root { --tops-gutter: 20px; --tops-railbar-h: 57px; }
+  .tops-page { padding-top: 32px; }
+}
+
+/* Fill the window, whichever layout is in play. dvh rather than vh because mobile
+   browser chrome changes the viewport height as you scroll, and vh does not notice. */
+.tops-fill { min-height: calc(100dvh - var(--tops-railbar-h)); }
+
+/* ── Shell: rail on desktop, drawer on small screens ──────────────────────────
+   The one breakpoint in the app. Below it the sidebar leaves the flow entirely and
+   slides in over the content, because at 390px a 248px rail takes 64% of the screen. */
+
+.tops-rail {
+  width: var(--tops-rail);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+}
+
+.tops-rail-scrim { display: none; }
+
+@media (max-width: 900px) {
+  .tops-rail {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    height: 100dvh;              /* dvh, not vh: mobile browser chrome hides and shows */
+    z-index: 30;
+    transform: translateX(-100%);
+    transition: transform .24s cubic-bezier(.22,.61,.36,1);
+    box-shadow: 0 0 0 1px rgba(0,0,0,.06);
+  }
+  .tops-rail[data-open="true"] { transform: translateX(0); }
+
+  .tops-rail-scrim {
+    display: block;
+    position: fixed; inset: 0; z-index: 29;
+    background: rgba(0,0,0,.28);
+    opacity: 0; pointer-events: none;
+    transition: opacity .24s ease;
+  }
+  .tops-rail-scrim[data-open="true"] { opacity: 1; pointer-events: auto; }
+
+  .tops-railbar { display: flex; }
+}
+
+/* The top bar that carries the menu button. Only exists below the breakpoint. */
+.tops-railbar {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  position: sticky; top: 0; z-index: 20;
+  padding: 10px var(--tops-gutter);
+  background: color-mix(in srgb, var(--tops-bg-2) 88%, transparent);
+  backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--tops-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tops-rail, .tops-rail-scrim { transition: none; }
+}
 
 /* ── Segmented control (Apple-style tabs), shared across pages ─────────────── */
 .seg {
