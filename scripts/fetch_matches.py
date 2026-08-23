@@ -332,6 +332,46 @@ def fetch_event_matches(event_id: int) -> tuple[list[dict], list[dict]]:
     return records, doubles_records
 
 
+def _clean_games(raw: str | None) -> list[str]:
+    """Split a "11-4,11-4,0-0" string into real games, dropping the padding.
+
+    A card always carries five slots whatever the match length, so unplayed games come
+    back as 0-0. 7-0 is the walkover marker.
+    """
+    out = []
+    for g in (raw or "").split(","):
+        p = g.strip().split("-")
+        if len(p) != 2:
+            continue
+        a, b = p[0].strip(), p[1].strip()
+        if a.isdigit() and b.isdigit() and (a, b) not in (("7", "0"), ("0", "7"), ("0", "0")):
+            out.append(f"{a}-{b}")
+    return out
+
+
+def pick_game_scores(m_card: dict) -> str | None:
+    """Choose between the two game-score fields a match card carries.
+
+    `gameScores` is the LIVE score — whatever the venue feed last pushed. If our fetch
+    lands while the match is still on, it freezes there and never self-corrects, because
+    a later run overwrites the field with the same stale value:
+
+        gameScores        "10-12,0-0,0-0,0-0,0-0"     one game
+        resultsGameScores "10-12,9-11,9-11,0-0,0-0"   the real 0-3
+
+    `resultsGameScores` is the official result, written when the match is signed off.
+
+    We used to read `gameScores` and fall back to `resultsGameScores` only when it was
+    absent — which it never is. That left 3,264 matches holding one game each, and a
+    0-3 defeat read "0-1" wherever the games were counted. Take whichever field carries
+    more real games.
+    """
+    live    = _clean_games(m_card.get("gameScores"))
+    official = _clean_games(m_card.get("resultsGameScores"))
+    best = official if len(official) > len(live) else live
+    return ",".join(best) if best else None
+
+
 def parse_match(m_card: dict, c1: dict, c2: dict,
                 event_id: int) -> dict | None:
     """Parse a single match card into a Supabase row."""
@@ -353,22 +393,7 @@ def parse_match(m_card: dict, c1: dict, c2: dict,
     except (ValueError, TypeError):
         return None
 
-    # Use gameScores directly — already formatted as "11-4,11-4,11-6"
-    game_scores = m_card.get("gameScores") or m_card.get("resultsGameScores")
-
-    # Filter out placeholder scores (walkovers, unplayed sets)
-    if game_scores:
-        clean_games = []
-        for g in game_scores.split(","):
-            parts = g.strip().split("-")
-            if len(parts) == 2:
-                a, b = parts[0].strip(), parts[1].strip()
-                if a.isdigit() and b.isdigit():
-                    if not (a == "7" and b == "0") and \
-                       not (a == "0" and b == "7") and \
-                       not (a == "0" and b == "0"):
-                        clean_games.append(f"{a}-{b}")
-        game_scores = ",".join(clean_games) if clean_games else None
+    game_scores = pick_game_scores(m_card)
 
     # comp1/comp2 individual scores (e.g. "11,11,6")
     comp1_scores = c1.get("scores") if c1.get("scores") else None
@@ -453,16 +478,7 @@ def parse_doubles_match(m_card: dict, c1: dict, c2: dict, event_id: int) -> dict
     if not all([c1p1, c1p2, c2p1, c2p2]):
         return None
 
-    game_scores = m_card.get("gameScores") or m_card.get("resultsGameScores")
-    if game_scores:
-        clean = []
-        for g in game_scores.split(","):
-            p = g.strip().split("-")
-            if len(p) == 2 and p[0].strip().isdigit() and p[1].strip().isdigit():
-                a, b = p[0].strip(), p[1].strip()
-                if (a, b) not in [("7", "0"), ("0", "7"), ("0", "0")]:
-                    clean.append(f"{a}-{b}")
-        game_scores = ",".join(clean) if clean else None
+    game_scores = pick_game_scores(m_card)
 
     match_score = m_card.get("overallScores") or m_card.get("resultOverallScores")
     result = None
