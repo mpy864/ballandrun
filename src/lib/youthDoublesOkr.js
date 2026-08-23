@@ -8,6 +8,7 @@
 import {
   parseScoresForPlayer, parseGame1Won, countDeuceGames, checkComeback,
   computeWindowData,
+  matchScoreFor,
 } from './playerMetrics.js';
 
 const GLABEL = { MD: 'Boys Doubles', WD: 'Girls Doubles', XD: 'Mixed Doubles' };
@@ -189,6 +190,7 @@ export async function loadYouthDoublesPairMetrics(supabase, pair, ageCategory) {
       eventTierStr: eventInfo?.event_tier ?? null,
       round: m.round_phase || 'N/A',
       score: m.game_scores || 'N/A',
+      matchScore: matchScoreFor(m.match_score, isComp1),
       result: won ? 'W' : 'L',
       isComp1,
       isUpset:        won && opponentRank < playerRankAtMatch,

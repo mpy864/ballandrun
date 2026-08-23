@@ -12,6 +12,7 @@ import {
 import {
   parseScoresForPlayer, parseGame1Won, countDeuceGames, checkComeback,
   cleanRound, computeWindowData, nsNarrative, computeVerdict,
+  matchScoreFor,
 } from '../lib/playerMetrics.js';
 import { loadDoublesPairs, loadDoublesPairMetrics } from '../lib/doublesOkr.js';
 import { loadYouthSinglesPlayers, loadYouthSinglesPlayerMetrics } from '../lib/youthSinglesOkr.js';
@@ -165,7 +166,9 @@ const TR_STYLE = { cursor: 'pointer' };
 function MatchRow({ match: m }) {
   const [open, setOpen] = useState(false);
   const isWin    = m.result === 'W';
-  const scoreStr = `${m.gamesWon}-${m.gamesLost}`;
+  // Prefer the recorded match score. Falling back to counted games understates any match
+  // whose game list is incomplete — a 0-3 loss with one game stored would read "0-1".
+  const scoreStr = m.matchScore || `${m.gamesWon}-${m.gamesLost}`;
   const comp     = cleanCompetitionName(m.tournament);
   const round    = cleanRound(m.round);
   const games    = parseDisplayGames(m.score, m.isComp1);
@@ -862,7 +865,10 @@ export default function DynamicOKRDashboard() {
           { data: events,   error: e3 },
         ] = await Promise.all([
           supabase.from('wtt_matches_singles')
-            .select('match_id,comp1_id,comp2_id,result,event_date,event_id,round_phase,game_scores')
+            // match_score is the real result, e.g. "0-3". Counting the games we hold is not
+            // the same thing: 3,257 matches have only their first game stored, so a 0-3
+            // defeat counted from games reads "0-1".
+            .select('match_id,comp1_id,comp2_id,result,event_date,event_id,round_phase,match_score,game_scores')
             .or(`comp1_id.eq.${selectedPlayer},comp2_id.eq.${selectedPlayer}`)
             .order('event_date', { ascending: false }).limit(500),
           supabase.from('rankings_singles_normalized')
@@ -1104,6 +1110,7 @@ export default function DynamicOKRDashboard() {
         eventTierStr: eventInfo?.event_tier ?? null,
         round: m.round_phase || 'N/A',
         score: m.game_scores || 'N/A',
+        matchScore: matchScoreFor(m.match_score, isComp1),
         result: won ? 'W' : 'L',
         isComp1,
         isUpset:       won && opponentRank < playerRankAtMatch,

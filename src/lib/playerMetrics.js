@@ -1,6 +1,22 @@
 // ─── Shared player metrics utilities ─────────────────────────────────────────
 // Used by DynamicOKRDashboard and PlayerPage
 
+// The match result as the source recorded it, seen from this player's side.
+//
+// Every score shown in the app used to be counted from the game scores we happen to
+// hold, which is a different question. 3,257 matches have only their first game stored —
+// captured while still being played and never re-fetched — so a 0-3 defeat counted from
+// games reads "0-1". match_score says 0-3 and has done all along.
+//
+// Stored from comp1's side, so it flips for comp2. Returns null when absent or a
+// placeholder, and callers fall back to counting.
+export function matchScoreFor(raw, isComp1) {
+  if (!raw || raw === '0-0') return null
+  const [a, b] = String(raw).split('-')
+  if (a === undefined || b === undefined) return null
+  return isComp1 ? `${a.trim()}-${b.trim()}` : `${b.trim()}-${a.trim()}`
+}
+
 export function parseScoresForPlayer(str, isComp1) {
   if (!str || str === 'N/A')
     return { gamesWon: 0, gamesLost: 0, pointsWon: 0, pointsLost: 0, totalGames: 0 };

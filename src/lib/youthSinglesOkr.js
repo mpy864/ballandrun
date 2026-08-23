@@ -5,7 +5,7 @@
 
 import {
   parseScoresForPlayer, parseGame1Won, countDeuceGames, checkComeback,
-  computeWindowData,
+  computeWindowData, matchScoreFor,
 } from './playerMetrics.js';
 
 const GLABEL = { MS: 'Boys Singles', WS: 'Girls Singles' };
@@ -56,7 +56,10 @@ export async function loadYouthSinglesPlayerMetrics(supabase, player, ageCategor
 
   const [{ data: matches }, { data: rankRows }, { data: events }] = await Promise.all([
     supabase.from('wtt_matches_singles')
-      .select('match_id,comp1_id,comp2_id,result,event_date,event_id,round_phase,game_scores,event_category,age_group')
+      // match_score is the real result, e.g. "0-3". Counting the games we hold is not the
+      // same thing: 3,257 matches have only their first game stored, so a 0-3 defeat
+      // counted from games reads "0-1".
+      .select('match_id,comp1_id,comp2_id,result,event_date,event_id,round_phase,match_score,game_scores,event_category,age_group')
       .or(`comp1_id.eq.${pidStr},comp2_id.eq.${pidStr}`)
       .eq('age_group', ageCategory)
       .order('event_date', { ascending: false }).limit(600),
@@ -157,6 +160,7 @@ export async function loadYouthSinglesPlayerMetrics(supabase, player, ageCategor
       eventTierStr: eventInfo?.event_tier ?? null,
       round: m.round_phase || 'N/A',
       score: m.game_scores || 'N/A',
+      matchScore: matchScoreFor(m.match_score, isComp1),
       result: won ? 'W' : 'L',
       isComp1,
       isUpset:        won && opponentRank < playerRankAtMatch,
