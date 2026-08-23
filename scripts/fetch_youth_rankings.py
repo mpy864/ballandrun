@@ -222,11 +222,88 @@ def prune_stale(supabase, table: str, year: int, week: int, cutoff: str, wrote: 
         print(f"    [!] prune failed on {table}: {e}")
 
 
+def band_from_age(dob: str, on: date) -> str | None:
+    """The band a player belonged to on a given date, from their date of birth.
+
+    Needed because WTT's AgeCategoryCode is the player's band TODAY, not their band in
+    the week being asked for. Fetching 2024 W10 returns 84 rows tagged U19, 33 tagged
+    U17 — and 83 tagged SEN, players who were juniors then and have since aged out.
+    Trusting the tag on a historical week silently discards all of them, and the further
+    back you go the more it discards: it cost 445 of 2024's ranked matches.
+
+    ITTF bands are inclusive and run to the END of the year the player turns the age, so
+    the comparison is on year alone, not on the birthday.
+    """
+    if not dob:
+        return None
+    try:
+        birth_year = int(str(dob)[:4])
+    except (TypeError, ValueError):
+        return None
+    age_at_year_end = on.year - birth_year
+    for band in BANDS:                       # U11, U13, U15, U17, U19 — narrowest first
+        if age_at_year_end <= int(band[1:]):
+            return band
+    return None                              # genuinely a senior that year
+
+
 def eligible_bands(native: str) -> list:
     """Every band a competitor tagged `native` is ranked in — its own and all wider
     ones. A U13 player appears in the U13, U15, U17 and U19 lists."""
     i = _BAND_IX.get(native)
     return BANDS[i:] if i is not None else []
+
+
+def load_dobs(supabase, ids: set) -> dict:
+    """{ittf_id: dob} for the ids given. Chunked because the id list goes in a URL.
+
+    Missing ids simply do not appear, and effective_band falls back to the API tag for
+    those — a partial answer, not a wrong one.
+    """
+    out, ids = {}, [i for i in ids if i]
+    for i in range(0, len(ids), 400):
+        chunk = ids[i:i + 400]
+        try:
+            r = (supabase.table("wtt_players").select("ittf_id, dob")
+                 .in_("ittf_id", chunk).execute())
+            for p in (r.data or []):
+                if p.get("dob"):
+                    out[str(p["ittf_id"])] = p["dob"]
+        except Exception as e:
+            print(f"    [!] dob lookup failed for a chunk: {e}")
+    return out
+
+
+def effective_band(rec: dict, dob_by_id: dict, on: date, *id_fields: str) -> str | None:
+    """The band this record belonged to in the week being fetched.
+
+    Date of birth wins wherever we have it, because it is the only source that knows what
+    the player was AT THE TIME; the API tag only knows what they are now. Where no dob is
+    on file — about a quarter of ranked juniors — the tag is the fallback, and for the
+    current week the tag is right anyway, which is the case the daily run cares about.
+
+    A pair belongs to the WIDEST of its two members' bands: two players are eligible for
+    a band only if both are, so a U15 partnered with a U19 is a U19 pair.
+    """
+    widest = None
+    saw_dob = False
+    for f in id_fields:
+        iid = rec.get(f)
+        if iid is None:
+            continue
+        dob = dob_by_id.get(str(iid))
+        if not dob:
+            continue
+        saw_dob = True
+        b = band_from_age(dob, on)
+        if b is None:            # senior that week — no youth band at all
+            return None
+        if widest is None or _BAND_IX[b] > _BAND_IX[widest]:
+            widest = b
+    if saw_dob:
+        return widest
+    native = rec.get("AgeCategoryCode")
+    return native if native in _BAND_IX else None
 
 
 def band_positions(recs: list, id_field: str) -> dict:
@@ -253,7 +330,10 @@ def band_positions(recs: list, id_field: str) -> dict:
     for r in recs:
         idv    = r.get(id_field)
         rank   = safe_int(r.get("CurrentRank"))
-        native = r.get("AgeCategoryCode")
+        # The band this record actually held that week, stamped on by process_week.
+        # Reading AgeCategoryCode here instead would drop every aged-out player from the
+        # ordering, so the positions below would count the wrong population.
+        native = r.get("_band")
         if idv is None or rank is None or native not in _BAND_IX:
             continue
         by_sub.setdefault(r.get("SubEventCode"), []).append((rank, str(idv), native))
@@ -279,7 +359,16 @@ def process_week(supabase, year: int, week: int) -> None:
     # a band's ordering depends on competitors the API tags with a narrower band.
     singles = {sub: fetch_paginated(IND_URL, year, week, {"SubEventCode": sub})
                for sub in SINGLE_EVENTS}
-    spos = band_positions([r for rs in singles.values() for r in rs], "IttfId")
+
+    # The Monday of the week being fetched — what "how old were they" is measured against.
+    week_date = date.fromisocalendar(year, week, 1)
+
+    all_singles = [r for rs in singles.values() for r in rs]
+    dobs = load_dobs(supabase, {str(r["IttfId"]) for r in all_singles if r.get("IttfId")})
+    for r in all_singles:
+        r["_band"] = effective_band(r, dobs, week_date, "IttfId")
+
+    spos = band_positions(all_singles, "IttfId")
 
     srows = []
     for sub, recs in singles.items():
@@ -289,7 +378,7 @@ def process_week(supabase, year: int, week: int) -> None:
                 continue
             iid = str(iid)
             # One row per band this player is ranked in, not just their own.
-            for band in eligible_bands(r.get("AgeCategoryCode")):
+            for band in eligible_bands(r.get("_band")):
                 srows.append({
                     "ittf_id": iid, "player_name": r.get("PlayerName"),
                     "country_code": r.get("CountryCode"), "country_name": r.get("CountryName"),
@@ -314,7 +403,18 @@ def process_week(supabase, year: int, week: int) -> None:
     # all: the API returns RankingPosition == CurrentRank for every pair.
     doubles = {sub: fetch_paginated(PAIRS_URL, year, week, {"SubEventCode": sub})
                for sub in DOUBLES_EVENTS}
-    dpos = band_positions([r for rs in doubles.values() for r in rs], "PairId")
+
+    all_doubles = [r for rs in doubles.values() for r in rs]
+    pair_ids = set()
+    for r in all_doubles:
+        for f in ("IttfId1", "IttfId1d"):
+            if r.get(f):
+                pair_ids.add(str(r[f]))
+    pair_dobs = load_dobs(supabase, pair_ids)
+    for r in all_doubles:
+        r["_band"] = effective_band(r, pair_dobs, week_date, "IttfId1", "IttfId1d")
+
+    dpos = band_positions(all_doubles, "PairId")
 
     drows = []
     for sub, recs in doubles.items():
@@ -323,7 +423,7 @@ def process_week(supabase, year: int, week: int) -> None:
             if pid is None:
                 continue
             pid = str(pid)
-            for band in eligible_bands(r.get("AgeCategoryCode")):
+            for band in eligible_bands(r.get("_band")):
                 drows.append({
                     "pair_id": pid,
                     "ittf_id1": str(r.get("IttfId1") or ""), "player_name1": r.get("PlayerName1"),
