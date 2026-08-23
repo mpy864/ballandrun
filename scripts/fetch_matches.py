@@ -403,11 +403,23 @@ def parse_match(m_card: dict, c1: dict, c2: dict,
     doc_code = m_card.get("documentCode") or m_card.get("matchId") or m_card.get("id")
     match_id = f"{event_id}_{doc_code}" if doc_code else None
 
+    # The band of the DRAW, taken from the draw's own name.
+    #
+    # This parser never wrote age_group at all, and an upsert only touches the columns it
+    # is given — so whatever an older version left in that column survived every nightly
+    # refresh untouched. What it had left there was the PLAYER's band rather than the
+    # draw's, which is why 26,111 junior matches read one step too young: a 16-year-old
+    # entering the U19 draw was filed under U17. The doubles parser below has always
+    # written it correctly; only singles was missing.
+    cat = m_card.get("subEventName")
+    age = next((a for a in ("U19", "U17", "U15", "U13", "U11") if cat and a in cat), None)
+
     return {
         "match_id":       match_id,
         "event_id":       event_id,
-        "event_category": m_card.get("subEventName"),
+        "event_category": cat,
         "round_phase":    m_card.get("subEventDescription"),
+        "age_group":      age,
         "comp1_id":       comp1_id,
         "comp2_id":       comp2_id,
         "comp1_scores":   comp1_scores,
