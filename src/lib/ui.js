@@ -15,13 +15,21 @@ export const T = {
   shadow: 'var(--tops-shadow)',
 }
 
-// Flat editorial "card": no box. A section reads via its own hairline rules
-// (header borderBottom, row borderTop) and whitespace, not a bordered surface.
+// A real panel: white, bounded, sitting a step above the page.
+//
+// This was a transparent no-op — the "flat editorial" idea that a section reads from its
+// own hairlines and whitespace alone. It is a real style, but an unforgiving one, and
+// the verdict on the actual screens was that those pages looked unfinished next to the
+// ones with bounded cards. A boundary is what makes a group of numbers read as a
+// deliberate panel rather than as text that happens to be near other text.
+//
+// Every page that uses this picks up the change at once, which is the whole reason it
+// lives in one place: 23 uses across 7 files, one edit.
 export const card = {
-  background: 'transparent',
-  border: 'none',
-  borderRadius: 0,
-  boxShadow: 'none',
+  background: T.card,
+  border: `1px solid ${T.border}`,
+  borderRadius: T.radius,
+  boxShadow: T.shadow,
 }
 
 // Small uppercase label / eyebrow.
