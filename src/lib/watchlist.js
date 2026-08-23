@@ -101,12 +101,17 @@ async function scanSeniorSingles({ indIds, dobById, nameById, consider }) {
   const since = new Date(ref.getTime() - 200 * DAY).toISOString().slice(0, 10)
   const ids = [...indIds]
   const byPlayer = {}
-  for (let i = 0; i < ids.length; i += 700) {
-    const { data } = await supabase.from('rankings_singles_normalized')
+  // Independent chunks, so one wave rather than a queue. Ordering within a player is
+  // preserved because each row is filed under its own player_id and the sort that
+  // matters is the per-request `order`, not the order the responses arrive in.
+  const chunks = []
+  for (let i = 0; i < ids.length; i += 700) chunks.push(ids.slice(i, i + 700))
+  const results = await Promise.all(chunks.map(c =>
+    supabase.from('rankings_singles_normalized')
       .select('player_id, rank, gender, ranking_date').gte('ranking_date', since)
-      .in('player_id', ids.slice(i, i + 700)).order('ranking_date', { ascending: false })
+      .in('player_id', c).order('ranking_date', { ascending: false })))
+  for (const { data } of results)
     for (const r of data || []) (byPlayer[r.player_id] ||= []).push({ rank: r.rank, date: r.ranking_date, gender: r.gender })
-  }
   for (const pid of Object.keys(byPlayer)) {
     const rows = byPlayer[pid]
     if ((rows[0]?.rank ?? 999) > cap) continue
@@ -154,39 +159,53 @@ async function scanSeniorDoubles({ indIds, dobById, nameById, consider }) {
 }
 
 // ── TAGG singles (U15/U17 age-category) ──
+//
+// Nested `for` loops with an `await` inside run one request at a time. Four band/event
+// combinations, two requests each, was eight round trips in a queue — and browser
+// latency, not query time, is what this page pays: the SQL underneath answers in
+// milliseconds. The combinations do not depend on each other, so they go together.
+//
+// Deliberately still two requests per combination rather than one shared "latest week".
+// Each band is asked for its OWN latest week, which is what the old code did, and if one
+// band is ever published late that band simply reads its own most recent week instead of
+// coming back empty against someone else's.
 async function scanTaggSingles({ dobById, nameById, consider }) {
-  for (const age of ['U15', 'U17']) {
-    for (const sub of ['MS', 'WS']) {
-      const { data: latest } = await supabase.from('youth_rankings_singles')
-        .select('ranking_year, ranking_week').eq('age_category', age).eq('sub_event', sub)
-        .order('ranking_year', { ascending: false }).order('ranking_week', { ascending: false }).limit(1)
-      const ly = latest?.[0]; if (!ly) continue
-      const { data } = await supabase.from('youth_rankings_singles')
-        .select('ittf_id, player_name, age_cat_rank').eq('country_code', 'IND')
-        .eq('age_category', age).eq('sub_event', sub)
-        .eq('ranking_year', ly.ranking_year).eq('ranking_week', ly.ranking_week)
-        .lte('age_cat_rank', maxRankFor('singles', 'ageCategory'))
-      for (const r of data || []) {
-        if (r.age_cat_rank == null) continue
-        const id = Number(r.ittf_id)
-        const res = evaluatePlayer({ discipline: 'singles', ageCatRanks: { [age]: r.age_cat_rank }, age: ageFromDob(dobById[id]) })
-        consider(rowFrom(res, {
-          id, name: nameById[id] || r.player_name, disc: sub, discBucket: 'singles', rank: r.age_cat_rank,
-          okr: { level: age, kind: 'singles', id },
-        }))
-      }
+  const combos = []
+  for (const age of ['U15', 'U17']) for (const sub of ['MS', 'WS']) combos.push({ age, sub })
+
+  await Promise.all(combos.map(async ({ age, sub }) => {
+    const { data: latest } = await supabase.from('youth_rankings_singles')
+      .select('ranking_year, ranking_week').eq('age_category', age).eq('sub_event', sub)
+      .order('ranking_year', { ascending: false }).order('ranking_week', { ascending: false }).limit(1)
+    const ly = latest?.[0]; if (!ly) return
+    const { data } = await supabase.from('youth_rankings_singles')
+      .select('ittf_id, player_name, age_cat_rank').eq('country_code', 'IND')
+      .eq('age_category', age).eq('sub_event', sub)
+      .eq('ranking_year', ly.ranking_year).eq('ranking_week', ly.ranking_week)
+      .lte('age_cat_rank', maxRankFor('singles', 'ageCategory'))
+    for (const r of data || []) {
+      if (r.age_cat_rank == null) continue
+      const id = Number(r.ittf_id)
+      const res = evaluatePlayer({ discipline: 'singles', ageCatRanks: { [age]: r.age_cat_rank }, age: ageFromDob(dobById[id]) })
+      consider(rowFrom(res, {
+        id, name: nameById[id] || r.player_name, disc: sub, discBucket: 'singles', rank: r.age_cat_rank,
+        okr: { level: age, kind: 'singles', id },
+      }))
     }
-  }
+  }))
 }
 
 // ── TAGG doubles (U15/U17 age-category, MD/WD/XD) ──
+// Six combinations here rather than four, so twelve queued round trips became one wave.
 async function scanTaggDoubles({ dobById, nameById, consider }) {
-  for (const age of ['U15', 'U17']) {
-    for (const sub of ['MD', 'WD', 'XD']) {
+  const combos = []
+  for (const age of ['U15', 'U17']) for (const sub of ['MD', 'WD', 'XD']) combos.push({ age, sub })
+
+  await Promise.all(combos.map(async ({ age, sub }) => {
       const { data: latest } = await supabase.from('youth_rankings_doubles')
         .select('ranking_year, ranking_week').eq('age_category', age).eq('sub_event', sub)
         .order('ranking_year', { ascending: false }).order('ranking_week', { ascending: false }).limit(1)
-      const ly = latest?.[0]; if (!ly) continue
+      const ly = latest?.[0]; if (!ly) return
       const { data } = await supabase.from('youth_rankings_doubles')
         .select('ittf_id1, player_name1, country_code1, ittf_id2, player_name2, country_code2, age_cat_rank')
         .eq('age_category', age).eq('sub_event', sub)
@@ -208,6 +227,5 @@ async function scanTaggDoubles({ dobById, nameById, consider }) {
           }))
         }
       }
-    }
-  }
+  }))
 }

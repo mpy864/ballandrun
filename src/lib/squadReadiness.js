@@ -32,11 +32,12 @@ async function loadEntryRows(ids) {
   if (!data?.length) return []
   const evIds = [...new Set(data.map(d => d.event_id))]
   const evMap = {}
-  for (let i = 0; i < evIds.length; i += 400) {
-    const { data: evs } = await supabase.from('wtt_events')
-      .select('event_id, event_name, start_date').in('event_id', evIds.slice(i, i + 400))
-    for (const e of evs || []) evMap[e.event_id] = e
-  }
+  // Chunks are independent — one wave, not a queue.
+  const evChunks = []
+  for (let i = 0; i < evIds.length; i += 400) evChunks.push(evIds.slice(i, i + 400))
+  const evResults = await Promise.all(evChunks.map(c =>
+    supabase.from('wtt_events').select('event_id, event_name, start_date').in('event_id', c)))
+  for (const { data: evs } of evResults) for (const e of evs || []) evMap[e.event_id] = e
   return (data || []).map(d => {
     const ev = evMap[d.event_id]
     if (!ev || !ev.start_date) return null
@@ -135,13 +136,17 @@ export async function loadIndiaMovers(limit = 6) {
   if (!inds?.length) return []
   const nameById = {}, ids = []
   for (const p of inds) { nameById[p.ittf_id] = p.player_name; ids.push(p.ittf_id) }
-  const rows = []
-  for (let i = 0; i < ids.length; i += 800) {
-    const { data } = await supabase.from('rankings_singles_normalized')
+  // The chunks exist because a URL has a length limit, not because they depend on each
+  // other. Awaiting them one at a time paid four round trips of browser latency for
+  // work the database finishes in milliseconds.
+  const chunks = []
+  for (let i = 0; i < ids.length; i += 800) chunks.push(ids.slice(i, i + 800))
+  const results = await Promise.all(chunks.map(c =>
+    supabase.from('rankings_singles_normalized')
       .select('player_id, rank, rank_change').eq('ranking_date', d).lte('rank', 400)
-      .in('player_id', ids.slice(i, i + 800))
-    for (const r of data || []) rows.push(r)
-  }
+      .in('player_id', c)))
+  const rows = []
+  for (const { data } of results) for (const r of data || []) rows.push(r)
   return rows
     .filter(r => r.rank_change != null && r.rank_change < 0 && r.rank < 999)
     .sort((a, b) => a.rank_change - b.rank_change)
@@ -202,23 +207,34 @@ export async function loadSquadReadiness(entries) {
       if (idsSet.has(c1)) oppIds.add(c2)
       if (idsSet.has(c2)) oppIds.add(c1)
     }
+    // Chunking is a URL-length limit, not a dependency — every chunk asks an unrelated
+    // question. Awaiting each in turn made the page pay one round trip of browser
+    // latency per chunk, which is the whole cost here: the queries themselves come back
+    // in tens of milliseconds. The opponent and event lookups do not depend on each
+    // other either, so all of it goes in one wave.
     const oppArr = [...oppIds]
-    const oppName = {}, oppRank = {}
-    for (let i = 0; i < oppArr.length; i += 400) {
-      const chunk = oppArr.slice(i, i + 400)
-      const [{ data: op }, { data: orr }] = await Promise.all([
-        supabase.from('wtt_players').select('ittf_id, player_name').in('ittf_id', chunk),
-        supabase.from('rankings_singles_normalized').select('player_id, rank, ranking_date').in('player_id', chunk).gte('ranking_date', rankHistCut).order('ranking_date', { ascending: false }),
-      ])
-      for (const p of op || []) oppName[p.ittf_id] = p.player_name
-      for (const r of orr || []) if (oppRank[r.player_id] == null) oppRank[r.player_id] = r.rank
-    }
     const evIds = [...new Set((sm || []).map(m => m.event_id))]
-    const eventsMap = {}
-    for (let i = 0; i < evIds.length; i += 400) {
-      const { data: ev } = await supabase.from('wtt_events_graded').select('event_id, event_name, tops_grade').in('event_id', evIds.slice(i, i + 400))
-      for (const e of ev || []) eventsMap[String(e.event_id)] = { name: e.event_name, tier: e.tops_grade }
+    const chunk = (arr, n) => {
+      const out = []
+      for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n))
+      return out
     }
+
+    const oppName = {}, oppRank = {}, eventsMap = {}
+    await Promise.all([
+      ...chunk(oppArr, 400).map(async c => {
+        const [{ data: op }, { data: orr }] = await Promise.all([
+          supabase.from('wtt_players').select('ittf_id, player_name').in('ittf_id', c),
+          supabase.from('rankings_singles_normalized').select('player_id, rank, ranking_date').in('player_id', c).gte('ranking_date', rankHistCut).order('ranking_date', { ascending: false }),
+        ])
+        for (const p of op || []) oppName[p.ittf_id] = p.player_name
+        for (const r of orr || []) if (oppRank[r.player_id] == null) oppRank[r.player_id] = r.rank
+      }),
+      ...chunk(evIds, 400).map(async c => {
+        const { data: ev } = await supabase.from('wtt_events_graded').select('event_id, event_name, tops_grade').in('event_id', c)
+        for (const e of ev || []) eventsMap[String(e.event_id)] = { name: e.event_name, tier: e.tops_grade }
+      }),
+    ])
 
     const byPlayer = {}; for (const pid of singlesIds) byPlayer[pid] = []
     for (const m of sm || []) {
