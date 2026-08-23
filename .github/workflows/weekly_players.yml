@@ -1,0 +1,71 @@
+name: Weekly Player Directory
+
+# Keeps wtt_players complete by walking WTT's whole athlete directory.
+#
+# Weekly rather than daily on purpose. The directory is 572 pages and changes slowly —
+# new athletes appear when they first register, not every night. fetch_matches.py still
+# picks up any player who turns up mid-week, so this is the sweep, not the safety net.
+#
+# Sunday 03:00 UTC: after Saturday's results have settled and well clear of the daily
+# sync at 00:30, so the two never contend for the same API.
+
+on:
+  schedule:
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Report only, write nothing (true/false)'
+        required: false
+        default: 'false'
+
+jobs:
+  players:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests supabase
+
+      - name: Fetch player directory
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          DRY_RUN:              ${{ inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            python scripts/fetch_players.py --dry-run
+          else
+            python scripts/fetch_players.py
+          fi
+
+      # The player set feeds india_match_results through two inner joins, so a match is
+      # invisible until BOTH its players exist. Adding players changes which matches are
+      # visible, and the snapshots must be rebuilt or the dashboard keeps yesterday's set.
+      - name: Rebuild snapshots
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          python - <<'PY'
+          import os
+          from supabase import create_client
+          db = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
+          for fn in ("refresh_india_match_ranked", "refresh_india_event_report"):
+              try:
+                  db.rpc(fn).execute()
+                  print(f"  {fn}: ok")
+              except Exception as e:
+                  print(f"  {fn}: {e}")
+          PY
