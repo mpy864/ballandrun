@@ -10,14 +10,14 @@ import { TalentTab, CompareTab } from './sportTabs.jsx'
 import EventsTab from './eventsTab.jsx'
 import TennisView from './tennisView.jsx'
 
-// â”€â”€â”€ Atoms â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Atoms ────────────────────────────────────────────────────────────────────
 
 function RankMove({ diff }) {
   if (diff == null || diff === 0) return null
   const n = Number(diff)
   return n < 0
-    ? <span style={{ color: '#22c55e', fontSize: 10, fontWeight: 700 }}>â–²{Math.abs(n)}</span>
-    : <span style={{ color: '#f87171', fontSize: 10, fontWeight: 700 }}>â–¼{n}</span>
+    ? <span style={{ color: '#22c55e', fontSize: 10, fontWeight: 700 }}>▲{Math.abs(n)}</span>
+    : <span style={{ color: '#f87171', fontSize: 10, fontWeight: 700 }}>▼{n}</span>
 }
 
 function DiscBadge({ disc }) {
@@ -26,7 +26,7 @@ function DiscBadge({ disc }) {
     <span style={{
       fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 99,
       background: `${c}15`, color: c, border: `1px solid ${c}30`, letterSpacing: '0.05em', whiteSpace: 'nowrap',
-    }}>{disc?.short || 'â€”'}</span>
+    }}>{disc?.short || '—'}</span>
   )
 }
 
@@ -40,10 +40,10 @@ function TagPill({ v }) {
 }
 
 function ScoreNum({ score }) {
-  if (!score) return <span style={{ fontSize: 13, fontWeight: 800, color: '#cbd5e1' }}>â€”</span>
+  if (!score) return <span style={{ fontSize: 13, fontWeight: 800, color: '#cbd5e1' }}>—</span>
   const v = Number(score.score)
-  const tip = `Rank ${score.rank_pts}/45 Â· Trajectory ${score.traj_pts}/20 Â· Form ${score.form_pts}/35`
-    + (score.stale ? ' Â· STALE âˆ’10' : '')
+  const tip = `Rank ${score.rank_pts}/45 · Trajectory ${score.traj_pts}/20 · Form ${score.form_pts}/35`
+    + (score.stale ? ' · STALE −10' : '')
   return <span title={`Readiness ${v}/100\n${tip}`} style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>{v}</span>
 }
 
@@ -57,7 +57,7 @@ function cleanEventLabel(name) {
   return (name || '').replace(/\s+presented\s+by\s+.*/i, '').replace(/\s+20\d\d$/, '').trim()
 }
 
-// â”€â”€â”€ Athlete / pair card (verdict-first) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Athlete / pair card (verdict-first) ─────────────────────────────────────
 
 function EntryCard({ entry, lookup, score, live, onOpen, onOpenEntry }) {
   const [open, setOpen] = useState(false)
@@ -89,17 +89,17 @@ function EntryCard({ entry, lookup, score, live, onOpen, onOpenEntry }) {
               </span>
             )}
           </div>
-          {/* age Â· next tournament */}
+          {/* age · next tournament */}
           {live && score && (
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 3 }}>
               {score.age != null && <span>Age {score.age}</span>}
-              {score.age != null && ' Â· '}
+              {score.age != null && ' · '}
               {score.next
                 ? <span>Next: <b style={{ color: '#334155', fontWeight: 600 }}>{cleanEventLabel(score.next.name)}</b>
                     {' '}<span style={{ color: '#94a3b8' }}>
-                      {fmtShortDate(score.next.date)}{score.next.seed ? ` Â· seed ${score.next.seed}` : ''}{score.next.qual ? ' Â· Q' : ''}
+                      {fmtShortDate(score.next.date)}{score.next.seed ? ` · seed ${score.next.seed}` : ''}{score.next.qual ? ' · Q' : ''}
                     </span>
-                    {score.next.provisional && <span style={{ color: '#a855f7', fontStyle: 'italic' }}> Â· provisional</span>}</span>
+                    {score.next.provisional && <span style={{ color: '#a855f7', fontStyle: 'italic' }}> · provisional</span>}</span>
                 : <span style={{ color: '#94a3b8' }}>No upcoming entry</span>}
             </div>
           )}
@@ -108,13 +108,13 @@ function EntryCard({ entry, lookup, score, live, onOpen, onOpenEntry }) {
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
               {score.achievements.runs.map((r, i) => (
                 <span key={i} style={{ fontSize: 9.5, fontWeight: 700, color: '#0369a1', background: '#e0f2fe', border: '1px solid #bae6fd', padding: '2px 7px', borderRadius: 99 }}>
-                  {r.label} Â· {r.event}{r.year ? ` ${r.year}` : ''}
+                  {r.label} · {r.event}{r.year ? ` ${r.year}` : ''}
                 </span>
               ))}
               {score.achievements.bestWin && (
                 <span style={{ fontSize: 9.5, fontWeight: 700, color: '#15803d', background: '#dcfce7', border: '1px solid #bbf7d0', padding: '2px 7px', borderRadius: 99 }}>
                   beat #{score.achievements.bestWin.rank} {score.achievements.bestWin.name}
-                  {score.achievements.bestWin.event ? ` Â· ${score.achievements.bestWin.event}` : ''}
+                  {score.achievements.bestWin.event ? ` · ${score.achievements.bestWin.event}` : ''}
                   {score.achievements.bestWin.year ? ` ${score.achievements.bestWin.year}` : ''}
                 </span>
               )}
@@ -139,7 +139,7 @@ function EntryCard({ entry, lookup, score, live, onOpen, onOpenEntry }) {
               border: '1px solid #e2e8f0', cursor: 'pointer',
               background: open ? '#0f172a' : '#f8fafc', color: open ? '#fff' : '#475569',
             }}
-          >Watch Â· {watch.length}</button>
+          >Watch · {watch.length}</button>
         )}
       </div>
 
@@ -151,7 +151,7 @@ function EntryCard({ entry, lookup, score, live, onOpen, onOpenEntry }) {
           {watch.sort((a, b) => (a.rank || 9999) - (b.rank || 9999)).map(w => (
             <div key={w.id} onClick={() => onOpen(w.id)}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', cursor: 'pointer', borderTop: '1px solid #f1f5f9' }}>
-              <span style={{ width: 42, textAlign: 'center', fontSize: 13, fontWeight: 800, color: '#334155' }}>{w.rank ? `#${w.rank}` : 'â€”'}</span>
+              <span style={{ width: 42, textAlign: 'center', fontSize: 13, fontWeight: 800, color: '#334155' }}>{w.rank ? `#${w.rank}` : '—'}</span>
               <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: '#334155' }}>{w.name}</span>
               {w.country && <span style={{ fontSize: 9, fontWeight: 700, color: '#64748b', background: '#f1f5f9', padding: '2px 6px', borderRadius: 99 }}>{w.country}</span>}
             </div>
@@ -162,7 +162,7 @@ function EntryCard({ entry, lookup, score, live, onOpen, onOpenEntry }) {
   )
 }
 
-// â”€â”€â”€ Youth (TAGG) card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Youth (TAGG) card ────────────────────────────────────────────────────────
 
 const YOUTH_EVENT_COLOR = { BS: '#3b82f6', GS: '#ec4899', BD: '#8b5cf6', GD: '#f59e0b', XD: '#10b981' }
 
@@ -193,7 +193,7 @@ function YouthCard({ entry, onOpenEntry }) {
   )
 }
 
-// â”€â”€â”€ Category column â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Category column ──────────────────────────────────────────────────────────
 
 function pairKey(players) {
   return (players || []).map(p => p.id).filter(Boolean).sort((a, b) => a - b).join('_')
@@ -234,10 +234,10 @@ function CategoryColumn({ cat, entries, lookup, scores, pairScores, live, onOpen
   )
 }
 
-// â”€â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { key: 'squad',   label: 'TOPS' },   // key stays 'squad' â€” internal, not shown
+  { key: 'squad',   label: 'TOPS' },   // key stays 'squad' — internal, not shown
   { key: 'talent',  label: 'Talent' },
   { key: 'events',  label: 'Events' },
   { key: 'compare', label: 'Compare' },
@@ -266,7 +266,7 @@ export default function SportPage() {
     const disc = DISCIPLINES[entry.discipline] || {}
     const ids = (entry.players || []).map(p => p.id).filter(Boolean)
     if (entry.youth) {
-      // Youth cards are player-centric â†’ youth-singles OKR profile.
+      // Youth cards are player-centric → youth-singles OKR profile.
       if (ids[0]) return navigate(okrLink({ level: entry.age, kind: 'singles', id: ids[0] }))
       return
     }
@@ -286,7 +286,7 @@ export default function SportPage() {
     return [...s]
   }, [sportKey])
 
-  // Roster athletes only â€” no watchlist rivals. Includes youth/TAGG entries, which
+  // Roster athletes only — no watchlist rivals. Includes youth/TAGG entries, which
   // the readiness board skips but which are still squad for this purpose.
   const squadIds = useMemo(() => {
     const s = new Set()
@@ -315,7 +315,7 @@ export default function SportPage() {
       try {
         const { lookup, scores, pairScores } = await loadSquadReadiness(entries)
         if (!cancelled) { setLookup(lookup); setScores(scores); setPairScores(pairScores) }
-        // Watchlist + India movers are singles-ranking based â†’ Table Tennis only for now.
+        // Watchlist + India movers are singles-ranking based → Table Tennis only for now.
         if (sportKey === 'tt') {
           const [w, mv, ue, sq] = await Promise.all([
             loadWatchlist(), loadIndiaMovers(6), loadIndiaUpcomingEvents(),
@@ -348,7 +348,7 @@ export default function SportPage() {
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
               <div>
                 <button onClick={() => navigate('/')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: 'var(--tops-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                  â† TOPS Intelligence
+                  ← TOPS Intelligence
                 </button>
                 <h1 style={{ margin: '4px 0 0', fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--tops-ink)' }}>{sport.name}</h1>
               </div>
@@ -376,7 +376,7 @@ export default function SportPage() {
           {sportKey === 'tennis' ? (
             <TennisView />
           ) : loading ? (
-            <div style={{ textAlign: 'center', padding: '80px 0', color: '#94a3b8', fontSize: 14 }}>Loading {sport.name}â€¦</div>
+            <div style={{ textAlign: 'center', padding: '80px 0', color: '#94a3b8', fontSize: 14 }}>Loading {sport.name}…</div>
           ) : tab === 'squad' ? (
             <SquadBoard sport={sport} entries={entries} lookup={lookup} scores={scores} pairScores={pairScores} watch={watch} movers={movers} upcoming={upcoming} squadEventIds={squadEventIds} squadIds={squadIds} loading={loading} />
           ) : tab === 'talent' ? (
