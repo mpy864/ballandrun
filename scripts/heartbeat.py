@@ -40,6 +40,9 @@ FEEDS = {
     # The first ingest that reports in. Points publish weekly with the rankings, but it
     # runs daily and is idempotent, so silence beyond a day means the job is stuck.
     "wtt-ranking-points": ("WTT ranking points", 1560),
+    # Daily. Without it nothing ever corrects an event's name, country or dates: WTT
+    # moved event 3254 from London to Astana and the dashboard showed England for months.
+    "wtt-calendar": ("WTT event calendar", 1560),
     # Weekly, so the window is 8 days plus slack — GitHub's scheduled crons run late.
     # A missing player is not a visible outage: the dashboard simply drops every match
     # that player appears in, silently, because india_match_results inner-joins them.

@@ -34,6 +34,12 @@ jobs:
       max-parallel: 3
       matrix:
         include:
+          # First in the list on purpose. Everything downstream reads wtt_events for the
+          # names, countries and dates it reports, and fetch_entries.py picks its window
+          # from that table. max-parallel does not guarantee order, but one day's lag on
+          # a brand-new event is harmless — a wrong venue for months is not.
+          - name: Event calendar
+            cmd: fetch_event_calendar.py
           - name: Senior rankings
             cmd: fetch_rankings.py
           - name: WTT match results

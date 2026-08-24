@@ -79,7 +79,9 @@ export function rosterPairKey(players) {
 export async function loadIndiaUpcomingEvents(limit = 60) {
   const { data, error } = await supabase
     .from('india_upcoming_entries')
-    .select('event_id, event_name, start_date, days_away, athletes, entries, senior_athletes, junior_athletes')
+    // country matters as much as the name: half the calendar is named after the host
+    // city, so "WTT Contender Panagyurishte" never says Bulgaria anywhere on screen.
+    .select('event_id, event_name, country, start_date, days_away, athletes, entries, senior_athletes, junior_athletes')
     .order('start_date', { ascending: true })
     .limit(limit)
   if (error) { console.error('upcoming india entries failed', error); return [] }

@@ -11,6 +11,18 @@ import { card, chip, T } from '../lib/ui.js'
 const TIER_TONE = { Core: '#b45309', Development: '#166534', TAGG: '#3730a3' }
 const SQUAD_TONE = '#b45309'   // matches the Core tier accent
 
+// WTT's official names carry a title sponsor — "WTT Contender Panagyurishte 2026
+// Presented by ASAREL", "WTT Champions Macao 2026 Presented by Galaxy Entertainment
+// Group". Strip the sponsor before the year, or the year is no longer at the end and
+// the old trailing-year trim silently stops firing, leaving a name too long to read
+// in a single-line row.
+function shortEventName(name = '') {
+  return name
+    .replace(/\s+presented by .*$/i, '')
+    .replace(/\s+20\d\d$/, '')
+    .trim()
+}
+
 // One upcoming event: headline counts, expanding to the Indian athletes entered and
 // the draws each is in. Athletes load on open — most rows are never expanded, and
 // pulling every entry up front is what makes a panel like this slow as entries grow.
@@ -44,9 +56,10 @@ function UpcomingEvent({ e, hasSquad, squadIds, first }) {
         }}>
         <span style={{ minWidth: 0 }}>
           <span style={{ display: 'block', fontSize: 13.5, fontWeight: hasSquad ? 650 : 550, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {e.event_name.replace(/\s+20\d\d$/, '')}
+            {shortEventName(e.event_name)}
           </span>
           <span style={{ fontSize: 12, color: T.muted }}>
+            {e.country ? <>{e.country}{' · '}</> : null}
             <b style={{ color: T.slate, fontWeight: 700 }}>{e.athletes}</b>
             {' '}athlete{e.athletes === 1 ? '' : 's'}
             {parts.length ? ` · ${parts.join(', ')}` : ''}
@@ -141,8 +154,13 @@ export default function SquadBoard({ sport, entries, lookup, scores, pairScores,
   // switches above count something true. The rail still opens at a readable height and
   // says plainly how much it is holding back — a list that silently stops at six is how
   // the filter came to be wrong in the first place.
+  //
+  // 15, not 8. The window typically holds 18 events, so a cap of 8 hid more than half of
+  // them: WTT Contender Panagyurishte sat 10th and WTT Star Contender Astana 13th, and
+  // both read as "not on the calendar" to anyone who did not click through. At 15 the
+  // "show more" is the exception rather than the normal state of the panel.
   const [allEvents, setAllEvents] = useState(false)
-  const EVENT_PREVIEW = 8
+  const EVENT_PREVIEW = 15
   const shownEvents = allEvents ? matching : matching.slice(0, EVENT_PREVIEW)
   const hiddenEvents = matching.length - shownEvents.length
 
