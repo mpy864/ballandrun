@@ -12,7 +12,7 @@ import {
 import {
   parseScoresForPlayer, parseGame1Won, countDeuceGames, checkComeback,
   cleanRound, computeWindowData, nsNarrative, computeVerdict,
-  matchScoreFor,
+  matchScoreFor, windowWinRate,
 } from '../lib/playerMetrics.js';
 import { loadDoublesPairs, loadDoublesPairMetrics } from '../lib/doublesOkr.js';
 import { loadYouthSinglesPlayers, loadYouthSinglesPlayerMetrics } from '../lib/youthSinglesOkr.js';
@@ -1525,7 +1525,11 @@ export default function DynamicOKRDashboard() {
                   <div className="flex items-center gap-6 flex-wrap">
                     {[
                       { label: 'World rank',    value: `#${playerMetrics.ranking}` },
-                      { label: 'Win rate (6M)', value: `${w6.winRate.toFixed(1)}%` },
+                      // A dash, not a number, when the window is too thin — the verdict
+                      // beside it already says "Insufficient data", and a bold 0.0% next
+                      // to "Matches (6M) 0" contradicts it.
+                      { label: 'Win rate (6M)',
+                        value: windowWinRate(w6) == null ? '—' : `${w6.winRate.toFixed(1)}%` },
                       { label: 'Matches (6M)',  value: `${w6.matchCount}` },
                     ].map(s => (
                       <div key={s.label} className="text-center">

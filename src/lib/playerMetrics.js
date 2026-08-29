@@ -118,8 +118,22 @@ export function nsNarrative(key, value) {
   }
 }
 
+// Fewest matches in a window before a win rate means anything. Below this the verdict
+// says "Insufficient data" — and every percentage drawn from the same window has to
+// agree with that, or the page contradicts itself. Sathiyan / Harmeet last played as a
+// pair in Feb 2026, so their 6-month window holds nothing; the header still printed
+// "Win rate (6M) 0.0%" beside "Matches (6M) 0", which reads as a pair that never wins
+// rather than a pair that has not played. They went 2W-1L at that last event.
+export const MIN_WINDOW_MATCHES = 5;
+
+// A win rate for display, or null when the window is too thin to support one.
+export function windowWinRate(w) {
+  if (!w || w.matchCount < MIN_WINDOW_MATCHES) return null;
+  return w.winRate;
+}
+
 export function computeVerdict(w) {
-  if (w.matchCount < 5) return { text: 'Insufficient data', tone: 'gray' };
+  if (w.matchCount < MIN_WINDOW_MATCHES) return { text: 'Insufficient data', tone: 'gray' };
   const up = w.rankChange > 0, strong = w.winRate >= 50;
   if (up && strong)   return { text: `Ascending — up ${w.rankChange} places`,                    tone: 'green' };
   if (!up && !strong) return { text: 'Declining — rank and win rate both falling',                tone: 'red'   };
