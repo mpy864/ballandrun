@@ -100,3 +100,26 @@ export function shortRound(round = '') {
     'Preliminary': 'Prelim', 'Other': '—',
   }[round] || round
 }
+
+// WTT shouts the family name: "Ankur BHATTACHARJEE", "LIN Shidong", "Sarah DE NUTTE".
+// That is fine in a results grid where it separates given name from family name at a
+// glance, but in a prose row it reads as shouting. This lower-cases only the tokens that
+// are entirely capitals, so anything already written in mixed case is left exactly as its
+// owner writes it.
+//
+// Word order is untouched. "LIN Shidong" becomes "Lin Shidong", not "Shidong Lin" —
+// the family name comes first in Chinese and Korean names and reordering them would be
+// wrong, not tidier.
+function capitalise(word) {
+  return word ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : word
+}
+
+export function properName(name = '') {
+  // Keep the separators: split on whitespace and slashes so "A / B" survives intact.
+  return String(name).split(/(\s+|\/)/).map(token => {
+    if (!/[A-Z]/.test(token)) return token
+    if (token !== token.toUpperCase()) return token   // already mixed case — leave it
+    // Re-case within hyphens and apostrophes too: "YUN-JU" → "Yun-Ju", "O'BRIEN" → "O'Brien".
+    return token.split(/([-'’])/).map(p => /^[-'’]$/.test(p) ? p : capitalise(p)).join('')
+  }).join('')
+}
