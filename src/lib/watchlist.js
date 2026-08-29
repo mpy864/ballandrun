@@ -8,6 +8,7 @@
 // WTT rounds) are documented in the config but need manual review.
 
 import { supabase } from './supabase.js'
+import { properName } from './matchFormat.js'
 import { ROSTER } from './topsRoster.js'
 import { ageFromDob } from './squadReadiness.js'
 import { evaluatePlayer, maxRankFor, TIER_ORDER, TIER_LABEL } from './topsCriteria.js'
@@ -48,7 +49,7 @@ export async function loadWatchlist() {
     .select('ittf_id, player_name, dob, country_code').eq('country_code', 'IND').limit(4000)
   const indIds = new Set((inds || []).map(p => Number(p.ittf_id)))
   const dobById = {}, nameById = {}
-  for (const p of inds || []) { dobById[p.ittf_id] = p.dob; nameById[p.ittf_id] = p.player_name }
+  for (const p of inds || []) { dobById[p.ittf_id] = p.dob; nameById[p.ittf_id] = properName(p.player_name) }
 
   const consider = (row) => {
     if (!row || !row.id || inRoster.has(Number(row.id))) return
@@ -188,7 +189,7 @@ async function scanTaggSingles({ dobById, nameById, consider }) {
       const id = Number(r.ittf_id)
       const res = evaluatePlayer({ discipline: 'singles', ageCatRanks: { [age]: r.age_cat_rank }, age: ageFromDob(dobById[id]) })
       consider(rowFrom(res, {
-        id, name: nameById[id] || r.player_name, disc: sub, discBucket: 'singles', rank: r.age_cat_rank,
+        id, name: nameById[id] || properName(r.player_name), disc: sub, discBucket: 'singles', rank: r.age_cat_rank,
         okr: { level: age, kind: 'singles', id },
       }))
     }
@@ -215,8 +216,8 @@ async function scanTaggDoubles({ dobById, nameById, consider }) {
       for (const r of data || []) {
         if (r.age_cat_rank == null) continue
         const members = [
-          { id: Number(r.ittf_id1), name: r.player_name1, ind: r.country_code1 === 'IND' },
-          { id: Number(r.ittf_id2), name: r.player_name2, ind: r.country_code2 === 'IND' },
+          { id: Number(r.ittf_id1), name: properName(r.player_name1), ind: r.country_code1 === 'IND' },
+          { id: Number(r.ittf_id2), name: properName(r.player_name2), ind: r.country_code2 === 'IND' },
         ]
         if (!members.some(m => m.ind)) continue
         const res = evaluatePlayer({ discipline: discBucket, ageCatRanks: { [age]: r.age_cat_rank }, age: ageFromDob(dobById[members[0].id]) ?? ageFromDob(dobById[members[1].id]) })

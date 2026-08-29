@@ -4,6 +4,7 @@
 // Presentation-agnostic; reuses the readiness.js formulas + doubles loader.
 
 import { supabase } from './supabase.js'
+import { properName } from './matchFormat.js'
 import { DISCIPLINES } from './topsRoster.js'
 import { computeReadiness, computeAchievements, cutoffDaysAgo } from './readiness.js'
 import { loadRosterDoublesLedgers } from './doublesOkr.js'
@@ -114,7 +115,7 @@ export async function loadEventAthletes(eventId, squadIds = []) {
   for (const r of data || []) {
     const k = Number(r.player_id)
     if (!byPlayer.has(k)) {
-      byPlayer.set(k, { id: k, name: r.player_name, junior: false, draws: [], squad: squad.has(k) })
+      byPlayer.set(k, { id: k, name: properName(r.player_name), junior: false, draws: [], squad: squad.has(k) })
     }
     const p = byPlayer.get(k)
     p.junior = p.junior || r.is_junior
@@ -137,7 +138,7 @@ export async function loadIndiaMovers(limit = 6) {
     .select('ittf_id, player_name').eq('country_code', 'IND').limit(3000)
   if (!inds?.length) return []
   const nameById = {}, ids = []
-  for (const p of inds) { nameById[p.ittf_id] = p.player_name; ids.push(p.ittf_id) }
+  for (const p of inds) { nameById[p.ittf_id] = properName(p.player_name); ids.push(p.ittf_id) }
   // The chunks exist because a URL has a length limit, not because they depend on each
   // other. Awaiting them one at a time paid four round trips of browser latency for
   // work the database finishes in milliseconds.
@@ -177,7 +178,7 @@ export async function loadSquadReadiness(entries) {
     supabase.from('rankings_singles_normalized').select('player_id, rank, rank_change, ranking_date').in('player_id', allIds).gte('ranking_date', rankHistCut).order('ranking_date', { ascending: false }),
   ])
   const map = {}
-  for (const p of players || []) map[p.ittf_id] = { id: p.ittf_id, name: p.player_name, country: p.country_code, dob: p.dob }
+  for (const p of players || []) map[p.ittf_id] = { id: p.ittf_id, name: properName(p.player_name), country: p.country_code, dob: p.dob }
   const cut1y = cutoffDaysAgo(350).toISOString().slice(0, 10)
   const rank1y = {}
   for (const r of ranks || []) {
@@ -229,7 +230,7 @@ export async function loadSquadReadiness(entries) {
           supabase.from('wtt_players').select('ittf_id, player_name').in('ittf_id', c),
           supabase.from('rankings_singles_normalized').select('player_id, rank, ranking_date').in('player_id', c).gte('ranking_date', rankHistCut).order('ranking_date', { ascending: false }),
         ])
-        for (const p of op || []) oppName[p.ittf_id] = p.player_name
+        for (const p of op || []) oppName[p.ittf_id] = properName(p.player_name)
         for (const r of orr || []) if (oppRank[r.player_id] == null) oppRank[r.player_id] = r.rank
       }),
       ...chunk(evIds, 400).map(async c => {

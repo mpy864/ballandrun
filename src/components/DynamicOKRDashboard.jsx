@@ -14,6 +14,7 @@ import {
   cleanRound, computeWindowData, nsNarrative, computeVerdict,
   matchScoreFor, windowWinRate,
 } from '../lib/playerMetrics.js';
+import { properName } from '../lib/matchFormat.js';
 import { loadDoublesPairs, loadDoublesPairMetrics } from '../lib/doublesOkr.js';
 import { loadYouthSinglesPlayers, loadYouthSinglesPlayerMetrics } from '../lib/youthSinglesOkr.js';
 import { loadYouthDoublesPairs, loadYouthDoublesPairMetrics } from '../lib/youthDoublesOkr.js';
@@ -743,7 +744,7 @@ export default function DynamicOKRDashboard() {
             const g = normGender(p.gender);
             return {
               player_id:    p.ittf_id,
-              player_name:  p.player_name,
+              player_name:  properName(p.player_name),
               rank:         Number(rankMap[p.ittf_id]),
               gender:       g,
               gender_label: g === 'M' ? 'Men' : g === 'W' ? 'Women' : (p.gender || ''),
@@ -772,7 +773,7 @@ export default function DynamicOKRDashboard() {
             if (prow) {
               const g = normGender(prow.gender);
               finalMerged = [{
-                player_id: prow.ittf_id, player_name: prow.player_name,
+                player_id: prow.ittf_id, player_name: properName(prow.player_name),
                 rank: Number(rrow?.[0]?.rank ?? 9999), gender: g,
                 gender_label: g === 'M' ? 'Men' : g === 'W' ? 'Women' : (prow.gender || ''),
                 country_code: prow.country_code || '', dob: prow.dob || null,
@@ -1098,7 +1099,7 @@ export default function DynamicOKRDashboard() {
       const eventInfo = events?.find(e => e.event_id === m.event_id);
       return {
         rawDate: matchDate,
-        opponent: oppP?.player_name || 'Unknown',
+        opponent: properName(oppP?.player_name || '') || 'Unknown',
         opponentCountry: oppP?.country_code || null,
         opponentDob: oppP?.dob || null,
         opponentHandedness: oppP?.handedness || null,
@@ -1161,7 +1162,7 @@ export default function DynamicOKRDashboard() {
 
         return {
           rawDate,
-          opponent: oppP?.player_name || opp,
+          opponent: properName(oppP?.player_name || opp),
           opponentCountry: oppP?.country_code || 'IND',
           opponentDob: oppP?.dob || null,
           opponentHandedness: oppP?.handedness || null,

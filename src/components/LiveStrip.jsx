@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { loadLiveMatches, loadLatestIndiaResults } from '../lib/liveStrip.js'
 import { shortRound, roundRank, properName } from '../lib/matchFormat.js'
-import { card, chip, T } from '../lib/ui.js'
+import { okrLink } from '../lib/okrLink.js'
+import { card, chip, hoverLift, T } from '../lib/ui.js'
 
 // ─── Live strip — the top of the TOPS tab ────────────────────────────────────
 //
@@ -44,22 +45,37 @@ function shortEventName(name = '') {
 function Opponent({ name, country, rank }) {
   // A result is meaningless without who it was against. "Lost 0-3" says nothing;
   // "lost 0-3 to World No. 1" is the whole story.
+  //
+  // Brackets, not a trailing word. Names are proper case now, so a bare "HUN" after
+  // "Mateusz Zalewski" reads as another part of the name — and for a doubles pair, which
+  // already carries a slash, "Szantosi / Zalewski HUN" is three names in a row. The
+  // brackets say plainly that this one is not a person.
   return (
     <span style={{ color: T.slate, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
       {name || 'Unknown'}
-      {country ? <span style={{ color: T.muted }}>{' '}{country}</span> : null}
-      {rank ? <span style={{ color: T.muted }}>{' '}#{rank}</span> : null}
+      {(country || rank) ? (
+        <span style={{ color: T.muted }}>
+          {' ('}{country || ''}{country && rank ? ' ' : ''}{rank ? `#${rank}` : ''}{')'}
+        </span>
+      ) : null}
     </span>
   )
 }
 
-function Row({ isSquad, showChip, live, lead, opp, oppCountry, oppRank, verb, score, sub, first }) {
+function Row({ isSquad, showChip, live, lead, opp, oppCountry, oppRank, verb, score, sub,
+               event, first, onOpen }) {
+  const Tag = onOpen ? 'button' : 'div'
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 10,
-      padding: '8px 20px', fontSize: 13,
-      borderTop: first ? 'none' : `1px solid ${T.divider}`,
-    }}>
+    <Tag
+      onClick={onOpen}
+      {...(onOpen ? hoverLift : {})}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        width: '100%', textAlign: 'left', appearance: 'none', border: 'none',
+        background: 'transparent', cursor: onOpen ? 'pointer' : 'default',
+        padding: '8px 20px', fontSize: 13,
+        borderTop: first ? 'none' : `1px solid ${T.divider}`,
+      }}>
       {showChip && (isSquad
         ? <span style={chip(SQUAD_TONE, { fontSize: 9.5 })}>TOPS</span>
         : <span style={{ width: 40 }} />)}
@@ -75,6 +91,9 @@ function Row({ isSquad, showChip, live, lead, opp, oppCountry, oppRank, verb, sc
       <Opponent name={opp} country={oppCountry} rank={oppRank} />
 
       <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap' }}>
+        {/* Only when the day spans more than one event — 46% of days do, up to four. The
+            header can only name one, so on those days the row has to say which. */}
+        {event ? <span style={{ fontSize: 11.5, color: T.muted }}>{event}</span> : null}
         {sub ? <span style={{ fontSize: 11.5, color: T.muted }}>{sub}</span> : null}
         <span className="tabnum" style={{
           fontSize: 13, fontWeight: 700,
@@ -83,7 +102,7 @@ function Row({ isSquad, showChip, live, lead, opp, oppCountry, oppRank, verb, sc
           {score?.text}
         </span>
       </span>
-    </div>
+    </Tag>
   )
 }
 
@@ -230,6 +249,8 @@ export default function LiveStrip({ squadIds = [] }) {
           oppCountry={r.oppCountry}
           oppRank={r.oppRank}
           sub={roundLabel(r.round)}
+          event={oneEvent ? null : shortEventName(r.eventName || '')}
+          onOpen={r.indId ? () => navigate(okrLink({ level: 'Senior', kind: 'singles', id: r.indId })) : null}
           score={{ text: `${r.games[0]}-${r.games[1]}  ${r.points[0]}-${r.points[1]}` }}
         />
       ) : (
@@ -243,6 +264,12 @@ export default function LiveStrip({ squadIds = [] }) {
           opp={properName(r.opp_name)}
           oppCountry={r.opp_country}
           sub={roundLabel(r.round)}
+          event={oneEvent ? null : shortEventName(r.event_name || '')}
+          // A doubles result opens the pair, a singles result opens the player — the same
+          // rule okrLink() applies everywhere else an athlete is clicked.
+          onOpen={r.ind_p1_id ? () => navigate(r.ind_p2_id
+            ? okrLink({ level: 'Senior', kind: 'doubles', ids: [r.ind_p1_id, r.ind_p2_id] })
+            : okrLink({ level: 'Senior', kind: 'singles', id: r.ind_p1_id })) : null}
           score={{ text: r.score || '—', won: r.won }}
         />
       ))}

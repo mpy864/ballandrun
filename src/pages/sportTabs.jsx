@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { properName } from '../lib/matchFormat.js'
 import { supabase } from '../lib/supabase.js'
 import { okrLink } from '../lib/okrLink.js'
 
@@ -46,7 +47,7 @@ export function TalentTab({ onOpen, navigate }) {
     let c = false
     ;(async () => {
       const { data } = await supabase.from('wtt_players').select('ittf_id, player_name, gender').eq('country_code', 'IND')
-      const map = {}; for (const p of data || []) map[p.ittf_id] = { name: p.player_name, gender: p.gender }
+      const map = {}; for (const p of data || []) map[p.ittf_id] = { name: properName(p.player_name), gender: p.gender }
       if (!c) setIndPlayers(map)
     })()
     return () => { c = true }
@@ -80,7 +81,7 @@ export function TalentTab({ onOpen, navigate }) {
         const latestDate = data?.[0]?.publish_date
         out = (data || [])
           .filter(r => r.publish_date === latestDate && (idset.has(r.p1_ittf_id) || idset.has(r.p2_ittf_id)))
-          .map(r => ({ kind: 'doubles', ids: [r.p1_ittf_id, r.p2_ittf_id], label: r.team_name, rank: r.current_rank, rank_change: r.previous_rank ? r.previous_rank - r.current_rank : null }))
+          .map(r => ({ kind: 'doubles', ids: [r.p1_ittf_id, r.p2_ittf_id], label: properName(r.team_name), rank: r.current_rank, rank_change: r.previous_rank ? r.previous_rank - r.current_rank : null }))
           .sort((a, b) => (a.rank || 9999) - (b.rank || 9999))
       }
 
@@ -95,7 +96,7 @@ export function TalentTab({ onOpen, navigate }) {
           .order('publish_date', { ascending: false }).limit(1000)
         const latestDate = data?.[0]?.publish_date
         out = (data || []).filter(r => r.publish_date === latestDate)
-          .map(r => ({ kind: 'singles', id: Number(r.ittf_id), label: r.player_name, rank: r.age_cat_rank, rank_change: r.rank_diff }))
+          .map(r => ({ kind: 'singles', id: Number(r.ittf_id), label: properName(r.player_name), rank: r.age_cat_rank, rank_change: r.rank_diff }))
           .sort((a, b) => (a.rank || 9999) - (b.rank || 9999))
       }
 
@@ -110,7 +111,7 @@ export function TalentTab({ onOpen, navigate }) {
           .order('publish_date', { ascending: false }).limit(1000)
         const latestDate = data?.[0]?.publish_date
         out = (data || []).filter(r => r.publish_date === latestDate)
-          .map(r => ({ kind: 'doubles', ids: [Number(r.ittf_id1), Number(r.ittf_id2)], label: `${r.player_name1} / ${r.player_name2}`, rank: r.age_cat_rank, rank_change: r.rank_diff }))
+          .map(r => ({ kind: 'doubles', ids: [Number(r.ittf_id1), Number(r.ittf_id2)], label: properName(`${r.player_name1} / ${r.player_name2}`), rank: r.age_cat_rank, rank_change: r.rank_diff }))
           .sort((a, b) => (a.rank || 9999) - (b.rank || 9999))
       }
 

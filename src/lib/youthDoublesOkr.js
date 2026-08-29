@@ -10,6 +10,7 @@ import {
   computeWindowData,
   matchScoreFor,
 } from './playerMetrics.js';
+import { properName } from './matchFormat.js'
 
 const GLABEL = { MD: 'Boys Doubles', WD: 'Girls Doubles', XD: 'Mixed Doubles' };
 
@@ -48,7 +49,7 @@ export async function loadYouthDoublesPairs(supabase, ageCategory) {
       pair_id:      String(r.pair_id),
       p1:           Number(r.ittf_id1),
       p2:           Number(r.ittf_id2),
-      player_name:  `${r.player_name1} / ${r.player_name2}`,
+      player_name:  properName(`${r.player_name1} / ${r.player_name2}`),
       rank:         Number(r.age_cat_rank),
       gender:       r.sub_event === 'WD' ? 'W' : r.sub_event === 'XD' ? 'X' : 'M',
       gender_label: GLABEL[r.sub_event] || r.sub_event,
@@ -122,7 +123,7 @@ export async function loadYouthDoublesPairMetrics(supabase, pair, ageCategory) {
     for (const r of (data || [])) {
       if (r.age_cat_rank == null) continue;
       const k = pairKey(r.ittf_id1, r.ittf_id2);
-      if (!youthMap[k]) youthMap[k] = { history: [], name: `${r.player_name1} / ${r.player_name2}` };
+      if (!youthMap[k]) youthMap[k] = { history: [], name: properName(`${r.player_name1} / ${r.player_name2}`) };
       youthMap[k].history.push({ ranking_date: r.publish_date, rank: r.age_cat_rank });
     }
   }
@@ -140,7 +141,7 @@ export async function loadYouthDoublesPairMetrics(supabase, pair, ageCategory) {
       .limit(20000);
     for (const r of (data || [])) {
       const k = pairKey(r.p1_ittf_id, r.p2_ittf_id);
-      if (!seniorMap[k]) seniorMap[k] = { name: r.team_name };
+      if (!seniorMap[k]) seniorMap[k] = { name: properName(r.team_name) };
     }
   }
   for (const k in youthMap)  youthMap[k].history.sort((x, y) => new Date(y.ranking_date) - new Date(x.ranking_date));
@@ -176,7 +177,7 @@ export async function loadYouthDoublesPairMetrics(supabase, pair, ageCategory) {
     const pointDiff = totalGames > 0 ? (pointsWon - pointsLost) / totalGames : null;
     const eventInfo = events?.find(e => e.event_id === m.event_id);
     const oppName = yInfo?.name || sInfo?.name
-      || [playerMap[m.__o1]?.player_name, playerMap[m.__o2]?.player_name].filter(Boolean).join(' / ')
+      || properName([playerMap[m.__o1]?.player_name, playerMap[m.__o2]?.player_name].filter(Boolean).join(' / '))
       || 'Unknown';
     return {
       rawDate: matchDate,

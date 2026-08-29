@@ -7,6 +7,7 @@ import {
   parseScoresForPlayer, parseGame1Won, countDeuceGames, checkComeback,
   computeWindowData, matchScoreFor,
 } from './playerMetrics.js';
+import { properName } from './matchFormat.js'
 
 const GLABEL = { MS: 'Boys Singles', WS: 'Girls Singles' };
 
@@ -37,7 +38,7 @@ export async function loadYouthSinglesPlayers(supabase, ageCategory) {
     .filter(r => r.age_cat_rank != null)
     .map(r => ({
       player_id:    String(r.ittf_id),
-      player_name:  r.player_name,
+      player_name:  properName(r.player_name),
       rank:         Number(r.age_cat_rank),
       gender:       r.sub_event === 'WS' ? 'W' : 'M',
       gender_label: GLABEL[r.sub_event] || r.sub_event,
@@ -102,7 +103,7 @@ export async function loadYouthSinglesPlayerMetrics(supabase, player, ageCategor
     for (const p of (data || [])) {
       const k = parseInt(p.ittf_id);
       if (!oppProfiles[k] && p.player_name) {
-        oppProfiles[k] = { player_name: p.player_name, country_code: p.country_code };
+        oppProfiles[k] = { player_name: properName(p.player_name), country_code: p.country_code };
       }
     }
   }
@@ -148,7 +149,7 @@ export async function loadYouthSinglesPlayerMetrics(supabase, player, ageCategor
       // Identity for grouping is the id, never the name: two opponents nobody could name
       // are still two opponents, and keying on the label merged them into one.
       opponentKey: oppId,
-      opponent: oppP?.player_name || `Unknown #${oppId}`,
+      opponent: properName(oppP?.player_name || '') || `Unknown #${oppId}`,
       opponentCountry: oppP?.country_code || null,
       opponentDob: oppP?.dob || null,
       opponentHandedness: oppP?.handedness || null,

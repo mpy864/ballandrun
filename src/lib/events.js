@@ -1,6 +1,6 @@
 import { supabase } from './supabase.js'
 import { ROSTER } from './topsRoster.js'
-import { disciplineOrder } from './matchFormat.js'
+import { disciplineOrder, properName } from './matchFormat.js'
 
 // Which events had a TOPS athlete in them. "10 Indians went" reads differently when
 // three of them are on the programme, so the table marks those rows.
@@ -99,7 +99,7 @@ export async function loadEventDetail(eventId) {
     const key = `${r.player_name}||${r.discipline}`
     let e = byEntrant.get(key)
     if (!e) {
-      e = { name: r.player_name, playerId: r.player_id, discipline: r.discipline,
+      e = { name: properName(r.player_name), playerId: r.player_id, discipline: r.discipline,
             kind: r.kind, rank: r.player_rank,
             depth: -Infinity, round: null, fromDepth: Infinity, fromRound: null,
             w: 0, l: 0, exitUpset: false }

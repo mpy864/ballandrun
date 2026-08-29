@@ -9,6 +9,7 @@ import {
   computeWindowData,
   matchScoreFor,
 } from './playerMetrics.js';
+import { properName } from './matchFormat.js'
 
 const GENDER_LABEL = { M: "Men's Doubles", W: "Women's Doubles", X: 'Mixed Doubles' };
 
@@ -54,7 +55,7 @@ export async function loadDoublesPairs(supabase) {
     pair_id:      String(r.pair_id),
     p1:           r.p1_ittf_id,
     p2:           r.p2_ittf_id,
-    player_name:  r.team_name || 'Unknown pair',
+    player_name:  properName(r.team_name) || 'Unknown pair',
     rank:         Number(r.current_rank),
     gender:       r.gender,                       // M | W | X
     gender_label: GENDER_LABEL[r.gender] || r.category,
@@ -158,8 +159,8 @@ export async function loadDoublesPairMetrics(supabase, pair) {
       parseScoresForPlayer(m.game_scores, isComp1);
     const pointDiff = totalGames > 0 ? (pointsWon - pointsLost) / totalGames : null;
     const eventInfo = events?.find(e => e.event_id === m.event_id);
-    const oppName = oppInfo?.team_name
-      || [playerMap[m.__o1]?.player_name, playerMap[m.__o2]?.player_name].filter(Boolean).join(' / ')
+    const oppName = properName(oppInfo?.team_name || '')
+      || properName([playerMap[m.__o1]?.player_name, playerMap[m.__o2]?.player_name].filter(Boolean).join(' / '))
       || 'Unknown';
     return {
       rawDate: matchDate,
@@ -286,7 +287,7 @@ export async function loadRosterDoublesLedgers(supabase, pairs) {
         .eq('publish_date', latestWeek));
     }
     for (const r of await Promise.all(chunks)) for (const row of (r.data || [])) {
-      oppCurrent[pairKey(row.p1_ittf_id, row.p2_ittf_id)] = { rank: row.current_rank, name: row.team_name };
+      oppCurrent[pairKey(row.p1_ittf_id, row.p2_ittf_id)] = { rank: row.current_rank, name: properName(row.team_name) };
     }
   }
 
