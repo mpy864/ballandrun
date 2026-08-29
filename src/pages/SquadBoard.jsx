@@ -6,6 +6,7 @@ import { okrLink } from '../lib/okrLink.js'
 import { rosterPairKey } from '../lib/squadReadiness.js'
 import { MANUAL_NOTE } from '../lib/watchlist.js'
 import { computeRetentionRisk } from '../lib/retention.js'
+import LiveStrip from '../components/LiveStrip.jsx'
 import { card, chip, T } from '../lib/ui.js'
 
 const TIER_TONE = { Core: '#b45309', Development: '#166534', TAGG: '#3730a3' }
@@ -196,6 +197,11 @@ export default function SquadBoard({ sport, entries, lookup, scores, pairScores,
           podium-ready was its row count, contenders and rising were its own tags tallied,
           the average was the average of the scores already listed beside each name. The
           board says all of it, in the same screenful, per athlete. */}
+      {/* Above both columns: who is on court now, or what India did the last day it
+          played. It renders nothing at all when there is neither, so the two panels below
+          keep their position on a quiet week. */}
+      <LiveStrip squadIds={squadIds} />
+
       {/* tops-cols reflows on its own — no breakpoint to keep in step. --col is the
           narrowest a column may get before it drops to the next row, and the class caps
           it at 100% so a 360px phone never gets a 340px column forcing a sideways page. */}
