@@ -42,6 +42,11 @@ import requests
 from datetime import date, timedelta, datetime, timezone
 from supabase import create_client
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from tg_common import reported                                   # noqa: E402
+
+FEED = "youth-rankings"
+
 # ── Config ─────────────────────────────────────────────────────────────────
 IND_URL   = "https://wttcmsapigateway-new.azure-api.net/internalttu/Rankings/GetRankingIndividuals"
 PAIRS_URL = "https://wttcmsapigateway-new.azure-api.net/internalttu/Rankings/GetRankingPairs"
@@ -449,7 +454,7 @@ def process_week(supabase, year: int, week: int) -> None:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main():
+def main(run):
     ap = argparse.ArgumentParser()
     ap.add_argument("--weeks", type=int, default=0,
                     help="force fetch of the last N weeks (default: DB-latest -> current)")
@@ -474,7 +479,11 @@ def main():
     print("Finding latest available week ...")
     latest = latest_available_week()
     if latest == (None, None):
+        # An error, not a quiet exit. A ranking API that answers with nothing is an
+        # outage; reporting it as a clean run is how this feed stayed invisible.
         print("No youth ranking data returned by the API — aborting.")
+        run["status"] = "error"
+        run["detail"] = "ranking API returned no weeks"
         return
     print(f"  latest available: {latest[0]}/W{latest[1]}")
 
@@ -499,19 +508,31 @@ def main():
 
     if date.fromisocalendar(*start, 1) > date.fromisocalendar(*latest, 1):
         print("DB already current — nothing to fetch.")
+        run["status"] = "noop"
+        run["detail"] = f"already current at {latest[0]}/W{latest[1]}"
         return
 
     plan = weeks_between(start, latest)
     print(f"  fetching {len(plan)} week(s): {plan[0]} .. {plan[-1]}\n")
+    failed = []
     for (y, w) in plan:
         try:
             process_week(supabase, y, w)
         except Exception as e:
             print(f"  [!] week {y}/W{w} failed: {e}")
+            failed.append(f"{y}/W{w}")
         time.sleep(1)
 
     print("Done.")
+    # A week that threw is swallowed above so one bad week cannot lose the rest. It must
+    # still surface: a run that fetched nothing it was asked for is not a healthy run.
+    run["detail"] = f"{len(plan) - len(failed)}/{len(plan)} weeks ok"
+    if failed:
+        run["detail"] += " — failed: " + ", ".join(failed[:8])
+        if len(failed) == len(plan):
+            run["status"] = "error"
 
 
 if __name__ == "__main__":
-    main()
+    with reported(FEED) as run:
+        main(run)

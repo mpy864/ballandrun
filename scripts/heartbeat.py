@@ -48,6 +48,21 @@ FEEDS = {
     # that player appears in, silently, because india_match_results inner-joins them.
     # Nothing else would report it.
     "wtt-players": ("WTT player directory", 10 * 24 * 60),
+
+    # ── The ingests ───────────────────────────────────────────────────────────
+    # These six run daily and, until now, none of them reported at all. This watchdog
+    # answered "all healthy" while blind to six of its seven daily jobs: the doubles
+    # ranking sat a week stale and nothing said a word — it took someone comparing the
+    # dashboard against WTT's own site by eye. A feed that cannot go red is decoration.
+    #
+    # All six run in daily_sync.yml at 00:30 UTC except doubles-rankings (02:00), so a
+    # day plus slack is the right window for every one of them.
+    "wtt-rankings":     ("Senior rankings",   1560),
+    "youth-rankings":   ("Youth rankings",    1560),
+    "wtt-matches":      ("WTT match results", 1560),
+    "ittf-matches":     ("ITTF match results", 1560),
+    "wtt-entries":      ("Upcoming entries",  1560),
+    "doubles-rankings": ("Doubles rankings",  1560),
 }
 
 

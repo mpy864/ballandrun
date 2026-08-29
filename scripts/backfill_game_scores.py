@@ -23,17 +23,23 @@ What it does
 1. Finds every row whose game count disagrees with its match_score.
 2. Asks WTT for that one match by name:
        GetMatchCardDetails/{event_id}/{document_code}
-   The bulk endpoint (GetOfficialResult) has dropped most of these events, but
-   the per-match one still serves several. document_code is the half of match_id
-   after the underscore, so nothing extra needs looking up.
+   The bulk endpoint (GetOfficialResult) drops an event once it is over, but the
+   per-match one keeps serving it. document_code is the half of match_id after the
+   underscore, so nothing extra needs looking up.
 3. Writes back game_scores when the card carries more real games than we hold,
    and rebuilds comp1_scores / comp2_scores from it so the row stays consistent.
 
 A row is never made shorter. If the card has no more than we already have, it is
 left alone.
 
-Not every event is still served — roughly 1,422 of the 3,264 are gone from the API
-and stay short. The run reports both numbers.
+On empty replies
+----------------
+The endpoint sits behind a CDN that answers 204 with no body while a node is cold.
+The first version of this script read that as "the event has aged out", and a
+give-up rule then skipped the rest of the event without asking. It wrote off 1,655
+matches as unrecoverable and said so. They were not: event 3310, one of the ones
+declared gone, answered 200 with a full card twelve times out of twelve when asked
+again. Every row is now asked, and an empty body is retried like any other failure.
 
 Usage
 -----
@@ -79,7 +85,6 @@ TIMEOUT    = 25
 RETRIES    = 3
 PAGE       = 1000   # rows per Supabase read
 BATCH      = 200    # rows per Supabase write
-GIVE_UP_AT = 8      # consecutive empty replies before writing an event off
 
 TABLES = {
     # table: does it carry per-competitor score columns?
@@ -111,29 +116,31 @@ def split_match_id(match_id: str) -> tuple[str, str] | None:
 
 
 def fetch_card(event_id: str, doc: str) -> dict | None:
-    """One match card, or None if WTT no longer serves it.
+    """One match card, or None after every retry came back empty.
 
-    An event that has aged out returns HTTP 200 with a two-byte body, not an error,
-    so an empty reply is a normal outcome here rather than a failure.
+    An empty reply is NOT proof the match is gone. This endpoint sits behind a CDN that
+    answers 204 with no body while a node is cold, then serves the same card fine a
+    moment later. The first version of this script read that 204 as "aged out", and
+    combined with a give-up rule it wrote off 1,655 matches as unrecoverable. Event 3310
+    was one of them; asked again it answered 200 with a full card twelve times out of
+    twelve. An empty body is retried like any other failure, and only silence on every
+    attempt returns None.
     """
     url = f"{CARD_URL}/{event_id}/{doc}"
     for attempt in range(RETRIES):
+        if attempt:
+            time.sleep(1.5 * attempt)
         try:
             r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
         except Exception as e:
             if attempt == RETRIES - 1:
                 print(f"    [!] {event_id}/{doc[:24]}: {e}")
-                return None
-            time.sleep(1.5 * (attempt + 1))
             continue
-        if r.status_code != 200:
+        if r.status_code != 200 or len(r.content) <= 10:
             if attempt == RETRIES - 1:
-                print(f"    [!] HTTP {r.status_code} for {event_id}/{doc[:24]}")
-                return None
-            time.sleep(1.5 * (attempt + 1))
+                print(f"    [!] empty after {RETRIES} tries "
+                      f"(HTTP {r.status_code}, {len(r.content)}B) {event_id}/{doc[:24]}")
             continue
-        if len(r.content) <= 10:
-            return None            # aged out — not an error
         try:
             return r.json()
         except Exception:
@@ -204,16 +211,16 @@ def repair_table(db: Client, table: str, has_comp_scores: bool,
         by_event[r["event_id"]] += 1
     print(f"  {len(broken)} rows short, across {len(by_event)} events")
 
-    dead_events: set[int] = set()
+    # Every row gets asked. There used to be a rule here that wrote an event off after
+    # GIVE_UP_AT consecutive empty replies and skipped the rest of it unasked — it turned
+    # one bad minute on the CDN into a permanent verdict for 1,655 matches, and reported
+    # them as unrecoverable. Skipping work is not worth being wrong about what exists.
     empties = defaultdict(int)
     updates: list[dict] = []
     stats = {"broken": len(broken), "fixed": 0, "gone": 0, "nomore": 0, "fullfix": 0}
 
     for i, r in enumerate(broken, 1):
         eid = r["event_id"]
-        if eid in dead_events:
-            stats["gone"] += 1
-            continue
 
         parts = split_match_id(r["match_id"])
         if not parts:
@@ -226,13 +233,7 @@ def repair_table(db: Client, table: str, has_comp_scores: bool,
         if card is None:
             stats["gone"] += 1
             empties[eid] += 1
-            if empties[eid] >= GIVE_UP_AT:
-                dead_events.add(eid)
-                left = by_event[eid] - empties[eid]
-                print(f"  event {eid}: {GIVE_UP_AT} empty replies — no longer served, "
-                      f"skipping its remaining {max(left, 0)} rows")
             continue
-        empties[eid] = 0
 
         best = pick_game_scores(card)
         have_n = r["_have"]
@@ -264,7 +265,7 @@ def repair_table(db: Client, table: str, has_comp_scores: bool,
 
     print(f"  repaired {stats['fixed']}  "
           f"(complete {stats['fullfix']})   "
-          f"no longer served {stats['gone']}   "
+          f"no card returned {stats['gone']}   "
           f"card had no more {stats['nomore']}")
     return stats
 
@@ -291,7 +292,7 @@ def main():
     print(f"  short rows found        {total['broken']}")
     print(f"  repaired                {total['fixed']}")
     print(f"    of those, complete    {total['fullfix']}")
-    print(f"  no longer served by WTT {total['gone']}")
+    print(f"  no card returned      {total['gone']}")
     print(f"  card had nothing more   {total['nomore']}")
     if args.dry_run:
         print("  (dry run — nothing written)")

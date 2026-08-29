@@ -7,10 +7,16 @@ Runs daily via GitHub Actions alongside fetch_matches.py.
 """
 
 import os
+import sys
 import time
 import requests
 from datetime import date, timedelta, datetime, timezone
 from supabase import create_client, Client
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from tg_common import reported                                   # noqa: E402
+
+FEED = "ittf-matches"
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -273,7 +279,7 @@ def ensure_players_in_db(supabase: Client, matches: list[dict]) -> None:
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
-def main():
+def main(run):
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
     today    = date.today()
     total    = 0
@@ -329,7 +335,11 @@ def main():
         time.sleep(SLEEP_EVENT)
 
     print(f"\n[ITTF] Done. Total upserted: {total}")
+    run["detail"] = f"{total} matches upserted"
+    if total == 0:
+        run["status"] = "noop"   # no active ITTF event in the window
 
 
 if __name__ == "__main__":
-    main()
+    with reported(FEED) as run:
+        main(run)

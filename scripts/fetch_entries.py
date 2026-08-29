@@ -13,12 +13,18 @@ Usage:
 """
 
 import os
+import sys
 import time
 import argparse
 from datetime import date, timedelta, datetime, timezone
 
 import requests
 from supabase import create_client
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from tg_common import reported                                   # noqa: E402
+
+FEED = "wtt-entries"
 
 ENTRIES_URL = ("https://wtt-website-live-events-api-prod-cmfzgabgbzhphabb"
                ".eastasia-01.azurewebsites.net/api/cms/GetPlayerEntriesforEvent/{eid}/all")
@@ -132,7 +138,7 @@ def prune_withdrawals(sb, event_id, name, cutoff, wrote):
         return 0
 
 
-def main():
+def main(run):
     ap = argparse.ArgumentParser()
     ap.add_argument("--events", default="", help="comma-separated event ids (else upcoming window)")
     ap.add_argument("--days-back", type=int, default=5)
@@ -170,7 +176,13 @@ def main():
             removed += prune_withdrawals(sb, eid, name, cutoff, len(rows))
         time.sleep(0.4)
     print(f"[entries] done — {total} rows upserted, {removed} withdrawn entries removed")
+    run["detail"] = f"{total} entries across {len(events)} events, {removed} withdrawn"
+    if total == 0:
+        # No event in the window is not the same as the API refusing to answer, but
+        # both look identical from here — flag it rather than call it healthy.
+        run["status"] = "noop"
 
 
 if __name__ == "__main__":
-    main()
+    with reported(FEED) as run:
+        main(run)

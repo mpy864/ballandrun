@@ -15,7 +15,8 @@ Import this everywhere instead of copy-pasting. If Supabase creds are missing,
 dedup + health degrade gracefully (used for local --dry-run).
 """
 
-import os, requests
+import os, requests, traceback
+from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -80,6 +81,40 @@ def record_health(db, feed, status, detail="", posts=0):
         db.table("feed_health").upsert(row).execute()
     except Exception as e:
         print(f"  [tg_common] health write error: {e}")
+
+
+@contextmanager
+def reported(feed, db=None):
+    """Wrap a script's main() so feed_health always learns how the run ended.
+
+    Calling record_health() by hand has one failure mode that matters: it only runs when
+    the script reaches the end. A crash halfway leaves the row untouched, so the feed
+    reads as healthy — right up to whatever the staleness window is. That is how the
+    ingests stayed invisible. Six of the seven daily jobs never reported at all, and the
+    watchdog answered "all healthy" while blind to nearly all of them; the doubles
+    ranking sat a week stale and nothing said a word.
+
+    Usage:
+
+        with reported("wtt-rankings") as run:
+            ...
+            run["detail"] = f"{total} rows across {n} disciplines"
+
+    Set run["status"] = "noop" for a legitimate nothing-to-do run. Exceptions are
+    recorded as 'error' and then re-raised, so the workflow still fails red.
+    """
+    db = db or get_db()
+    run = {"detail": "", "posts": 0, "status": None}
+    try:
+        yield run
+    except BaseException as e:
+        detail = f"{type(e).__name__}: {e}"
+        print(f"  [{feed}] FAILED — {detail}")
+        traceback.print_exc()
+        record_health(db, feed, "error", detail)
+        raise
+    else:
+        record_health(db, feed, run["status"] or "ok", run["detail"], run["posts"])
 
 
 # ── Telegram ──────────────────────────────────────────────────────────────────

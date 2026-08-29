@@ -5,10 +5,16 @@ Runs daily via GitHub Actions — skips if week already in DB.
 """
 
 import os
+import sys
 import time
 import requests
 from datetime import date, timedelta
 from supabase import create_client, Client
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from tg_common import reported                                   # noqa: E402
+
+FEED = "wtt-rankings"
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -116,7 +122,7 @@ def transform_row(raw: dict, year: int, week: int,
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
-def main():
+def main(run):
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
     tuesday      = most_recent_tuesday()
@@ -155,6 +161,10 @@ def main():
         time.sleep(SLEEP_DISC)
 
     print(f"\n[Rankings] Done. Total rows upserted: {total_upserted}")
+    run["detail"] = f"{total_upserted} rows for {year}/W{week}"
+    if total_upserted == 0:
+        run["status"] = "noop"   # every discipline already had this week
 
 if __name__ == "__main__":
-    main()
+    with reported(FEED) as run:
+        main(run)

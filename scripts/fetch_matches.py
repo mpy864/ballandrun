@@ -13,6 +13,11 @@ import requests
 from datetime import date, timedelta, datetime, timezone
 from supabase import create_client, Client
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from tg_common import reported                                   # noqa: E402
+
+FEED = "wtt-matches"
+
 # ─── Config ───────────────────────────────────────────────────────────────────
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
@@ -612,7 +617,7 @@ def ensure_players_in_db(supabase: Client, matches: list[dict]) -> None:
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
-def main():
+def main(run):
     # An event only gets fetched while it sits inside the lookback window, so anything
     # that was broken at the time and fixed later is unreachable by the daily run —
     # London finished 104 days before its cause was found. These two flags are how a
@@ -704,7 +709,11 @@ def main():
         time.sleep(SLEEP_EVENT)
 
     print(f"\n[Matches] Done. Total matches upserted: {total_upserted}")
+    run["detail"] = f"{total_upserted} matches in the lookback window"
+    if total_upserted == 0:
+        run["status"] = "noop"   # no event ended inside the window
 
 
 if __name__ == "__main__":
-    main()
+    with reported(FEED) as run:
+        main(run)

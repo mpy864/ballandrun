@@ -18,6 +18,11 @@ import requests
 from datetime import datetime, timezone
 from supabase import create_client, Client
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from tg_common import reported                                   # noqa: E402
+
+FEED = "doubles-rankings"
+
 # ── Config ──────────────────────────────────────────────────────────────────
 CDN       = "https://wtt-web-frontdoor-withoutcache-cqakg0andqf5hchn.a01.azurefd.net/ranking"
 PAIRS_URL = "https://wttcmsapigateway-new.azure-api.net/internalttu/Rankings/GetRankingPairs"
@@ -169,7 +174,7 @@ def fetch_senior_doubles_week(supabase: Client, year: int, week: int) -> None:
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
-def main():
+def main(run):
     parser = argparse.ArgumentParser()
     parser.add_argument("--from-year", type=int, default=2022)
     parser.add_argument("--from-week", type=int, default=1)
@@ -191,7 +196,11 @@ def main():
         time.sleep(SLEEP_WEEK)
 
     print("\nDone.")
+    run["detail"] = f"{len(to_fetch)} week(s) fetched of {len(weeks)} published"
+    if not to_fetch:
+        run["status"] = "noop"   # every published week already in the DB
 
 
 if __name__ == "__main__":
-    main()
+    with reported(FEED) as run:
+        main(run)
