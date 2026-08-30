@@ -22,6 +22,12 @@ import { supabase } from './supabase.js'
 // ones to actually show (the Indian ones). Returning the whole set and letting the
 // component filter keeps that honest — a header reading "5 live" beside an empty body is
 // the truth, and hiding the 5 would not be.
+// A row keeps status='live' after the match ends if the feed stops without a final
+// update. Measured on a live sample: the two matches actually in play had updated 0
+// minutes ago, while every row 7+ minutes old was already at 2 or 3 games — finished or
+// abandoned. A table-tennis match moves every point, so silence is the signal.
+const STALE_MINUTES = 10
+
 export async function loadLiveMatches() {
   const { data, error } = await supabase
     .from('wtt_live_state')
@@ -29,14 +35,20 @@ export async function loadLiveMatches() {
     .eq('status', 'live')
   if (error) { console.error('live matches failed', error); return [] }
 
-  const rows = data || []
+  const cutoff = Date.now() - STALE_MINUTES * 60_000
+  const rows = (data || []).filter(r => !r.updated_at || new Date(r.updated_at).getTime() >= cutoff)
   if (!rows.length) return []
 
   const ids = [...new Set(rows.flatMap(r => [r.comp1_id, r.comp2_id]).filter(Boolean))]
   const eventIds = [...new Set(rows.map(r => r.event_id).filter(Boolean))]
 
   const [pRes, rRes, eRes] = await Promise.all([
-    supabase.from('wtt_players').select('ittf_id,country_code').in('ittf_id', ids),
+    // player_name as well as country. The two tables disagree about name order:
+    // wtt_live_state writes the family name first ("SOOD Tushti") the way a venue
+    // scoreboard does, while wtt_players writes "Tushti SOOD" like the rest of the app.
+    // Taking the first word of the live spelling gave "Sood" — her surname — where a
+    // first name was wanted. wtt_players is the one every other screen reads.
+    supabase.from('wtt_players').select('ittf_id,country_code,player_name').in('ittf_id', ids),
     // Newest rank per player. Ordering descending and keeping the first sighting is what
     // LiveProbability does; a live match has no "rank at the time" to reach for.
     supabase.from('rankings_singles_normalized')
@@ -47,8 +59,11 @@ export async function loadLiveMatches() {
     supabase.from('wtt_events').select('event_id,event_name').in('event_id', eventIds),
   ])
 
-  const country = {}
-  for (const p of (pRes.data || [])) country[p.ittf_id] = p.country_code
+  const country = {}, dbName = {}
+  for (const p of (pRes.data || [])) {
+    country[p.ittf_id] = p.country_code
+    dbName[p.ittf_id]  = p.player_name
+  }
   const rank = {}
   for (const r of (rRes.data || [])) if (!(r.player_id in rank)) rank[r.player_id] = r.rank
   const eventName = {}
@@ -76,9 +91,9 @@ export async function loadLiveMatches() {
       isIndian,
       indIsComp1,
       indId: indIsComp1 ? r.comp1_id : r.comp2_id,
-      indName: indIsComp1 ? r.comp1_name : r.comp2_name,
+      indName: dbName[indIsComp1 ? r.comp1_id : r.comp2_id] || (indIsComp1 ? r.comp1_name : r.comp2_name),
       oppId: indIsComp1 ? r.comp2_id : r.comp1_id,
-      oppName: indIsComp1 ? r.comp2_name : r.comp1_name,
+      oppName: dbName[indIsComp1 ? r.comp2_id : r.comp1_id] || (indIsComp1 ? r.comp2_name : r.comp1_name),
       oppCountry: indIsComp1 ? c2 : c1,
       oppRank: rank[indIsComp1 ? r.comp2_id : r.comp1_id] ?? null,
       games: indIsComp1 ? [r.games_a, r.games_b] : [r.games_b, r.games_a],

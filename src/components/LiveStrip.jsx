@@ -237,6 +237,13 @@ export default function LiveStrip({ squadIds = [] }) {
             <span style={{ fontSize: 14, fontWeight: 650, color: T.ink }}>
               {indianLive.length} Indian{indianLive.length === 1 ? '' : 's'} on court
             </span>
+            {/* The event was computed but only drawn on the results header, so a live
+                strip never said where the match was being played. */}
+            {oneEvent && (
+              <span style={{ fontSize: 12.5, color: T.muted }}>
+                {shortEventName(oneEvent)}
+              </span>
+            )}
           </>
         ) : (
           <>
