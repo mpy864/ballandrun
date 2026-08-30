@@ -60,11 +60,19 @@ export async function loadLiveMatches() {
     // Which side is India's decides which name leads the row and which score comes first.
     const indIsComp1 = c1 === 'IND'
     const isIndian = indIsComp1 || c2 === 'IND'
+
+    // round_name is the whole phrase — "U17 Girls' Singles - Round of 16 - Match 2" — not
+    // the round. Passing it to shortRound() matched nothing and returned it unchanged, so
+    // a live row would have printed the entire string where the round belongs. Split it:
+    // the discipline is the first segment and the round is the second.
+    const parts = String(r.round_name || '').split(' - ').map(x => x.trim())
+
     return {
       matchId: r.match_id,
       eventId: r.event_id,
       eventName: eventName[r.event_id] || null,
-      round: r.round_name || '',
+      discipline: parts[0] || '',
+      round: parts[1] || '',
       isIndian,
       indIsComp1,
       indId: indIsComp1 ? r.comp1_id : r.comp2_id,

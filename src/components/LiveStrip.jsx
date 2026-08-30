@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { loadLiveMatches, loadLatestIndiaResults } from '../lib/liveStrip.js'
-import { shortRound, roundRank, properName } from '../lib/matchFormat.js'
+import { shortRound, roundRank, properName, disciplineCode, firstNames } from '../lib/matchFormat.js'
+import { DISCIPLINES } from '../lib/topsRoster.js'
 import { okrLink } from '../lib/okrLink.js'
 import { card, chip, hoverLift, T } from '../lib/ui.js'
 
@@ -62,7 +63,7 @@ function Opponent({ name, country, rank }) {
   )
 }
 
-function Row({ isSquad, showChip, live, lead, opp, oppCountry, oppRank, verb, score, sub,
+function Row({ isSquad, showChip, live, lead, disc, opp, oppCountry, oppRank, verb, score, sub,
                event, first, onOpen }) {
   const Tag = onOpen ? 'button' : 'div'
   return (
@@ -80,8 +81,17 @@ function Row({ isSquad, showChip, live, lead, opp, oppCountry, oppRank, verb, sc
         ? <span style={chip(SQUAD_TONE, { fontSize: 9.5 })}>TOPS</span>
         : <span style={{ width: 40 }} />)}
 
+      {/* The same code and colour the squad rows use for the same discipline, so MD means
+          one thing across the page. Fixed width so the names below it line up. */}
       <span style={{
-        fontWeight: isSquad ? 650 : 550, color: T.ink,
+        width: 26, flexShrink: 0, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em',
+        color: DISCIPLINES[disc]?.color || T.muted,
+      }}>
+        {disc || ''}
+      </span>
+
+      <span style={{
+        color: T.ink,
         minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>
         {lead}
@@ -166,6 +176,25 @@ export default function LiveStrip({ squadIds = [] }) {
   const rows = expanded ? ordered : ordered.slice(0, MAX_ROWS)
   const hiddenCount = ordered.length - rows.length
 
+  // First names only for the Indian side — the reader knows the squad, and three rows
+  // repeating "Ankur Bhattacharjee" spend the row's width on something already known.
+  //
+  // Except when two different people on screen share one. Over 133 days of results that
+  // happened on exactly one day, so this guard almost never fires; when it does, showing
+  // "Aarav defeated X" twice for two different Aaravs would be worse than a long row.
+  const clashes = new Set()
+  const seen = new Map()
+  for (const r of ordered) {
+    const full = properName(showingLive ? r.indName : r.ind_name) || ''
+    const first = firstNames(full)
+    if (seen.has(first) && seen.get(first) !== full) clashes.add(first)
+    else seen.set(first, full)
+  }
+  const leadName = (full) => {
+    const short = firstNames(full || '')
+    return clashes.has(short) ? full : short
+  }
+
   // The chip earns its place by telling squad rows apart from the rest. When every row is
   // squad it says the same thing five times down the left edge and stops being a signal.
   const mixedSquad = showingLive
@@ -243,7 +272,8 @@ export default function LiveStrip({ squadIds = [] }) {
           live
           showChip={mixedSquad}
           isSquad={squad.has(r.indId)}
-          lead={properName(r.indName)}
+          lead={leadName(properName(r.indName))}
+          disc={disciplineCode(r.discipline)}
           verb="vs"
           opp={properName(r.oppName)}
           oppCountry={r.oppCountry}
@@ -259,7 +289,8 @@ export default function LiveStrip({ squadIds = [] }) {
           first={i === 0}
           showChip={mixedSquad}
           isSquad={squad.has(r.ind_p1_id) || squad.has(r.ind_p2_id)}
-          lead={properName(r.ind_name)}
+          lead={leadName(r.ind_name)}
+          disc={disciplineCode(r.discipline)}
           verb={r.won ? 'defeated' : 'lost to'}
           opp={properName(r.opp_name)}
           oppCountry={r.opp_country}

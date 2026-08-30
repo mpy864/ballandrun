@@ -114,6 +114,34 @@ function capitalise(word) {
   return word ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : word
 }
 
+// "U19 Boys' Singles" → "MS", "Mixed Doubles" → "XD". The codes are the ones
+// topsRoster.DISCIPLINES already uses, so a chip here matches the chip on the squad row
+// for the same discipline. The age band is dropped: the strip is short of width, and a
+// junior draw is already obvious from the round and the event beside it.
+//
+// Boys/Girls map to M/W deliberately — WTT labels the junior draws that way, but they
+// are the same five disciplines, and inventing BS/GS codes would mean two vocabularies
+// for one thing.
+export function disciplineCode(label = '') {
+  const rest = String(label).replace(/^U\d+\s+/, '')
+  if (/^Mixed Doubles/i.test(rest))               return 'XD'
+  if (/^(Men|Boys)'?s? Singles/i.test(rest))      return 'MS'
+  if (/^(Women|Girls)'?s? Singles/i.test(rest))   return 'WS'
+  if (/^(Men|Boys)'?s? Doubles/i.test(rest))      return 'MD'
+  if (/^(Women|Girls)'?s? Doubles/i.test(rest))   return 'WD'
+  return null                                      // team events, "Singles", anything odd
+}
+
+// "Ankur Bhattacharjee" → "Ankur"; "Ankur Bhattacharjee / Akash Pal" → "Ankur / Akash".
+//
+// Only safe for the Indian side of a row, where the reader knows the squad. Across 133
+// days of results exactly one day had two different Indian players sharing a first name,
+// so the ambiguity is rare — but it is not zero, which is why callers showing several
+// rows at once should check for a collision before using this.
+export function firstNames(name = '') {
+  return String(name).split('/').map(p => p.trim().split(/\s+/)[0] || '').filter(Boolean).join(' / ')
+}
+
 export function properName(name = '') {
   // Keep the separators: split on whitespace and slashes so "A / B" survives intact.
   return String(name).split(/(\s+|\/)/).map(token => {
