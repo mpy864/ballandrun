@@ -51,27 +51,42 @@ const CAPABILITIES = [
 
 function Capabilities({ variants }) {
   return (
-    <motion.ul variants={variants} style={{
-      position: 'relative', zIndex: 1, listStyle: 'none', margin: 0, padding: 0,
-      maxWidth: 760,
-      // Two columns of four wherever there is room for them, one below that. The min()
-      // cap is what stops a 260px track forcing the page sideways on a phone.
-      display: 'grid', gap: '0 clamp(24px, 3vw, 56px)',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))',
-    }}>
-      {CAPABILITIES.map(([label, note]) => (
-        <li key={label} style={{
-          padding: '11px 0', borderTop: `1px solid ${T.divider}`,
-        }}>
-          <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: T.ink }}>
-            {label}
-          </span>
-          <span style={{ display: 'block', fontSize: 12.5, color: T.muted, marginTop: 2, lineHeight: 1.4 }}>
-            {note}
-          </span>
-        </li>
-      ))}
-    </motion.ul>
+    <motion.div variants={variants} style={{ position: 'relative', zIndex: 1, maxWidth: 760 }}>
+      {/* An eyebrow, not a heading. A heading here would have to be sized between the
+          vision above and the item labels below, and there is no room between them — it
+          would either compete with the sentence or outrank the list it introduces. Set
+          small and uppercase it names the group without entering the size contest, which
+          is the same job the scheme's name does at the top of the panel. */}
+      <p style={{
+        margin: '0 0 14px', fontSize: 12, fontWeight: 700, letterSpacing: '0.14em',
+        textTransform: 'uppercase', color: T.slate,
+      }}>
+        What you can do here
+      </p>
+
+      <ul style={{
+        listStyle: 'none', margin: 0, padding: 0,
+        // Two columns of four wherever there is room for them, one below that. The min()
+        // cap is what stops a 280px track forcing the page sideways on a phone.
+        display: 'grid', gap: '0 clamp(24px, 3vw, 56px)',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))',
+      }}>
+        {CAPABILITIES.map(([label, note]) => (
+          <li key={label} style={{
+            padding: '13px 0', borderTop: `1px solid ${T.divider}`,
+          }}>
+            <span style={{ display: 'block', fontSize: 16, fontWeight: 600, color: T.ink,
+                           letterSpacing: '-0.01em' }}>
+              {label}
+            </span>
+            <span style={{ display: 'block', fontSize: 13.5, color: T.muted, marginTop: 3,
+                           lineHeight: 1.45 }}>
+              {note}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </motion.div>
   )
 }
 
