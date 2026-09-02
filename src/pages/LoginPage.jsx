@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
-import { T, card, field, fieldFocus, fieldLabel, primaryBtn, ghostBtn, textBtn,
+import { T, field, fieldFocus, fieldLabel, primaryBtn, ghostBtn, textBtn,
          formError } from '../lib/ui.js'
 import { Rings, SchemeName, GoldRule, Vision, Mission, group, rise, wipe } from '../components/brand.jsx'
+import { useMediaQuery, SMALL_SCREEN } from '../lib/useMediaQuery.js'
 
 // ─── Sign in / sign up / recover ─────────────────────────────────────────────
 //
-// Four modes on one card. The page used to carry two — password and magic link — and
+// Four modes on one form. The page used to carry two — password and magic link — and
 // neither could create an account or set a password. Every account that exists was made
 // by typing an email into the magic-link box, which quietly created a user with a random
 // password nobody could ever learn. Four people signed in once that way on 12 June 2026
@@ -103,6 +104,7 @@ export default function LoginPage() {
     signup: ['Account created',   <>Confirm your email at <strong>{email}</strong>, then sign in. An admin will approve your access.</>],
   }[sent] || []
 
+  const small = useMediaQuery(SMALL_SCREEN)
   const still = useReducedMotion()
   const anim = still ? { initial: false }
                      : { variants: group, initial: 'hidden', animate: 'show' }
@@ -114,53 +116,57 @@ export default function LoginPage() {
     // statement of what TOPS is for sat one route away, behind the login. It belongs here:
     // this is the only screen a person outside the scheme will ever look at.
     //
-    // Two columns that become one below ~880px, using the same intrinsic reflow as the
-    // rest of the app — auto-fit with a min() cap, so a narrow phone never gets a column
-    // wider than the screen. The statement leads on a phone and the form follows it.
+    // Two panels split by one full-height hairline, and no card around the form. A card
+    // is a container that says "this group is separate from the page" — but the form is
+    // not a group inside this page, it is one half of it. The rule does that job with a
+    // single pixel, and the form then sits directly on the ground like the statement does.
+    //
+    // The split is drawn with useMediaQuery rather than a CSS breakpoint because the rule
+    // and the layout have to disappear together: a border-left on a stacked full-width
+    // block reads as a stray rail down the side of a phone.
     <div style={{
-      minHeight: '100dvh', display: 'flex', alignItems: 'center',
+      minHeight: '100dvh', display: 'grid', alignItems: 'stretch',
       fontFamily: 'system-ui, sans-serif', position: 'relative', zIndex: 4,
-      padding: 'clamp(28px, 5vw, 64px)',
+      gridTemplateColumns: small ? '1fr' : 'minmax(0, 1.18fr) minmax(0, 0.82fr)',
     }}>
-      <Rings animate={!still} />
-
-      <div style={{
-        position: 'relative', zIndex: 1,
-        width: '100%', maxWidth: 1440, margin: '0 auto',
-        display: 'grid', gap: 'clamp(32px, 5vw, 80px)', alignItems: 'center',
-        // auto-fit reflows to one column below roughly 900px without a breakpoint to keep
-        // in step. The min() cap means a narrow phone never gets a column wider than the
-        // screen. minmax(0,…) rather than minmax(0,1fr) on the second track is not
-        // available here, so the card constrains itself instead — see maxWidth below.
-        gridTemplateColumns: 'repeat(auto-fit, minmax(min(420px, 100%), 1fr))',
+      {/* ── The statement ──
+          It started two steps down from Home, on the theory that it should not shout over
+          the form. That was wrong about what the two are competing for: shrinking the
+          statement never made the form louder, it left the left half under-filled.
+          It now runs a step ABOVE Home. Home's statement shares its page with a sidebar
+          and has to sit inside the app; this page has nothing else on it, so the sentence
+          can carry the screen. */}
+      <motion.section {...anim} style={{
+        position: 'relative', overflow: 'hidden',
+        display: 'flex', flexDirection: 'column', justifyContent: 'center',
+        padding: small ? 'clamp(48px, 9vw, 72px) clamp(24px, 7vw, 48px) 8px'
+                       : 'clamp(56px, 6vw, 96px) clamp(48px, 6vw, 104px)',
       }}>
-        {/* ── The statement ──
-            It started two steps down from Home, on the theory that it should not shout
-            over the form. That was wrong about what the two are competing for: the form is
-            a 380px panel on a 1440px page, and shrinking the statement never made the form
-            louder — it left the left half under-filled.
-            It now runs a step ABOVE Home. Home's statement shares its page with a sidebar
-            and has to sit inside the app; this page has nothing else on it, so the
-            sentence can carry the screen. */}
-        <motion.section {...anim} style={{ maxWidth: 760 }}>
+        {/* Scoped to this panel now, not the page. Bleeding across the rule would have
+            put the watermark behind the password field. overflow:hidden crops it at the
+            rule, which is what makes it read as material rather than decoration. */}
+        <Rings animate={!still} />
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: 760 }}>
           <SchemeName variants={v} />
           <Vision variants={v} scale={1.28} />
           <div style={{ marginTop: 44, paddingTop: 34, borderTop: `1px solid ${T.divider}` }}>
             <GoldRule variants={vWipe} />
             <Mission variants={v} scale={1.06} />
           </div>
-        </motion.section>
+        </div>
+      </motion.section>
 
-        {/* ── The form ──
-            A bounded panel on the app's own tokens, not a card floating on a 24px blur.
-            Pushed to the right edge of its column: centred, it drifted toward the middle
-            of the page and sat closer to the statement than to anything else. */}
-        <div style={{
-        ...card, width: '100%', maxWidth: 380, justifySelf: 'end', padding: '36px 32px',
+      {/* ── The form ── on the page, not on a card. */}
+      <div style={{
+        display: 'flex', flexDirection: 'column', justifyContent: 'center',
+        borderLeft: small ? 'none' : `1px solid ${T.border}`,
+        borderTop:  small ? `1px solid ${T.border}` : 'none',
+        padding: small ? 'clamp(36px, 8vw, 56px) clamp(24px, 7vw, 48px)'
+                       : 'clamp(48px, 5vw, 80px) clamp(40px, 4.5vw, 72px)',
       }}>
-        {/* Gold, once, at the top of the card — the same accent that marks the mission
-            on the left. It is the only colour on this panel, which is what makes it
-            register at all. */}
+        <div style={{ width: '100%', maxWidth: 340 }}>
+        {/* Gold, once — the same accent that marks the mission on the left. It is the only
+            colour on this half, which is what makes it register at all. */}
         <div style={{ width: 28, height: 2, background: 'var(--tops-gold)', marginBottom: 18 }} />
         <div style={{ marginBottom: 28 }}>
           <h1 style={{ fontSize: 21, fontWeight: 600, letterSpacing: '-0.025em', color: T.ink, margin: 0 }}>
