@@ -41,7 +41,7 @@ const MIN_PASSWORD = 8
 const CAPABILITIES = [
   ['Performance profiles',  'every match, rank and result, per athlete'],
   ['Form and trajectory',   'where a career is heading, not just where it is'],
-  ['Benchmarking',          'measured against the players above them'],
+  ['Benchmarks',            'measured against the players ranked above them'],
   ['Competitor analysis',   'the opponents standing in the way'],
   ['World rankings',        "India's singles, doubles and youth standing"],
   ['Daily matches',         'what your athletes did yesterday'],
@@ -71,10 +71,11 @@ function Capabilities({ variants }) {
         display: 'grid', gap: '0 clamp(24px, 3vw, 56px)',
         gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))',
       }}>
+        {/* No rule above each item. Eight hairlines across two columns drew a grid over a
+            list that was already legible as a list — the space does the separating, so
+            the eye counts items rather than lines. */}
         {CAPABILITIES.map(([label, note]) => (
-          <li key={label} style={{
-            padding: '13px 0', borderTop: `1px solid ${T.divider}`,
-          }}>
+          <li key={label} style={{ padding: '0 0 22px' }}>
             <span style={{ display: 'block', fontSize: 16, fontWeight: 600, color: T.ink,
                            letterSpacing: '-0.01em' }}>
               {label}
@@ -218,7 +219,12 @@ export default function LoginPage() {
         {/* Three zones, top / middle / bottom, held apart by space-between rather than by
             margins — so the vision sits on the top edge and the credo on the bottom one
             whatever the window height, and the capabilities take whatever is left. */}
-        <div style={{ position: 'relative', zIndex: 1, maxWidth: 760 }}>
+        {/* No 760px cap on this block. The sentence is 45 characters; at the size the
+            clamp gives it on a wide display that needs about 1,040px, and the cap was
+            what forced it onto two lines. It still wraps on a narrow window, which is
+            correct — textWrap: balance then evens the break rather than leaving one word
+            stranded. */}
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: 1100 }}>
           <SchemeName variants={v} />
           <Vision variants={v} scale={1.05} />
         </div>
