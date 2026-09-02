@@ -126,28 +126,34 @@ export default function LoginPage() {
 
       <div style={{
         position: 'relative', zIndex: 1,
-        width: '100%', maxWidth: 1180, margin: '0 auto',
-        display: 'grid', gap: 'clamp(32px, 5vw, 72px)', alignItems: 'center',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(min(400px, 100%), 1fr))',
+        width: '100%', maxWidth: 1320, margin: '0 auto',
+        display: 'grid', gap: 'clamp(32px, 5vw, 80px)', alignItems: 'center',
+        // auto-fit reflows to one column below roughly 900px without a breakpoint to keep
+        // in step. The min() cap means a narrow phone never gets a column wider than the
+        // screen. minmax(0,…) rather than minmax(0,1fr) on the second track is not
+        // available here, so the card constrains itself instead — see maxWidth below.
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(420px, 100%), 1fr))',
       }}>
-        {/* ── The statement ── */}
-        <motion.section {...anim}>
+        {/* ── The statement ──
+            Full size, the same as Home. It was set two steps down on the theory that it
+            should not shout over the form, but the form is a 380px panel and the page is
+            1320: shrinking the statement did not make the form louder, it just left the
+            left half looking under-filled. */}
+        <motion.section {...anim} style={{ maxWidth: 640 }}>
           <SchemeName variants={v} />
-          {/* A step smaller than on Home: there it owns the page, here it shares the
-              screen with a form and must not shout over the thing you came to do. */}
-          <Vision variants={v} scale={0.82} />
-          <div style={{ marginTop: 38, paddingTop: 30, borderTop: `1px solid ${T.divider}`, maxWidth: 560 }}>
+          <Vision variants={v} />
+          <div style={{ marginTop: 44, paddingTop: 34, borderTop: `1px solid ${T.divider}` }}>
             <GoldRule variants={vWipe} />
-            <Mission variants={v} scale={0.72} />
+            <Mission variants={v} scale={0.86} />
           </div>
         </motion.section>
 
         {/* ── The form ──
             A bounded panel on the app's own tokens, not a card floating on a 24px blur.
-            justifySelf is center, not end: pinned right it left a lake of empty page
-            between the statement and the form and read as two unrelated screens. */}
+            Pushed to the right edge of its column: centred, it drifted toward the middle
+            of the page and sat closer to the statement than to anything else. */}
         <div style={{
-        ...card, width: '100%', maxWidth: 380, justifySelf: 'center', padding: '36px 32px',
+        ...card, width: '100%', maxWidth: 380, justifySelf: 'end', padding: '36px 32px',
       }}>
         {/* Gold, once, at the top of the card — the same accent that marks the mission
             on the left. It is the only colour on this panel, which is what makes it
