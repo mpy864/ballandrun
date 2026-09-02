@@ -1,4 +1,5 @@
 import { useAuth } from '../context/AuthContext'
+import { card, T, ghostBtn } from '../lib/ui.js'
 
 // ─── The waiting room ────────────────────────────────────────────────────────
 //
@@ -19,28 +20,22 @@ export default function PendingPage() {
       fontFamily: 'system-ui, sans-serif', padding: 20, position: 'relative', zIndex: 4,
     }}>
       <div style={{
-        width: '100%', maxWidth: 420, padding: '40px 32px', textAlign: 'center',
-        background: '#fff', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
+        ...card, width: '100%', maxWidth: 440, padding: '36px 32px',
       }}>
-        <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', margin: '0 0 8px' }}>
-          TOPS TT Intelligence
-        </p>
-        <h1 style={{ fontSize: 21, fontWeight: 800, color: '#0f172a', margin: '0 0 10px' }}>
+        <div style={{ width: 28, height: 2, background: 'var(--tops-gold)', marginBottom: 18 }} />
+        <h1 style={{ fontSize: 21, fontWeight: 600, letterSpacing: '-0.025em', color: T.ink, margin: '0 0 10px' }}>
           Waiting for approval
         </h1>
-        <p style={{ fontSize: 13.5, color: '#475569', lineHeight: 1.6, margin: 0 }}>
+        <p style={{ fontSize: 13.5, color: T.slate, lineHeight: 1.6, margin: 0 }}>
           Your account is set up. An administrator has to approve it before you can see
           any data.
         </p>
-        <p style={{ fontSize: 12.5, color: '#64748b', marginTop: 14 }}>
-          Signed in as <strong>{session?.user?.email}</strong>
+        <p style={{ fontSize: 12.5, color: T.muted, margin: '18px 0 0', paddingTop: 16,
+                    borderTop: `1px solid ${T.divider}` }}>
+          Signed in as <strong style={{ color: T.slate }}>{session?.user?.email}</strong>
         </p>
 
-        <button onClick={signOut} style={{
-          marginTop: 22, padding: '9px 20px', background: 'none',
-          border: '1px solid #e2e8f0', borderRadius: 8,
-          fontSize: 13, color: '#64748b', cursor: 'pointer',
-        }}>
+        <button onClick={signOut} style={{ ...ghostBtn, width: 'auto', marginTop: 18 }}>
           Sign out
         </button>
       </div>

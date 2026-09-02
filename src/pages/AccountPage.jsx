@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
-import { card, T } from '../lib/ui.js'
+import { card, T, field, fieldFocus, fieldLabel, primaryBtn, formError, formOk } from '../lib/ui.js'
 
 // ─── Your account ────────────────────────────────────────────────────────────
 //
@@ -65,29 +65,22 @@ export default function AccountPage() {
 
         {['New password', 'Confirm password'].map((label, i) => (
           <div key={label} style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: T.slate, display: 'block', marginBottom: 6 }}>
-              {label}
-            </label>
+            <label style={fieldLabel}>{label}</label>
             <input
               type="password" required autoComplete="new-password" placeholder="••••••••"
               value={i === 0 ? password : confirm}
               onChange={e => (i === 0 ? setPassword : setConfirm)(e.target.value)}
-              style={{
-                width: '100%', padding: '10px 12px', border: `1.5px solid ${T.border}`,
-                borderRadius: 8, fontSize: 14, color: T.ink, outline: 'none', boxSizing: 'border-box',
-              }}
+              style={field}
+              {...fieldFocus}
             />
           </div>
         ))}
 
-        {error && <p style={{ fontSize: 12, color: '#dc2626', marginBottom: 10 }}>{error}</p>}
-        {msg   && <p style={{ fontSize: 12, color: '#15803d', marginBottom: 10 }}>{msg}</p>}
+        {error && <p style={formError}>{error}</p>}
+        {msg   && <p style={formOk}>{msg}</p>}
 
-        <button type="submit" disabled={loading || !password || !confirm} style={{
-          padding: '10px 18px', background: loading ? '#a5b4fc' : '#6366f1', color: '#fff',
-          border: 'none', borderRadius: 8, fontSize: 13.5, fontWeight: 700,
-          cursor: loading || !password ? 'not-allowed' : 'pointer',
-        }}>
+        <button type="submit" disabled={loading || !password || !confirm}
+                style={{ ...primaryBtn(loading || !password || !confirm), width: 'auto' }}>
           {loading ? 'Saving…' : 'Update password'}
         </button>
       </form>

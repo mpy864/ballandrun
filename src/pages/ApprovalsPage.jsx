@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
-import { card, chip, T } from '../lib/ui.js'
+import { card, chip, T, formError } from '../lib/ui.js'
 
 // ─── Approvals — admin only ──────────────────────────────────────────────────
 //
@@ -68,7 +68,7 @@ export default function ApprovalsPage() {
           : 'Nobody is waiting.'}
       </p>
 
-      {error && <p style={{ fontSize: 12, color: '#dc2626', marginBottom: 12 }}>{error}</p>}
+      {error && <p style={formError}>{error}</p>}
 
       <div style={{ ...card, overflow: 'hidden' }}>
         {(rows || []).map((r, i) => (

@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
-import { T } from '../lib/ui.js'
+import { T, card, field, fieldFocus, fieldLabel, primaryBtn, ghostBtn, textBtn,
+         formError } from '../lib/ui.js'
 import { Rings, SchemeName, GoldRule, Vision, Mission, group, rise, wipe } from '../components/brand.jsx'
 
 // ─── Sign in / sign up / recover ─────────────────────────────────────────────
@@ -26,25 +27,16 @@ const MODES = {
 
 const MIN_PASSWORD = 8
 
-const inputStyle = {
-  width: '100%', padding: '10px 12px', border: '1.5px solid #e2e8f0',
-  borderRadius: 8, fontSize: 14, color: '#0f172a', outline: 'none',
-  boxSizing: 'border-box',
-}
-
 function Field({ label, type, value, onChange, placeholder, autoComplete }) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
-        {label}
-      </label>
+      <label style={fieldLabel}>{label}</label>
       <input
         type={type} required value={value} autoComplete={autoComplete}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        style={inputStyle}
-        onFocus={e => e.target.style.borderColor = '#6366f1'}
-        onBlur={e => e.target.style.borderColor = '#e2e8f0'}
+        style={field}
+        {...fieldFocus}
       />
     </div>
   )
@@ -150,26 +142,32 @@ export default function LoginPage() {
           </div>
         </motion.section>
 
-        {/* ── The form ── */}
+        {/* ── The form ──
+            A bounded panel on the app's own tokens, not a card floating on a 24px blur.
+            justifySelf is center, not end: pinned right it left a lake of empty page
+            between the statement and the form and read as two unrelated screens. */}
         <div style={{
-        width: '100%', maxWidth: 380, justifySelf: 'end', padding: '40px 32px',
-        background: 'white', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
+        ...card, width: '100%', maxWidth: 380, justifySelf: 'center', padding: '36px 32px',
       }}>
-        <div style={{ marginBottom: 32 }}>
-          <p style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 6 }}>
-            TOPS TT Intelligence
-          </p>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', margin: 0 }}>{m.title}</h1>
-          <p style={{ fontSize: 13, color: '#64748b', marginTop: 6 }}>{m.blurb}</p>
+        {/* Gold, once, at the top of the card — the same accent that marks the mission
+            on the left. It is the only colour on this panel, which is what makes it
+            register at all. */}
+        <div style={{ width: 28, height: 2, background: 'var(--tops-gold)', marginBottom: 18 }} />
+        <div style={{ marginBottom: 28 }}>
+          <h1 style={{ fontSize: 21, fontWeight: 600, letterSpacing: '-0.025em', color: T.ink, margin: 0 }}>
+            {m.title}
+          </h1>
+          <p style={{ fontSize: 13, color: T.slate, marginTop: 6, lineHeight: 1.45 }}>{m.blurb}</p>
         </div>
 
         {sent ? (
           <>
-            <div style={{ padding: '16px 18px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10 }}>
-              <p style={{ fontSize: 13, fontWeight: 600, color: '#15803d', margin: 0 }}>{NOTICE[0]}</p>
-              <p style={{ fontSize: 12, color: '#166534', marginTop: 4 }}>{NOTICE[1]}</p>
-            </div>
-            <button type="button" onClick={() => go('password')} style={linkBtn}>
+            {/* No green success box. A tinted panel with its own border is a second card
+                inside the card; the message is the only thing on screen, so it can simply
+                be the text. */}
+            <p style={{ fontSize: 14, fontWeight: 600, color: T.ink, margin: 0 }}>{NOTICE[0]}</p>
+            <p style={{ fontSize: 13, color: T.slate, margin: '6px 0 22px', lineHeight: 1.5 }}>{NOTICE[1]}</p>
+            <button type="button" onClick={() => go('password')} style={ghostBtn}>
               Back to sign in
             </button>
           </>
@@ -189,15 +187,10 @@ export default function LoginPage() {
                      placeholder="••••••••" autoComplete="new-password" />
             )}
 
-            {error && <p style={{ fontSize: 12, color: '#dc2626', marginBottom: 12 }}>{error}</p>}
+            {error && <p style={formError}>{error}</p>}
 
-            <button type="submit" disabled={loading || !canSubmit} style={{
-              width: '100%', padding: '11px',
-              background: loading || !canSubmit ? '#a5b4fc' : '#6366f1',
-              color: 'white', border: 'none', borderRadius: 8,
-              fontSize: 14, fontWeight: 700,
-              cursor: loading || !canSubmit ? 'not-allowed' : 'pointer',
-            }}>
+            <button type="submit" disabled={loading || !canSubmit}
+                    style={primaryBtn(loading || !canSubmit)}>
               {loading ? 'Working…'
                 : mode === 'signup' ? 'Create account'
                 : mode === 'magic'  ? 'Send sign-in link'
@@ -209,20 +202,23 @@ export default function LoginPage() {
                 login card into a menu. */}
             {mode === 'password' && (
               <>
-                <button type="button" onClick={() => go('signup')} style={linkBtn}>Create an account</button>
-                <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
-                  <button type="button" onClick={() => go('forgot')} style={{ ...subtle, flex: 1 }}>Forgot password?</button>
-                  <button type="button" onClick={() => go('magic')}  style={{ ...subtle, flex: 1 }}>Email me a link</button>
+                <button type="button" onClick={() => go('signup')}
+                        style={{ ...ghostBtn, marginTop: 10 }}>Create an account</button>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 12 }}>
+                  <button type="button" onClick={() => go('forgot')} style={textBtn}>Forgot password?</button>
+                  <button type="button" onClick={() => go('magic')}  style={textBtn}>Email me a link</button>
                 </div>
               </>
             )}
             {mode !== 'password' && (
-              <button type="button" onClick={() => go('password')} style={linkBtn}>Back to sign in</button>
+              <button type="button" onClick={() => go('password')}
+                      style={{ ...ghostBtn, marginTop: 10 }}>Back to sign in</button>
             )}
           </form>
         )}
 
-        <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 24 }}>
+        <p style={{ fontSize: 11.5, color: T.muted, marginTop: 24, lineHeight: 1.5,
+                    paddingTop: 18, borderTop: `1px solid ${T.divider}` }}>
           Anyone can create an account. Access to data is approved by an administrator.
         </p>
         </div>
@@ -231,12 +227,3 @@ export default function LoginPage() {
   )
 }
 
-const linkBtn = {
-  width: '100%', marginTop: 10, padding: '9px',
-  background: 'none', border: '1px solid #e2e8f0', borderRadius: 8,
-  fontSize: 13, color: '#64748b', cursor: 'pointer',
-}
-const subtle = {
-  padding: '8px', background: 'none', border: 'none',
-  fontSize: 12, color: '#6366f1', cursor: 'pointer',
-}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import { card, T, field, fieldFocus, fieldLabel, primaryBtn, formError } from '../lib/ui.js'
 
 // ─── Where the reset email lands ─────────────────────────────────────────────
 //
@@ -55,49 +56,40 @@ export default function ResetPasswordPage() {
       fontFamily: 'system-ui, sans-serif', position: 'relative', zIndex: 4,
     }}>
       <div style={{
-        width: '100%', maxWidth: 380, padding: '40px 32px',
-        background: 'white', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
+        ...card, width: '100%', maxWidth: 380, padding: '36px 32px',
       }}>
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', margin: '0 0 6px' }}>
+        <div style={{ width: 28, height: 2, background: 'var(--tops-gold)', marginBottom: 18 }} />
+        <h1 style={{ fontSize: 21, fontWeight: 600, letterSpacing: '-0.025em', color: T.ink, margin: 0 }}>
           Set a new password
         </h1>
 
         {done ? (
-          <p style={{ fontSize: 13, color: '#15803d', marginTop: 12 }}>
+          <p style={{ fontSize: 13.5, color: T.slate, marginTop: 12 }}>
             Password updated. Taking you in…
           </p>
         ) : !ready ? (
-          <p style={{ fontSize: 13, color: '#64748b', marginTop: 12 }}>
+          <p style={{ fontSize: 13.5, color: T.muted, marginTop: 12 }}>
             Checking your link…
           </p>
         ) : (
           <form onSubmit={submit} style={{ marginTop: 18 }}>
             {['New password', 'Confirm password'].map((label, i) => (
               <div key={label} style={{ marginBottom: 14 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
-                  {label}
-                </label>
+                <label style={fieldLabel}>{label}</label>
                 <input
                   type="password" required autoComplete="new-password" placeholder="••••••••"
                   value={i === 0 ? password : confirm}
                   onChange={e => (i === 0 ? setPassword : setConfirm)(e.target.value)}
-                  style={{
-                    width: '100%', padding: '10px 12px', border: '1.5px solid #e2e8f0',
-                    borderRadius: 8, fontSize: 14, color: '#0f172a', outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
+                  style={field}
+                  {...fieldFocus}
                 />
               </div>
             ))}
 
-            {error && <p style={{ fontSize: 12, color: '#dc2626', marginBottom: 12 }}>{error}</p>}
+            {error && <p style={formError}>{error}</p>}
 
-            <button type="submit" disabled={loading || !password || !confirm} style={{
-              width: '100%', padding: '11px',
-              background: loading ? '#a5b4fc' : '#6366f1', color: 'white',
-              border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 700,
-              cursor: loading ? 'not-allowed' : 'pointer',
-            }}>
+            <button type="submit" disabled={loading || !password || !confirm}
+                    style={primaryBtn(loading || !password || !confirm)}>
               {loading ? 'Saving…' : 'Save password'}
             </button>
           </form>
