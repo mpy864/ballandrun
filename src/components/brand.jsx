@@ -165,9 +165,9 @@ export function Vision({ variants, scale = 1 }) {
 // why you would open it.
 const CAPABILITIES = [
   ['Performance profiles',  'every match, rank and result, per athlete'],
-  ['Form and trajectory',   'where a career is heading, not just where it is'],
+  ['Form and trajectory',   'where a career is heading'],
   ['Benchmarks',            'measured against the players ranked above them'],
-  ['Competitor analysis',   'the opponents standing in the way'],
+  ['Competitor analysis',   'how a specific opponent plays'],
   ['World rankings',        "India's singles, doubles and youth standing"],
   ['Daily matches',         'what your athletes did yesterday'],
   ['Competition reports',   'how India did, event by event'],
