@@ -126,7 +126,7 @@ export default function LoginPage() {
 
       <div style={{
         position: 'relative', zIndex: 1,
-        width: '100%', maxWidth: 1320, margin: '0 auto',
+        width: '100%', maxWidth: 1440, margin: '0 auto',
         display: 'grid', gap: 'clamp(32px, 5vw, 80px)', alignItems: 'center',
         // auto-fit reflows to one column below roughly 900px without a breakpoint to keep
         // in step. The min() cap means a narrow phone never gets a column wider than the
@@ -135,16 +135,19 @@ export default function LoginPage() {
         gridTemplateColumns: 'repeat(auto-fit, minmax(min(420px, 100%), 1fr))',
       }}>
         {/* ── The statement ──
-            Full size, the same as Home. It was set two steps down on the theory that it
-            should not shout over the form, but the form is a 380px panel and the page is
-            1320: shrinking the statement did not make the form louder, it just left the
-            left half looking under-filled. */}
-        <motion.section {...anim} style={{ maxWidth: 640 }}>
+            It started two steps down from Home, on the theory that it should not shout
+            over the form. That was wrong about what the two are competing for: the form is
+            a 380px panel on a 1440px page, and shrinking the statement never made the form
+            louder — it left the left half under-filled.
+            It now runs a step ABOVE Home. Home's statement shares its page with a sidebar
+            and has to sit inside the app; this page has nothing else on it, so the
+            sentence can carry the screen. */}
+        <motion.section {...anim} style={{ maxWidth: 760 }}>
           <SchemeName variants={v} />
-          <Vision variants={v} />
+          <Vision variants={v} scale={1.28} />
           <div style={{ marginTop: 44, paddingTop: 34, borderTop: `1px solid ${T.divider}` }}>
             <GoldRule variants={vWipe} />
-            <Mission variants={v} scale={0.86} />
+            <Mission variants={v} scale={1.06} />
           </div>
         </motion.section>
 
