@@ -12,15 +12,23 @@ import IndiaPage from './pages/IndiaPage.jsx'
 import ForecastPage from './pages/ForecastPage.jsx'
 import TopsPlatformPage from './pages/TopsPlatformPage.jsx'
 import HomePage from './pages/HomePage.jsx'
+import PendingPage from './pages/PendingPage.jsx'
+import ResetPasswordPage from './pages/ResetPasswordPage.jsx'
+import AccountPage from './pages/AccountPage.jsx'
+import ApprovalsPage from './pages/ApprovalsPage.jsx'
 import SportPage from './pages/SportPage.jsx'
 import PairProfile from './pages/PairProfile.jsx'
 import PageBackground from './components/PageBackground.jsx'
 import AppShell from './components/AppShell.jsx'
 
 // Authed layout: the persistent shell (sidebar) wraps all signed-in routes.
+//
+// Two gates, not one. Being signed in gets you past the first; being approved gets you
+// past the second. Signup is open to anyone, so without the second gate a stranger with
+// an email address would land on the squad board.
 function ShellLayout() {
-  const { session, loading } = useAuth()
-  if (loading) {
+  const { session, loading, profileLoading, isPending } = useAuth()
+  if (loading || profileLoading) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--tops-muted)', fontSize: 14 }}>
         Loading…
@@ -28,6 +36,7 @@ function ShellLayout() {
     )
   }
   if (!session) return <Navigate to="/login" replace />
+  if (isPending) return <PendingPage />
   return <AppShell />
 }
 
@@ -45,6 +54,9 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<RedirectIfAuthed><LoginPage /></RedirectIfAuthed>} />
         <Route path="/live" element={<LivePage />} />
+        {/* Outside the shell: the reset link arrives with a recovery session, not an
+            approved one, so it must not pass through the approval gate. */}
+        <Route path="/reset" element={<ResetPasswordPage />} />
 
         {/* All signed-in routes live inside the app shell */}
         <Route element={<ShellLayout />}>
@@ -60,6 +72,8 @@ export default function App() {
           <Route path="/forecast" element={<ForecastPage />} />
           <Route path="/sport/:sport" element={<SportPage />} />
           <Route path="/pair/:pair" element={<PairProfile />} />
+          <Route path="/account" element={<AccountPage />} />
+          <Route path="/approvals" element={<ApprovalsPage />} />
         </Route>
       </Routes>
     </>

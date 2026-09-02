@@ -27,12 +27,16 @@ export function AuthProvider({ children }) {
   }, [])
 
   async function fetchProfile(userId) {
+    // maybeSingle, not single: the profile row is written by an auth trigger, and for the
+    // first moments after a signup it may not exist yet. single() treats zero rows as an
+    // error, which left profile null forever and the app stuck on a spinner.
     const { data } = await supabase
       .from('user_profiles')
       .select('*')
       .eq('id', userId)
-      .single()
-    setProfile(data)
+      .maybeSingle()
+    // No row means not yet approved — never means unrestricted.
+    setProfile(data || { id: userId, role: 'pending' })
     if (data?.role === 'coach' && data?.club_id) {
       fetchCompetitorPicks(data.club_id)
     }
@@ -107,7 +111,13 @@ export function AuthProvider({ children }) {
   const value = {
     session,
     profile,
+    // Two different waits. `loading` is "do we know whether anyone is signed in";
+    // `profileLoading` is "we know who, but not yet what they are allowed to see".
+    // Collapsing them would flash the waiting-room screen at an approved user on every
+    // page load, in the gap before their profile arrives.
     loading:          session === undefined,
+    profileLoading:   !!session && profile === null,
+    isPending:        profile?.role === 'pending',
     isAdmin:          profile?.role === 'admin',
     isOrg:            profile?.role === 'org',
     isCoach:          profile?.role === 'coach',

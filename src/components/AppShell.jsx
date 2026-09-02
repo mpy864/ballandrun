@@ -6,7 +6,7 @@ import { SPORTS } from '../lib/topsRoster.js'
 import { T } from '../lib/ui.js'
 import { useMediaQuery, SMALL_SCREEN } from '../lib/useMediaQuery.js'
 
-const ROLE_LABEL = { admin: 'Admin', coach: 'Coach', org: 'Organisation', athlete: 'Athlete' }
+const ROLE_LABEL = { admin: 'Admin', coach: 'Coach', org: 'Organisation', athlete: 'Athlete', pending: 'Pending approval' }
 
 function accentFor(pathname) {
   const m = pathname.match(/^\/sport\/(\w+)/)
@@ -44,7 +44,7 @@ function MenuIcon() {
 }
 
 export default function AppShell() {
-  const { session, profile, signOut } = useAuth()
+  const { session, profile, signOut, isAdmin } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const accent = accentFor(location.pathname)
@@ -116,6 +116,14 @@ export default function AppShell() {
               already links to as "Full head-to-head (match history) →"; the tab is the
               summary and /h2h is the depth behind it, and a sidebar link short-circuited
               that. Both routes stay live and stay reachable. */}
+
+          {/* Account is where a password gets changed; Approvals is where a signup gets
+              let in. Approvals is shown only to an admin — the page refuses non-admins
+              anyway, and RLS refuses them the rows, but a link nobody may follow is
+              still clutter. */}
+          <NavLabel>Account</NavLabel>
+          <NavItem to="/account" label="My account" />
+          {isAdmin && <NavItem to="/approvals" label="Approvals" />}
         </nav>
 
         {/* footer / user */}
