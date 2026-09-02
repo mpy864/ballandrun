@@ -1,6 +1,7 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import { T } from '../lib/ui.js'
-import { Rings, SchemeName, GoldRule, Vision, Mission, group, rise, wipe } from '../components/brand.jsx'
+import { Rings, SchemeName, GoldRule, Vision, Mission, Capabilities,
+         group, rise, wipe } from '../components/brand.jsx'
 
 // Home says what the platform is for. It does not navigate.
 //
@@ -32,9 +33,10 @@ export default function HomePage() {
     // edge of the window on both layouts rather than 57px below it on a phone.
     <div className="tops-fill" style={{
       position: 'relative',
-      display: 'flex', flexDirection: 'column',
+      display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+      gap: 'clamp(40px, 5vh, 72px)',
       maxWidth: 'var(--tops-content)', margin: '0 auto',
-      padding: '72px var(--tops-gutter) 76px',
+      padding: '64px var(--tops-gutter) 72px',
     }}>
       <Rings animate={!still} />
 
@@ -45,6 +47,12 @@ export default function HomePage() {
         <Vision variants={v} />
       </motion.section>
 
+      {/* ── What's inside ── the same eight lines the login page shows.
+          Login has to answer "why would I sign in"; Home answers "what am I looking at"
+          for the person who just did. Nothing about the answer changes between them, so
+          neither does the component. */}
+      <Capabilities variants={v} />
+
       {/* ── Mission ── the closing credo. It sits clear of the bottom edge rather than
           against it: a statement pressed into the last few pixels of the window reads as
           overflow, not as a close. */}
@@ -54,7 +62,7 @@ export default function HomePage() {
           : { variants: group, initial: 'hidden', whileInView: 'show',
               viewport: { once: true, amount: 0.6 } })}
         style={{
-          position: 'relative', zIndex: 1, marginTop: 'auto', paddingTop: 34,
+          position: 'relative', zIndex: 1, paddingTop: 34,
           borderTop: `1px solid ${T.divider}`, maxWidth: 720,
         }}>
         <GoldRule variants={vWipe} />
