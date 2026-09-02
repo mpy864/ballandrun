@@ -1,6 +1,9 @@
 import { useState } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
+import { T } from '../lib/ui.js'
+import { Rings, SchemeName, GoldRule, Vision, Mission, group, rise, wipe } from '../components/brand.jsx'
 
 // ─── Sign in / sign up / recover ─────────────────────────────────────────────
 //
@@ -108,13 +111,48 @@ export default function LoginPage() {
     signup: ['Account created',   <>Confirm your email at <strong>{email}</strong>, then sign in. An admin will approve your access.</>],
   }[sent] || []
 
+  const still = useReducedMotion()
+  const anim = still ? { initial: false }
+                     : { variants: group, initial: 'hidden', animate: 'show' }
+  const v = still ? undefined : rise
+  const vWipe = still ? undefined : wipe
+
   return (
+    // The first screen anyone ever sees used to say "Sign in" on an empty page, while the
+    // statement of what TOPS is for sat one route away, behind the login. It belongs here:
+    // this is the only screen a person outside the scheme will ever look at.
+    //
+    // Two columns that become one below ~880px, using the same intrinsic reflow as the
+    // rest of the app — auto-fit with a min() cap, so a narrow phone never gets a column
+    // wider than the screen. The statement leads on a phone and the form follows it.
     <div style={{
-      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      minHeight: '100dvh', display: 'flex', alignItems: 'center',
       fontFamily: 'system-ui, sans-serif', position: 'relative', zIndex: 4,
+      padding: 'clamp(28px, 5vw, 64px)',
     }}>
+      <Rings animate={!still} />
+
       <div style={{
-        width: '100%', maxWidth: 380, padding: '40px 32px',
+        position: 'relative', zIndex: 1,
+        width: '100%', maxWidth: 1180, margin: '0 auto',
+        display: 'grid', gap: 'clamp(32px, 5vw, 72px)', alignItems: 'center',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(400px, 100%), 1fr))',
+      }}>
+        {/* ── The statement ── */}
+        <motion.section {...anim}>
+          <SchemeName variants={v} />
+          {/* A step smaller than on Home: there it owns the page, here it shares the
+              screen with a form and must not shout over the thing you came to do. */}
+          <Vision variants={v} scale={0.82} />
+          <div style={{ marginTop: 38, paddingTop: 30, borderTop: `1px solid ${T.divider}`, maxWidth: 560 }}>
+            <GoldRule variants={vWipe} />
+            <Mission variants={v} scale={0.72} />
+          </div>
+        </motion.section>
+
+        {/* ── The form ── */}
+        <div style={{
+        width: '100%', maxWidth: 380, justifySelf: 'end', padding: '40px 32px',
         background: 'white', borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
       }}>
         <div style={{ marginBottom: 32 }}>
@@ -187,6 +225,7 @@ export default function LoginPage() {
         <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 24 }}>
           Anyone can create an account. Access to data is approved by an administrator.
         </p>
+        </div>
       </div>
     </div>
   )
