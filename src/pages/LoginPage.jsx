@@ -127,7 +127,12 @@ export default function LoginPage() {
     <div style={{
       minHeight: '100dvh', display: 'grid', alignItems: 'stretch',
       fontFamily: 'system-ui, sans-serif', position: 'relative', zIndex: 4,
-      gridTemplateColumns: small ? '1fr' : 'minmax(0, 1.18fr) minmax(0, 0.82fr)',
+      // The form column is sized by the form, not by a share of the page. As a fraction
+      // it was 0.82fr — around 560px on a wide display for a 340px stack of fields, so
+      // the rule sat a long way left of the thing it was separating and the right of the
+      // screen was empty. `auto` makes the track exactly the form plus its padding, and
+      // every pixel the page gains goes to the sentence instead.
+      gridTemplateColumns: small ? '1fr' : 'minmax(0, 1fr) auto',
     }}>
       {/* ── The statement ──
           It started two steps down from Home, on the theory that it should not shout over
@@ -164,7 +169,9 @@ export default function LoginPage() {
         padding: small ? 'clamp(36px, 8vw, 56px) clamp(24px, 7vw, 48px)'
                        : 'clamp(48px, 5vw, 80px) clamp(40px, 4.5vw, 72px)',
       }}>
-        <div style={{ width: '100%', maxWidth: 340 }}>
+        {/* A fixed width, not a max: the column is auto-sized, so an intrinsic
+            width is what gives the track something definite to measure. */}
+        <div style={{ width: small ? '100%' : 340, maxWidth: 340 }}>
         {/* Gold, once — the same accent that marks the mission on the left. It is the only
             colour on this half, which is what makes it register at all. */}
         <div style={{ width: 28, height: 2, background: 'var(--tops-gold)', marginBottom: 18 }} />
