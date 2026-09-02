@@ -28,6 +28,53 @@ const MODES = {
 
 const MIN_PASSWORD = 8
 
+// What the dashboard is for, in eight lines.
+//
+// Not numbered. A number implies a sequence — first this, then that — and these are eight
+// independent things; numbering them would be decoration wearing the costume of
+// structure. They are ordered instead: the athlete, then the opposition, then the
+// calendar, which is the order a selector actually thinks in.
+//
+// Each carries a qualifier because a bare label is a category, not a promise. "Daily
+// matches" says nothing that "Matches" does not; "what your athletes did yesterday" says
+// why you would open it.
+const CAPABILITIES = [
+  ['Performance profiles',  'every match, rank and result, per athlete'],
+  ['Form and trajectory',   'where a career is heading, not just where it is'],
+  ['Benchmarking',          'measured against the players above them'],
+  ['Competitor analysis',   'the opponents standing in the way'],
+  ['World rankings',        "India's singles, doubles and youth standing"],
+  ['Daily matches',         'what your athletes did yesterday'],
+  ['Competition reports',   'how India did, event by event'],
+  ['Live scores',           'with win probability while the match is on'],
+]
+
+function Capabilities({ variants }) {
+  return (
+    <motion.ul variants={variants} style={{
+      position: 'relative', zIndex: 1, listStyle: 'none', margin: 0, padding: 0,
+      maxWidth: 760,
+      // Two columns of four wherever there is room for them, one below that. The min()
+      // cap is what stops a 260px track forcing the page sideways on a phone.
+      display: 'grid', gap: '0 clamp(24px, 3vw, 56px)',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))',
+    }}>
+      {CAPABILITIES.map(([label, note]) => (
+        <li key={label} style={{
+          padding: '11px 0', borderTop: `1px solid ${T.divider}`,
+        }}>
+          <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: T.ink }}>
+            {label}
+          </span>
+          <span style={{ display: 'block', fontSize: 12.5, color: T.muted, marginTop: 2, lineHeight: 1.4 }}>
+            {note}
+          </span>
+        </li>
+      ))}
+    </motion.ul>
+  )
+}
+
 function Field({ label, type, value, onChange, placeholder, autoComplete }) {
   return (
     <div style={{ marginBottom: 14 }}>
@@ -143,21 +190,29 @@ export default function LoginPage() {
           can carry the screen. */}
       <motion.section {...anim} style={{
         position: 'relative', overflow: 'hidden',
-        display: 'flex', flexDirection: 'column', justifyContent: 'center',
-        padding: small ? 'clamp(48px, 9vw, 72px) clamp(24px, 7vw, 48px) 8px'
-                       : 'clamp(56px, 6vw, 96px) clamp(48px, 6vw, 104px)',
+        display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+        gap: 'clamp(32px, 4vh, 64px)',
+        padding: small ? 'clamp(48px, 9vw, 72px) clamp(24px, 7vw, 48px) 40px'
+                       : 'clamp(52px, 5.5vw, 84px) clamp(48px, 6vw, 104px)',
       }}>
         {/* Scoped to this panel now, not the page. Bleeding across the rule would have
             put the watermark behind the password field. overflow:hidden crops it at the
             rule, which is what makes it read as material rather than decoration. */}
         <Rings animate={!still} />
+
+        {/* Three zones, top / middle / bottom, held apart by space-between rather than by
+            margins — so the vision sits on the top edge and the credo on the bottom one
+            whatever the window height, and the capabilities take whatever is left. */}
         <div style={{ position: 'relative', zIndex: 1, maxWidth: 760 }}>
           <SchemeName variants={v} />
-          <Vision variants={v} scale={1.28} />
-          <div style={{ marginTop: 44, paddingTop: 34, borderTop: `1px solid ${T.divider}` }}>
-            <GoldRule variants={vWipe} />
-            <Mission variants={v} scale={1.06} />
-          </div>
+          <Vision variants={v} scale={1.05} />
+        </div>
+
+        <Capabilities variants={v} />
+
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <GoldRule variants={vWipe} />
+          <Mission variants={v} scale={0.8} />
         </div>
       </motion.section>
 
