@@ -27,7 +27,7 @@ import AppShell from './components/AppShell.jsx'
 // past the second. Signup is open to anyone, so without the second gate a stranger with
 // an email address would land on the squad board.
 function ShellLayout() {
-  const { session, loading, profileLoading, isPending } = useAuth()
+  const { session, loading, profileLoading, isPending, isRecovery } = useAuth()
   if (loading || profileLoading) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--tops-muted)', fontSize: 14 }}>
@@ -36,6 +36,10 @@ function ShellLayout() {
     )
   }
   if (!session) return <Navigate to="/login" replace />
+  // Ahead of every other gate: someone following a reset link is holding a session they
+  // asked for in order to change a password, not to read the dashboard. Supabase strips
+  // an unlisted redirect_to and drops them on the app root, so this catches them there.
+  if (isRecovery) return <ResetPasswordPage />
   if (isPending) return <PendingPage />
   return <AppShell />
 }

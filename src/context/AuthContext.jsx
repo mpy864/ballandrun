@@ -7,6 +7,17 @@ export function AuthProvider({ children }) {
   const [session, setSession]                 = useState(undefined) // undefined = loading
   const [profile, setProfile]                 = useState(null)
   const [competitorPicks, setCompetitorPicks] = useState([]) // { athlete_ittf_id, competitor_ittf_id, valid_until }
+  // A reset link that arrives anywhere still has to end at the reset form.
+  //
+  // Supabase drops any redirect_to it has not been given in its allow-list and silently
+  // falls back to the Site URL. Asking for https://ballandrun.com/reset came back as
+  // https://ballandrun.com, so the link consumed its recovery token, landed on the app
+  // root with a valid session, and showed the dashboard — a reset that resets nothing.
+  //
+  // The allow-list is worth fixing too, but the app should not depend on a setting in
+  // another console. Supabase announces the recovery with its own event; catching that
+  // works wherever the link happens to land, and survives the next domain change.
+  const [recovery, setRecovery] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -14,12 +25,14 @@ export function AuthProvider({ children }) {
       if (session) fetchProfile(session.user.id)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') setRecovery(true)
       setSession(session)
       if (session) fetchProfile(session.user.id)
       else {
         setProfile(null)
         setCompetitorPicks([])
+        setRecovery(false)
       }
     })
 
@@ -118,6 +131,8 @@ export function AuthProvider({ children }) {
     loading:          session === undefined,
     profileLoading:   !!session && profile === null,
     isPending:        profile?.role === 'pending',
+    isRecovery:       recovery,
+    clearRecovery:    () => setRecovery(false),
     isAdmin:          profile?.role === 'admin',
     isOrg:            profile?.role === 'org',
     isCoach:          profile?.role === 'coach',

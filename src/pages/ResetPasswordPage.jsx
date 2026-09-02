@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../context/AuthContext'
 
 // ─── Where the reset email lands ─────────────────────────────────────────────
 //
@@ -16,6 +17,7 @@ const MIN_PASSWORD = 8
 
 export default function ResetPasswordPage() {
   const navigate = useNavigate()
+  const { clearRecovery } = useAuth()
   const [ready, setReady]       = useState(false)
   const [password, setPassword] = useState('')
   const [confirm, setConfirm]   = useState('')
@@ -42,7 +44,9 @@ export default function ResetPasswordPage() {
     setLoading(false)
     if (error) return setError(error.message)
     setDone(true)
-    setTimeout(() => navigate('/'), 1500)
+    // Drop the recovery flag before navigating, or the shell renders this page again
+    // instead of the dashboard the person has just earned their way back into.
+    setTimeout(() => { clearRecovery?.(); navigate('/') }, 1500)
   }
 
   return (
