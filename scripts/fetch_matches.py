@@ -193,8 +193,18 @@ SLEEP_EVENT   = 2.0    # seconds between event fetches
 
 def get_recent_event_ids(lookback_days: int = LOOKBACK_DAYS) -> list[dict]:
     """
-    Return events whose end date falls within the lookback window.
-    Reads from the hardcoded WTT_2026_EVENT_IDS dict — no API call needed.
+    Events worth fetching: anything that finished inside the lookback window, and anything
+    running right now.
+
+    The condition used to be `cutoff <= end_date <= today`, which required an event to
+    have ENDED before its results were touched. WTT Contender Almaty ran 1-6 September and
+    the squad page showed nothing from it until the 7th — during the tournament, the one
+    time anybody wants to look, we held zero of its matches.
+
+    Re-fetching a live event means storing mid-match scores, which used to be a trap: the
+    card's `gameScores` field freezes at whatever the venue last pushed. pick_game_scores()
+    now prefers `resultsGameScores` whenever it carries more games, so a later run repairs
+    the row rather than cementing it.
     """
     today  = date.today()
     cutoff = today - timedelta(days=lookback_days)
@@ -205,7 +215,16 @@ def get_recent_event_ids(lookback_days: int = LOOKBACK_DAYS) -> list[dict]:
             end_date = date.fromisoformat(end_date_str)
         except ValueError:
             continue
-        if cutoff <= end_date <= today:
+        if end_date < cutoff:
+            continue                      # over and already collected
+        if end_date <= today:
+            in_window = True              # finished inside the lookback window
+        else:
+            # Still to come, or under way. The hardcoded dict holds no start date, so ask
+            # wtt_events — the calendar sync keeps it accurate, and an event with no row
+            # there is treated as not started rather than fetched blindly every night.
+            in_window = _has_started(event_id)
+        if in_window:
             recent.append({
                 "event_id":   event_id,
                 "event_name": event_name,
@@ -214,6 +233,25 @@ def get_recent_event_ids(lookback_days: int = LOOKBACK_DAYS) -> list[dict]:
             })
 
     return recent
+
+
+_started_cache: dict[int, bool] = {}
+
+def _has_started(event_id: int) -> bool:
+    """True when wtt_events says this event's start date has arrived."""
+    if event_id in _started_cache:
+        return _started_cache[event_id]
+    try:
+        sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+        r = (sb.table("wtt_events").select("start_date")
+             .eq("event_id", event_id).limit(1).execute())
+        sd = (r.data or [{}])[0].get("start_date")
+        started = bool(sd) and date.fromisoformat(sd) <= date.today()
+    except Exception as e:
+        print(f"  [!] start-date check failed for {event_id}: {e}")
+        started = False
+    _started_cache[event_id] = started
+    return started
 
 
 def events_needing_fetch(supabase: Client,
