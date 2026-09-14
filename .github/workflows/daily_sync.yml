@@ -52,6 +52,12 @@ jobs:
             cmd: fetch_entries.py --days-fwd 75
           - name: Ranking points
             cmd: fetch_ranking_points.py
+          # TTFI is the domestic circuit — Nationals, Inter-State, the ranking series.
+          # It ran by hand once in April 2026 and then not at all, so the table went 155
+          # days stale. It needed a real browser back then to clear Cloudflare; the site
+          # answers a plain request now, so it is an ordinary feed like the six above.
+          - name: TTFI domestic
+            cmd: fetch_ttfi.py
 
     steps:
       - name: Checkout repo
@@ -63,7 +69,9 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests supabase
+        # bs4 + lxml: the TTFI feed parses HTML brackets off ttfi.org. Every other feed
+        # reads JSON and does not need them, but the matrix shares one install step.
+        run: pip install requests supabase beautifulsoup4 lxml
 
       - name: Run ${{ matrix.name }}
         env:
