@@ -204,6 +204,7 @@ function UpsetRow({ r }) {
 
 function EventDetail({ ev, onOpenPlayer }) {
   const [d, setD] = useState(null)
+  const [err, setErr] = useState(null)
   // All matches stays shut. Europe Smash alone is 25 of them across five disciplines,
   // and opening a row to be met by four screens of scorelines buries the summary that
   // most readers came for.
@@ -214,10 +215,24 @@ function EventDetail({ ev, onOpenPlayer }) {
 
   useEffect(() => {
     let c = false
-    ;(async () => { const r = await loadEventDetail(ev.event_id); if (!c) setD(r) })()
+    setD(null); setErr(null)
+    ;(async () => {
+      const r = await loadEventDetail(ev.event_id)
+      if (c) return
+      if (!r)            setErr('No response from the server.')
+      else if (r.error)  setErr(r.error)
+      else               setD(r)
+    })()
     return () => { c = true }
   }, [ev.event_id])
 
+  // A failed fetch used to render as "Loading…" and spin for good. Saying so costs one
+  // line and turns an invisible outage into a bug report.
+  if (err) return (
+    <div style={{ padding: '14px 2px', fontSize: 12.5, color: '#b91c1c' }}>
+      Could not load this tournament — {err}
+    </div>
+  )
   if (!d) return <div style={{ padding: '14px 2px', fontSize: 12.5, color: T.muted }}>Loading…</div>
 
   // A single column with the discipline beside each name, rather than singles and

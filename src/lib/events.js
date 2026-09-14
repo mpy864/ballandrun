@@ -74,7 +74,10 @@ export async function loadEventDetail(eventId) {
     .eq('event_id', eventId)
     .limit(DETAIL_LIMIT)
 
-  if (error) { console.error('event detail failed', error); return null }
+  // Not a bare null. null is also the component's "still fetching" state, so returning it
+  // for a failure made a dead request look identical to a slow one — the Events tab sat on
+  // "Loading…" forever after migration 026 renamed a column out from under this query.
+  if (error) { console.error('event detail failed', error); return { error: error.message } }
   // round_depth is a Postgres numeric, and PostgREST sends numerics as STRINGS to keep
   // their precision — "10", "9", "1.03000000000000000000". Left as strings, `>` compares
   // them character by character, so "10" > "9" is false and every finalist was recorded
