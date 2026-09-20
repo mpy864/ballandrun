@@ -128,19 +128,33 @@ def _normalize_country(s: str | None) -> str | None:
 
 
 def load_player_profiles(supabase) -> dict[int, dict]:
-    """Return {ittf_id: {gender, country_code, dob, handedness}} for all players."""
+    """Return {ittf_id: {gender, country_code, dob, handedness}} for all players.
+
+    Paged, like load_rankings. A single .execute() is capped by PostgREST and
+    returned exactly 10,000 of 57,008 players — silently, with no error. A player
+    missing here has gender None, so every match they play fails the gender filter
+    and is dropped from training, and age_diff/handedness_diff read as 0 for them.
+    That is how the M and W models ended up with byte-identical player_states.
+    """
     print("[Model] Loading player profiles...")
-    resp = supabase.table("wtt_players").select(
-        "ittf_id,gender,country_code,dob,handedness"
-    ).execute()
     profiles = {}
-    for p in (resp.data or []):
-        profiles[p["ittf_id"]] = {
-            "gender":       p.get("gender"),
-            "country_code": p.get("country_code"),
-            "dob":          p.get("dob"),
-            "handedness":   p.get("handedness"),  # "LH" or "RH" or None
-        }
+    page, size = 0, 1000
+    while True:
+        resp = supabase.table("wtt_players").select(
+            "ittf_id,gender,country_code,dob,handedness"
+        ).order("ittf_id").range(page * size, page * size + size - 1).execute()
+        if not resp.data:
+            break
+        for p in resp.data:
+            profiles[p["ittf_id"]] = {
+                "gender":       p.get("gender"),
+                "country_code": p.get("country_code"),
+                "dob":          p.get("dob"),
+                "handedness":   p.get("handedness"),  # "LH" or "RH" or None
+            }
+        if len(resp.data) < size:
+            break
+        page += 1
     print(f"[Model] {len(profiles)} player profiles loaded.")
     return profiles
 
