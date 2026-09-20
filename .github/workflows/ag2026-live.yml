@@ -1,0 +1,57 @@
+name: AG2026 Live
+
+# Asian Games 2026 table tennis: live win probability during play.
+#
+# Play runs roughly 09:00-22:00 JST, which is 00:00-13:00 UTC. Three back-to-back
+# 5-hour shifts starting 00:10, 05:10 and 10:10 UTC cover it with a little either
+# side. The :10 offset keeps this off the same tick as live-updater.yml (:00).
+
+on:
+  schedule:
+    - cron: '10 0,5,10 * * *'
+  workflow_dispatch:
+
+# A DISTINCT group from live-updater. If these shared one, a new Asian Games
+# shift would cancel the running WTT poller.
+concurrency:
+  group: ag2026-live
+  cancel-in-progress: true
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: gate
+        name: Are the Games on?
+        run: |
+          d=$(date -u +%F)
+          if [[ "$d" < "2026-09-19" || "$d" > "2026-09-30" ]]; then
+            echo "outside the games window ($d)"; echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.gate.outputs.go == 'true'
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        if: steps.gate.outputs.go == 'true'
+        run: pip install -r scripts/requirements.txt
+
+      # --interval 15: the results service sits behind a CloudFront cache with a
+      # ~30 s TTL, so each request is sent with a cache-buster and 15 s is about
+      # as fine-grained as the origin data actually gets.
+      # --max-runtime 290: exit cleanly ~10 min before the 300 m timeout so the
+      # job ends SUCCESS rather than a timeout-kill, keeping failure signals real.
+      - name: Poll live matches
+        if: steps.gate.outputs.go == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python scripts/ag2026_live.py --db --interval 15 --max-runtime 290

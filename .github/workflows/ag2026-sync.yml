@@ -1,0 +1,63 @@
+name: AG2026 Sync
+
+# Asian Games 2026 table tennis: entries, the Reg -> ITTF id bridge, the schedule,
+# the draw, and a fresh Monte-Carlo forecast.
+#
+# Offset to :20 and :50 so it never starts on the same tick as live-updater.yml
+# (:00) or forecasts.yml (:00).
+
+on:
+  schedule:
+    - cron: '20,50 * * * *'
+  workflow_dispatch:
+
+# A distinct group. Sharing live-updater's group would have this job cancel the
+# running WTT poller, which must keep going right through the Games.
+concurrency:
+  group: ag2026-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The table tennis programme is 20-28 Sep 2026. Outside that window every
+      # step below is skipped rather than hammering a feed with nothing on it.
+      - id: gate
+        name: Are the Games on?
+        run: |
+          d=$(date -u +%F)
+          if [[ "$d" < "2026-09-19" || "$d" > "2026-09-30" ]]; then
+            echo "outside the games window ($d)"; echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.gate.outputs.go == 'true'
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        if: steps.gate.outputs.go == 'true'
+        run: pip install -r scripts/requirements.txt
+
+      - name: Sync entries, schedule and draw
+        if: steps.gate.outputs.go == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python scripts/ag2026_sync.py
+
+      # Re-run after the sync so completed matches are locked into the bracket:
+      # once a result lands, the odds condition on it instead of simulating it.
+      - name: Re-forecast the singles draws
+        if: steps.gate.outputs.go == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python scripts/ag2026_draw.py --forecast --runs 20000
