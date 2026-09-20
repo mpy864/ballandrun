@@ -250,9 +250,21 @@ def sweep(db, preds: Predictors, ittf: dict, units: list,
         rr     = res.get("Results") or {}
         subs   = res.get("SubUnits") or []
 
-        # A team tie is scored through its rubbers, not directly.
+        # A team tie is scored through its rubbers, not directly. Each rubber is a
+        # real singles match with its own probability, so it needs enough context
+        # to be readable alone: which tie it belongs to and where the tie stands.
         targets = []
         if subs:
+            tie_home = (u.get("home_name") or "").strip()
+            tie_away = (u.get("away_name") or "").strip()
+            tie_label = f"{tie_home} v {tie_away}" if (tie_home and tie_away) else None
+            comps = res.get("Competitors") or []
+            tie_score = None
+            if len(comps) >= 2:
+                ra, rb = comps[0].get("Result"), comps[1].get("Result")
+                if ra not in (None, "") and rb not in (None, ""):
+                    tie_score = f"{ra}-{rb}"
+
             for su in subs:
                 sd = sides_from_subunit(su, ittf)
                 if not sd:
@@ -260,11 +272,14 @@ def sweep(db, preds: Predictors, ittf: dict, units: list,
                 h, a = sd
                 sres = su.get("Results") or {}
                 si   = su.get("Info") or {}
+                key  = si.get("Key")
                 targets.append({
-                    "unit_key": si.get("Key"), "parent": u["unit_key"],
+                    "unit_key": key, "parent": u["unit_key"],
                     "res_detail": sres.get("ResDetail") or "",
                     "status": si.get("Status"), "home": h, "away": a,
                     "best_of": len(sres.get("Periods") or []) or 5,
+                    "rubber_num": (parse_rsc(key) or {}).get("rubber_num") or 0,
+                    "tie_label": tie_label, "tie_score": tie_score,
                 })
         else:
             targets.append({
@@ -274,6 +289,7 @@ def sweep(db, preds: Predictors, ittf: dict, units: list,
                 "home": {"ittf": u["home_ittf"], "name": u["home_name"], "org": u["home_org"]},
                 "away": {"ittf": u["away_ittf"], "name": u["away_name"], "org": u["away_org"]},
                 "best_of": u.get("best_of") or 5,
+                "rubber_num": 0, "tie_label": None, "tie_score": None,
             })
 
         for t in targets:
@@ -322,6 +338,10 @@ def sweep(db, preds: Predictors, ittf: dict, units: list,
                 "prob_level": pr["level"],
                 "res_detail": t["res_detail"],
                 "status":     state,
+                "parent_unit": t.get("parent"),
+                "rubber_num":  t.get("rubber_num") or 0,
+                "tie_label":   t.get("tie_label"),
+                "tie_score":   t.get("tie_score"),
                 "data_age_s": cache.get("age"),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             })
