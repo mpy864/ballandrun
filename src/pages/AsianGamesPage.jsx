@@ -74,6 +74,13 @@ function fromIndia(r) {
    list and costs no width, and every India row also names the player. */
 const indiaMark = { borderLeft: `2px solid ${FLAG.saffron}` }
 
+/* Two clocks, always. The venue runs on JST and the people reading this are in
+   India; a bare "10:00" is a three-and-a-half hour trap. */
+const fmtIST = t => new Date(t).toLocaleString('en-GB', {
+  weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })
+const fmtJST = t => new Date(t).toLocaleString('en-GB', {
+  hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' })
+
 /* The probability bar: the table seen from above, split at the probability,
    with a two-pixel gap standing in for the net. */
 function ProbBar({ p }) {
@@ -306,10 +313,16 @@ const Row = ({ children, last }) => (
 function IndiaBoard({ live, results, next, odds }) {
   const won = results.filter(r => fromIndia(r).won).length
   const lost = results.length - won
-  const upsets = results.filter(r => {
-    const f = fromIndia(r)
-    return f.pre != null && f.pre < 50 && f.won
-  })
+  const scoredR = results.filter(r => fromIndia(r).pre != null)
+  const upWin  = scoredR.filter(r => { const f = fromIndia(r); return f.pre < 50 && f.won })
+  const upLoss = scoredR.filter(r => { const f = fromIndia(r); return f.pre > 50 && !f.won })
+  // Mean pre-match confidence against what actually happened. When the model is
+  // consistently above the win rate it is over-rating India on this field, and
+  // saying so is more use to a coach than hiding it.
+  const meanPre = scoredR.length
+    ? Math.round(scoredR.reduce((s, r) => s + fromIndia(r).pre, 0) / scoredR.length) : null
+  const actual = scoredR.length
+    ? Math.round(100 * scoredR.filter(r => fromIndia(r).won).length / scoredR.length) : null
 
   return (
     <motion.section variants={rise} style={{ marginTop: 26 }}>
@@ -325,12 +338,30 @@ function IndiaBoard({ live, results, next, odds }) {
             {lost} lost
           </span>
         )}
-        {upsets.length > 0 && (
+        {upWin.length > 0 && (
           <span style={chip(FLAG.green)}>
-            {upsets.length} {upsets.length === 1 ? 'win' : 'wins'} the model did not expect
+            {upWin.length} {upWin.length === 1 ? 'win' : 'wins'} against the odds
+          </span>
+        )}
+        {upLoss.length > 0 && (
+          <span style={chip(FLAG.saffron)}>
+            {upLoss.length} {upLoss.length === 1 ? 'loss' : 'losses'} as favourite
           </span>
         )}
       </div>
+
+      {meanPre != null && Math.abs(meanPre - actual) >= 10 && (
+        <div style={{ ...card, ...indiaMark, padding: '10px 13px', marginBottom: 12,
+                      fontSize: 12.5, color: T.slate }}>
+          <b style={{ color: T.ink, fontWeight: 600 }}>
+            The model is {meanPre > actual ? 'over' : 'under'}-rating India here.
+          </b>{' '}
+          It gave India an average of <b style={{ ...nums, color: T.ink }}>{meanPre}%</b> across
+          these {scoredR.length} matches; the actual win rate is{' '}
+          <b style={{ ...nums, color: T.ink }}>{actual}%</b>. Treat the percentages below as a
+          guide, not a forecast, until the gap closes.
+        </div>
+      )}
 
       {live.length > 0 && (
         <div style={{ marginBottom: 12 }}>
@@ -346,26 +377,47 @@ function IndiaBoard({ live, results, next, odds }) {
             ? <div style={{ padding: '0 13px 13px', fontSize: 13, color: T.slate }}>
                 Nothing scheduled in the window.
               </div>
-            : next.slice(0, 6).map((u, i, a) => (
-              <Row key={u.unit_key} last={i === a.length - 1}>
-                <span style={{ minWidth: 0, overflowWrap: 'anywhere', color: T.ink }}>
-                  {u.home_name || u.away_name
-                    ? <>{u.home_name || 'Bye'}<span style={{ color: T.muted }}> v </span>{u.away_name || 'Bye'}</>
-                    : <span style={{ color: T.slate }}>{u.event_desc}</span>}
-                </span>
-                <span style={{ ...nums, fontSize: 11, color: T.slate, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  {new Date(u.start_at).toLocaleString('en-GB', {
-                    weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo',
-                  })}
-                  {u.round_label ? ` · ${u.round_label}` : ''}
-                </span>
-              </Row>
-            ))}
+            : next.map((u, i, a) => {
+              // Three different things look the same in the feed and must not
+              // read the same here: a real fixture, a bye (already through),
+              // and a slot whose opponent has not been decided yet.
+              const who = u.home_name || u.away_name
+              const both = u.home_name && u.away_name
+              return (
+                <Row key={u.unit_key} last={i === a.length - 1}>
+                  <span style={{ minWidth: 0, overflowWrap: 'anywhere', color: T.ink }}>
+                    <span style={{ ...labelStyle, fontSize: 9.5, display: 'block', marginBottom: 1 }}>
+                      {u.event_desc}
+                    </span>
+                    {both
+                      ? <>{u.home_name}<span style={{ color: T.muted }}> v </span>{u.away_name}</>
+                      : <>{who}<span style={{ color: T.muted }}>
+                          {u.is_bye ? ' — bye, through to the next round'
+                                    : ' v opponent still to be decided'}
+                        </span></>}
+                  </span>
+                  <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <span style={{ ...nums, fontSize: 12, color: T.ink, display: 'block' }}>
+                      {fmtIST(u.start_at)} <span style={{ color: T.muted, fontSize: 10 }}>IST</span>
+                    </span>
+                    <span style={{ ...nums, fontSize: 10, color: T.muted }}>
+                      {fmtJST(u.start_at)} JST{u.round_label ? ` · ${u.round_label}` : ''}
+                    </span>
+                  </span>
+                </Row>
+              )
+            })}
         </div>
 
         <div style={{ ...card, ...indiaMark, overflow: 'hidden' }}>
-          <div style={{ ...labelStyle, fontSize: 10, padding: '11px 13px 8px' }}>
-            Results · model verdict
+          {/* The column header has to say what the number is. A bare "80%"
+              beside a scoreline is the classic unlabelled-dashboard number:
+              the reader cannot tell whose it is or what it measured. */}
+          <div style={{ padding: '11px 13px 8px' }}>
+            <div style={{ ...labelStyle, fontSize: 10 }}>Results</div>
+            <div style={{ fontSize: 11.5, color: T.muted, marginTop: 2 }}>
+              India&rsquo;s score first · % is what the model gave India before the match
+            </div>
           </div>
           {results.length === 0
             ? <div style={{ padding: '0 13px 13px', fontSize: 13, color: T.slate }}>
@@ -373,21 +425,33 @@ function IndiaBoard({ live, results, next, odds }) {
               </div>
             : results.slice(0, 8).map((r, i, a) => {
               const f = fromIndia(r)
-              const surprise = f.pre != null && (f.pre < 50) === f.won
+              // An upset either way: India won when the model said they would
+              // not, or lost when it said they would.
+              const surprise = f.pre != null && (f.pre < 50) !== !f.won
               return (
-                <Row key={r.unit_key} last={i === a.length - 1}>
+                <Row key={r.unit_key} last={i === a.length - 1 && results.length <= 8}>
                   <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                    {r.tie_label && (
+                      <span style={{ ...labelStyle, fontSize: 9.5, display: 'block', marginBottom: 1 }}>
+                        {r.tie_label}
+                      </span>
+                    )}
                     <b style={{ fontWeight: 600, color: T.ink }}>{f.player}</b>
                     <span style={{ color: T.muted }}> v </span>
                     <span style={{ color: T.slate }}>{f.opponent}</span>
                     <span style={{ ...nums, fontSize: 10, color: T.muted, marginLeft: 5 }}>{f.oppOrg}</span>
                   </span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 7, whiteSpace: 'nowrap' }}>
+                    {surprise && (
+                      <span style={chip(f.won ? FLAG.green : FLAG.saffron, { fontSize: 9 })}>
+                        {f.won ? 'upset win' : 'upset loss'}
+                      </span>
+                    )}
                     <span style={{ ...nums, fontWeight: 600, color: f.won ? FLAG.green : T.slate }}>
                       {f.gf}&ndash;{f.ga}
                     </span>
                     {f.pre != null && (
-                      <span style={chip(surprise ? FLAG.saffron : T.muted, { fontSize: 9.5 })}>
+                      <span style={{ ...nums, fontSize: 11.5, color: T.muted, minWidth: 34, textAlign: 'right' }}>
                         {f.pre}%
                       </span>
                     )}
@@ -395,12 +459,21 @@ function IndiaBoard({ live, results, next, odds }) {
                 </Row>
               )
             })}
+          {results.length > 8 && (
+            <div style={{ padding: '8px 13px', fontSize: 12, color: T.muted }}>
+              and {results.length - 8} more
+            </div>
+          )}
         </div>
       </div>
 
       {odds.length > 0 && (
         <div style={{ ...card, ...indiaMark, marginTop: 12, padding: '11px 13px 12px' }}>
-          <div style={{ ...labelStyle, fontSize: 10, marginBottom: 8 }}>Singles medal chance</div>
+          <div style={{ ...labelStyle, fontSize: 10, marginBottom: 2 }}>Singles medal chance</div>
+          <div style={{ fontSize: 11.5, color: T.muted, marginBottom: 8 }}>
+            Reaching the semi-final, which is where the Games awards its two bronzes.
+            China and Japan hold the four favourites in each draw.
+          </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 18px' }}>
             {odds.map(o => (
               <span key={o.qkey} style={{ fontSize: 13, color: T.ink }}>
@@ -410,9 +483,6 @@ function IndiaBoard({ live, results, next, odds }) {
                 </span>
               </span>
             ))}
-          </div>
-          <div style={{ fontSize: 11.5, color: T.muted, marginTop: 8 }}>
-            Chance of reaching the semi-final, which is where the Games awards its two bronzes.
           </div>
         </div>
       )}
@@ -465,10 +535,10 @@ export default function AsianGamesPage() {
         .eq('status', 'finished').order('updated_at', { ascending: false }).limit(20),
 
       supabase.from('ag2026_units')
-        .select('unit_key,round_label,event_desc,start_at,loc_desc,home_name,away_name,home_org,away_org,status')
+        .select('unit_key,round_label,event_desc,start_at,loc_desc,home_name,away_name,home_org,away_org,status,is_bye')
         .eq('rubber_num', 0).or(`home_org.eq.${IND},away_org.eq.${IND}`)
         .not('start_at', 'is', null).gte('start_at', from)
-        .order('start_at').limit(10),
+        .order('start_at').limit(12),
     ])
 
     const bad = [l, r, f, s, ir, inx].find(x => x.error)
@@ -501,13 +571,23 @@ export default function AsianGamesPage() {
   const indWon = indResults.filter(r => fromIndia(r).won).length
   const indLive = live.filter(isIndia)
 
+  // Only show a tile that has something to say. Three of five reading "0" or
+  // "—" is dead space in the most prominent row on the page, and it trains the
+  // eye to skip the row entirely — including on the days it matters.
+  // The next tile means the next thing India actually plays, not the next row.
+  const nextInd = indNext.find(u => u.home_name && u.away_name)
+  const indUpsets = indResults.filter(r => {
+    const f = fromIndia(r)
+    return f.pre != null && (f.pre < 50) !== !f.won
+  })
   const stats = [
-    ['India record', indResults.length ? `${indWon}–${indResults.length - indWon}` : '—'],
-    ['India live', indLive.length],
-    ['Live now', live.length],
-    ['Favourite won', scored.length ? `${Math.round(100 * hits.length / scored.length)}%` : '—'],
-    ['Feed lag', live.length ? `${worstLag}s` : '—'],
-  ]
+    ['India record', indResults.length ? `${indWon}–${indResults.length - indWon}` : null],
+    ['India next', nextInd ? fmtIST(nextInd.start_at).replace(',', '') : null,
+      nextInd ? 'IST' : null],
+    live.length ? ['Live now', live.length] : null,
+    ['Favourite won', scored.length ? `${Math.round(100 * hits.length / scored.length)}%` : null],
+    live.length ? ['Feed lag', `${worstLag}s`] : null,
+  ].filter(s => s && s[1] != null)
 
   const days = {}
   sched.forEach(u => {
@@ -547,10 +627,12 @@ export default function AsianGamesPage() {
         <motion.div variants={rise} style={{
           display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(132px,1fr))', gap: 8,
         }}>
-          {stats.map(([k, v]) => (
+          {stats.map(([k, v, suffix]) => (
             <div key={k} style={{ ...card, padding: '11px 14px' }}>
               <div style={{ ...labelStyle, fontSize: 10 }}>{k}</div>
-              <div style={{ ...nums, fontSize: 19, fontWeight: 600, color: T.ink, marginTop: 2 }}>{v}</div>
+              <div style={{ ...nums, fontSize: 19, fontWeight: 600, color: T.ink, marginTop: 2 }}>
+                {v}{suffix && <span style={{ fontSize: 11, color: T.muted, marginLeft: 4 }}>{suffix}</span>}
+              </div>
             </div>
           ))}
         </motion.div>
