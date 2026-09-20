@@ -26,6 +26,7 @@ RUN
 
 import argparse
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -170,6 +171,93 @@ def fix_duplicate_ids(db) -> dict:
 
     return {"duplicates": len(dupes), "reassigned": reassigned,
             "cleared": cleared, "notes": notes}
+
+
+def _tokens(name: str) -> frozenset:
+    """Order-independent word set. 'GNANASEKARAN Sathiyan' and
+    'Sathiyan GNANASEKARAN' are the same person written two ways."""
+    return frozenset(w for w in re.split(r"[^A-Za-z]+", (name or "").lower()) if len(w) >= 3)
+
+
+def verify_bridge(db) -> dict:
+    """Catch an IFId that belongs to somebody else entirely.
+
+    fix_duplicate_ids only fires when two Asian Games athletes claim one id. It
+    cannot see the worse case: a single athlete handed an id that is real but
+    another player's. Measured 2026-09-20, the feed does this four times, and
+    they look like transposed digits —
+
+        GNANASEKARAN Sathiyan (IND)  ->  103106, which is Tracy GINSBURG (RSA, b.1965)
+                                         the real Sathiyan is 103126
+        NEGARA Muhammad (INA)        ->  122229, which is Elizabeth WILLIAMS (SLE)
+                                         the real Negara is 122299
+
+    Left alone, India's number three in the team event carries a stranger's
+    (empty) record and is modelled as the weakest player in the draw.
+
+    The discriminator is the NAME, and only as a check on an id the feed already
+    gave — never as the lookup. Four other athletes also disagree with
+    wtt_players on country or date of birth and are nonetheless correct: Johan
+    HAGBERG plays for Laos but is registered in Sweden, Aleena KHAN for Pakistan
+    but registered in Germany, and two more differ by a typo in one date. In
+    every one of those the name matches, so the name is what separates "the same
+    person recorded differently" from "a different person".
+
+    A rejected id is re-resolved on (country, gender, dob) — exact, not fuzzy —
+    and where that returns several, the name breaks the tie. Anything still
+    ambiguous is cleared rather than guessed: unrated is recoverable, wrong is not.
+    """
+    rows = (db.table("ag2026_athletes").select("reg,name,org,gender,dob,ittf_id")
+              .eq("ptype", "A").not_.is_("ittf_id", "null").execute().data or [])
+    if not rows:
+        return {"checked": 0, "repaired": 0, "cleared": 0, "notes": []}
+
+    ids = sorted({r["ittf_id"] for r in rows})
+    claimed = {}
+    for i in range(0, len(ids), 200):
+        got = (db.table("wtt_players").select("ittf_id,player_name,country_code,dob")
+                 .in_("ittf_id", ids[i:i + 200]).execute().data or [])
+        for p in got:
+            claimed[p["ittf_id"]] = p
+
+    repaired, cleared, notes = 0, 0, []
+    for r in rows:
+        p = claimed.get(r["ittf_id"])
+        if not p:
+            continue
+        agrees_name = bool(_tokens(r["name"]) & _tokens(p.get("player_name"))) and \
+            _tokens(r["name"]) == _tokens(p.get("player_name"))
+        same_country = (p.get("country_code") == r["org"])
+        same_dob = (r.get("dob") and p.get("dob") and r["dob"] == p["dob"])
+        if agrees_name or (same_country and same_dob):
+            continue                     # same person, however it is recorded
+
+        alt = None
+        if r.get("dob"):
+            cands = (db.table("wtt_players").select("ittf_id,player_name")
+                       .eq("country_code", r["org"]).eq("gender", r["gender"])
+                       .eq("dob", r["dob"]).execute().data or [])
+            if len(cands) == 1:
+                alt = cands[0]["ittf_id"]
+            elif len(cands) > 1:
+                named = [c for c in cands if _tokens(c["player_name"]) == _tokens(r["name"])]
+                if len(named) == 1:
+                    alt = named[0]["ittf_id"]
+
+        db.table("ag2026_athletes").update(
+            {"ittf_id": alt, "id_source": "dob" if alt else "bad"}
+        ).eq("reg", r["reg"]).execute()
+
+        if alt:
+            repaired += 1
+            notes.append(f"{r['name']} ({r['org']}) {r['ittf_id']} was "
+                         f"'{p.get('player_name')}' -> {alt} by dob {r['dob']}")
+        else:
+            cleared += 1
+            notes.append(f"{r['name']} ({r['org']}) {r['ittf_id']} was "
+                         f"'{p.get('player_name')}' -> cleared, no exact dob match")
+
+    return {"checked": len(rows), "repaired": repaired, "cleared": cleared, "notes": notes}
 
 
 def sync_entries(db, refresh_bios: bool = False) -> dict:
@@ -388,6 +476,15 @@ def main():
                 for n in d["notes"]:
                     print(f"  {n}")
                 bits.append(f"{d['duplicates']} dupes fixed")
+
+            v = verify_bridge(db)
+            if v["repaired"] or v["cleared"]:
+                print(f"[verify] {v['checked']} ids checked — "
+                      f"{v['repaired']} pointed at the wrong player and were repaired, "
+                      f"{v['cleared']} cleared")
+                for n in v["notes"]:
+                    print(f"  {n}")
+                bits.append(f"{v['repaired']} misbridged fixed")
 
         s = sync_schedule(db, [args.day] if args.day else None)
         print(f"[schedule] {s['units']} units over {s['days']} days, "

@@ -241,7 +241,13 @@ def draw_stats(draw: SubEventDraw, states: dict | None = None) -> dict:
 
 # ── Forecast ─────────────────────────────────────────────────────────────────
 
-def apply_unrated_prior(mp, draw) -> dict:
+def field_ids(draw) -> list:
+    """Every real competitor in a draw, as ITTF ids."""
+    return [c.player_ids[0] for pair in draw.matches for c in pair
+            if c.player_ids[0] is not None]
+
+
+def apply_unrated_prior(mp, field) -> dict:
     """Give entrants with no WTT record a prior that fits the Asian Games.
 
     Two defaults in the WTT stack are wrong for this event, and together they made
@@ -268,11 +274,14 @@ def apply_unrated_prior(mp, draw) -> dict:
     field. Injecting a state also makes SinglesModel treat them as known, so the
     real feature model is used rather than the bare Elo fallback.
 
+    `field` is the set of ITTF ids the prior is calibrated against — a draw's
+    competitors, or every entrant in a discipline when scoring a team tie, where
+    nine players are too few to set a floor from.
+
     Both mp.states and mp.rank_snap are replaced with copies. The WTT pipeline,
     which runs on cron throughout the Games, is untouched.
     """
-    field = [c.player_ids[0] for pair in draw.matches for c in pair
-             if c.player_ids[0] is not None]
+    field = [p for p in field if p is not None]
     rated = [p for p in field if p in mp.states]
     if not rated:
         return {"applied": 0, "template": None}
@@ -346,7 +355,7 @@ def run_forecast(db, event_key: str, runs: int = 20000, seed: int | None = None)
     # Capture who genuinely has a record BEFORE injecting priors, so the dashboard
     # can still badge them honestly as unrated.
     truly_rated = set(mp.states)
-    prior  = apply_unrated_prior(mp, draw)
+    prior  = apply_unrated_prior(mp, field_ids(draw))
     model  = make_model(draw.discipline, AG_TIER, predictor_m=mp, predictor_w=mp)
 
     locked = locked_results(db, event_key)
