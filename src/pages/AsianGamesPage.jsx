@@ -87,8 +87,29 @@ function MatchCard({ row, live }) {
 
   return (
     <motion.div variants={rise} style={{ ...card, padding: '13px 15px 15px', marginBottom: 8 }}>
+      {/* A team rubber is a real singles match, but it is only readable if you
+          can see which tie it sits in and where that tie stands. */}
+      {row.tie_label && (
+        <div style={{
+          display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap',
+          marginBottom: 8, paddingBottom: 8, borderBottom: `1px solid ${T.divider}`,
+        }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: T.ink }}>{row.tie_label}</span>
+          {row.rubber_num > 0 && (
+            <span style={{ fontSize: 12, color: T.slate }}>Match {row.rubber_num} of 5</span>
+          )}
+          {row.tie_score && (
+            <span style={{ marginLeft: 'auto', ...nums, fontSize: 12, color: T.slate }}>
+              tie {row.tie_score}
+            </span>
+          )}
+        </div>
+      )}
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 9 }}>
-        <span style={{ ...labelStyle, fontSize: 10 }}>{genderOf(row.event_key)}</span>
+        <span style={{ ...labelStyle, fontSize: 10 }}>
+          {genderOf(row.event_key)}{row.tie_label ? ' team' : ' singles'}
+        </span>
         {row.round_label && <span style={chip(T.slate)}>{row.round_label}</span>}
         {live
           ? <span style={chip(LIVE, { fontWeight: 700 })}>Live</span>
@@ -252,10 +273,14 @@ export default function AsianGamesPage() {
 
     const [l, r, f, s] = await Promise.all([
       supabase.from('ag2026_live_state')
-        .select('unit_key,event_key,round_label,comp1_name,comp2_name,comp1_org,comp2_org,games_a,games_b,pts_a,pts_b,best_of,p_win,p_prematch,prob_level,res_detail,data_age_s')
-        .eq('status', 'live').order('updated_at', { ascending: false }).limit(24),
+        .select('unit_key,event_key,round_label,comp1_name,comp2_name,comp1_org,comp2_org,games_a,games_b,pts_a,pts_b,best_of,p_win,p_prematch,prob_level,res_detail,data_age_s,parent_unit,rubber_num,tie_label,tie_score')
+        // Rubbers of the same tie sit together, in playing order, so a team
+        // session reads as one contest rather than five loose matches.
+        .eq('status', 'live')
+        .order('parent_unit', { ascending: true, nullsFirst: true })
+        .order('rubber_num', { ascending: true }).limit(24),
       supabase.from('ag2026_live_state')
-        .select('unit_key,event_key,round_label,comp1_name,comp2_name,comp1_org,comp2_org,games_a,games_b,p_prematch,res_detail')
+        .select('unit_key,event_key,round_label,comp1_name,comp2_name,comp1_org,comp2_org,games_a,games_b,p_prematch,res_detail,rubber_num,tie_label,tie_score')
         .eq('status', 'finished').not('p_prematch', 'is', null)
         .order('updated_at', { ascending: false }).limit(12),
       supabase.from('ag2026_forecasts')
