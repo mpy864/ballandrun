@@ -81,6 +81,35 @@ const fmtIST = t => new Date(t).toLocaleString('en-GB', {
 const fmtJST = t => new Date(t).toLocaleString('en-GB', {
   hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' })
 
+/* Rounds, in order, with names a reader uses out loud. */
+const ROUNDS = [
+  ['R64', 'Last 64'], ['R32', 'Last 32'], ['R16', 'Last 16'],
+  ['QF', 'Quarter-final'], ['SF', 'Semi-final'], ['F', 'Final'],
+]
+const LIKELY = 0.5
+
+/* The deepest round a player reaches more often than not. For India's four
+   that is the Last 16 at 58-86%, which a medal percentage of 0.3 buries
+   completely: the honest headline is not "no medal", it is "the last 16 is
+   likely and the quarter-final is the wall". */
+function likelyFinish(reach) {
+  if (!reach) return null
+  let best = null
+  for (const [k, name] of ROUNDS) {
+    const v = Number(reach[k])
+    if (Number.isFinite(v) && v >= LIKELY) best = { key: k, name, p: v }
+  }
+  return best
+}
+function nextStep(reach, afterKey) {
+  const i = ROUNDS.findIndex(([k]) => k === afterKey)
+  for (let j = i + 1; j < ROUNDS.length; j++) {
+    const v = Number(reach?.[ROUNDS[j][0]])
+    if (Number.isFinite(v) && v > 0) return { key: ROUNDS[j][0], name: ROUNDS[j][1], p: v }
+  }
+  return null
+}
+
 /* The probability bar: the table seen from above, split at the probability,
    with a two-pixel gap standing in for the net. */
 function ProbBar({ p }) {
@@ -469,20 +498,51 @@ function IndiaBoard({ live, results, next, odds }) {
 
       {odds.length > 0 && (
         <div style={{ ...card, ...indiaMark, marginTop: 12, padding: '11px 13px 12px' }}>
-          <div style={{ ...labelStyle, fontSize: 10, marginBottom: 2 }}>Singles medal chance</div>
-          <div style={{ fontSize: 11.5, color: T.muted, marginBottom: 8 }}>
-            Reaching the semi-final, which is where the Games awards its two bronzes.
-            China and Japan hold the four favourites in each draw.
+          <div style={{ ...labelStyle, fontSize: 10, marginBottom: 2 }}>Singles — how far</div>
+          <div style={{ fontSize: 11.5, color: T.muted, marginBottom: 10 }}>
+            How often each player reaches each round in 20,000 simulations of the draw.
+            Filled means more likely than not.
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 18px' }}>
-            {odds.map(o => (
-              <span key={o.qkey} style={{ fontSize: 13, color: T.ink }}>
-                {o.label}
-                <span style={{ ...nums, color: T.slate, marginLeft: 6 }}>
-                  {(100 * Number(o.p_medal)).toFixed(1)}%
-                </span>
-              </span>
-            ))}
+
+          {odds.map(o => {
+            const lf = likelyFinish(o.reach)
+            const step = lf ? nextStep(o.reach, lf.key) : null
+            return (
+              <div key={o.qkey} style={{
+                display: 'grid', gridTemplateColumns: 'minmax(120px,1fr) auto',
+                gap: '4px 12px', alignItems: 'center', padding: '7px 0',
+                borderTop: `1px solid ${T.divider}`,
+              }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, color: T.ink, fontWeight: 500 }}>{o.label}</div>
+                  {lf && (
+                    <div style={{ fontSize: 11.5, color: T.slate }}>
+                      likely to reach the <b style={{ color: T.ink, fontWeight: 600 }}>{lf.name}</b>
+                      {step && <> · {step.name} {Math.round(100 * step.p)}%</>}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {ROUNDS.filter(([k]) => Number.isFinite(Number(o.reach?.[k])))
+                         .map(([k, name]) => {
+                    const v = Number(o.reach[k])
+                    const on = v >= LIKELY
+                    return (
+                      <span key={k} title={`${name}: ${(100 * v).toFixed(1)}%`} style={{
+                        ...nums, fontSize: 10, lineHeight: 1.5, padding: '2px 6px',
+                        borderRadius: 3, border: `1px solid ${on ? HOME : T.border}`,
+                        background: on ? HOME : 'transparent',
+                        color: on ? '#fff' : T.muted, whiteSpace: 'nowrap',
+                      }}>{k} {Math.round(100 * v)}</span>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+          <div style={{ fontSize: 11.5, color: T.muted, marginTop: 9 }}>
+            A medal means the semi-final, where the Games awards its two bronzes.
+            China and Japan hold the top four seeds in each draw.
           </div>
         </div>
       )}
@@ -521,7 +581,7 @@ export default function AsianGamesPage() {
         .eq('status', 'finished').not('p_prematch', 'is', null)
         .order('updated_at', { ascending: false }).limit(12),
       supabase.from('ag2026_forecasts')
-        .select('event_key,qkey,label,org,p_title,p_medal,is_rated')
+        .select('event_key,qkey,label,org,p_title,p_medal,is_rated,reach')
         .order('p_title', { ascending: false }),
       supabase.from('ag2026_units')
         .select('unit_key,round_label,event_desc,start_at,loc_desc,home_name,away_name,home_org,away_org,status')
@@ -649,12 +709,36 @@ export default function AsianGamesPage() {
         <IndiaBoard live={indLive} results={indResults} next={indNext}
                     odds={odds.filter(o => o.org === IND)} />
 
-        <Section title="All matches — live now" note="Refreshes every 20 seconds">
-          {loading ? <Empty title="Loading" body="Fetching the current state of play." />
-            : live.length ? indiaFirst(live).map(r => <MatchCard key={r.unit_key} row={r} live />)
-            : <Empty title="Nothing on the tables right now"
-                     body="Play runs roughly 10:00–21:00 Japan time. Singles begin on 23 September; team ties fill 20–22 September." />}
-        </Section>
+        {/* Nothing is on the tables for roughly fourteen hours a day. A full
+            empty card that size, in the page's headline slot, teaches people
+            the section is always empty. One line does the job until play
+            starts, and the section expands on its own when it does. */}
+        {loading ? (
+          <Section title="All matches — live now">
+            <Empty title="Loading" body="Fetching the current state of play." />
+          </Section>
+        ) : live.length ? (
+          <Section title="All matches — live now" note="Refreshes every 20 seconds">
+            {indiaFirst(live).map(r => <MatchCard key={r.unit_key} row={r} live />)}
+          </Section>
+        ) : (
+          <motion.div variants={rise} style={{
+            marginTop: 26, padding: '10px 14px', borderTop: `1px solid ${T.border}`,
+            borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 10,
+            alignItems: 'baseline', flexWrap: 'wrap', fontSize: 12.5, color: T.slate,
+          }}>
+            <span style={{ ...labelStyle, fontSize: 10 }}>Live now</span>
+            <span>
+              Nothing on the tables. Play runs about 10:00&ndash;21:00 JST
+              ({'≈'} 06:30&ndash;17:30 IST).
+            </span>
+            {nextInd && (
+              <span style={{ marginLeft: 'auto', ...nums, fontSize: 12 }}>
+                India next: {fmtIST(nextInd.start_at).replace(',', '')} IST
+              </span>
+            )}
+          </motion.div>
+        )}
 
         <Section title="Gold medal odds"
                  note="20,000 simulations of the published draw. Medal % is reaching the semi-final, because the Games awards two bronzes and plays no third-place match.">
