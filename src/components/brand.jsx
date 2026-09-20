@@ -85,7 +85,10 @@ export function Rings({ animate = true, opacity = 0.045 }) {
 // at 4.46:1, both short of the 4.5:1 that 12px bold type needs. The flag's colours are
 // specified for a flag flying against the sky, not for small text on near-white. Deepened
 // they reach 4.68 and 5.34 and still read unmistakably as saffron and green.
-const FLAG = { saffron: '#B35900', navy: '#000080', green: '#0F7A06' }
+// Exported for the same reason the rings and the scheme name are: a second page
+// that wants India's colours should take these measured ones rather than reach
+// for #FF9933 again and reintroduce the contrast problem described above.
+export const FLAG = { saffron: '#B35900', navy: '#000080', green: '#0F7A06' }
 const SCHEME = [
   ['Target',  FLAG.saffron],
   ['Olympic', FLAG.navy],

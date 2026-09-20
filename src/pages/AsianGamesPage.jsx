@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase.js'
 import { T, card, label as labelStyle, chip, accentVar } from '../lib/ui.js'
-import { group, rise } from '../components/brand.jsx'
+import { group, rise, FLAG } from '../components/brand.jsx'
 import AuthBar from '../components/AuthBar.jsx'
 
 /**
@@ -48,6 +48,32 @@ function splitGames(resDetail) {
 
 const genderOf = k => (String(k || '').slice(0, 1) === 'W' ? 'Women' : 'Men')
 
+/* This is a TOPS board, so India comes first everywhere: its own section above
+   the rest, and its rows lifted to the top of every list below. */
+const IND = 'IND'
+const isIndia = r => r.comp1_org === IND || r.comp2_org === IND ||
+                     r.home_org === IND || r.away_org === IND || r.org === IND
+const indiaFirst = rows => [...rows].sort((a, b) => (isIndia(b) ? 1 : 0) - (isIndia(a) ? 1 : 0))
+
+/* Which side of the row India is on, and how the match reads from there. */
+function fromIndia(r) {
+  const first = r.comp1_org === IND
+  const pre = r.p_prematch == null ? null
+            : Math.round(100 * (first ? Number(r.p_prematch) : 1 - Number(r.p_prematch)))
+  const gf = first ? r.games_a : r.games_b
+  const ga = first ? r.games_b : r.games_a
+  return {
+    player: first ? r.comp1_name : r.comp2_name,
+    opponent: first ? r.comp2_name : r.comp1_name,
+    oppOrg: first ? r.comp2_org : r.comp1_org,
+    gf, ga, won: gf > ga, pre,
+  }
+}
+
+/* A saffron hairline on the left is the whole marker. It reads instantly in a
+   list and costs no width, and every India row also names the player. */
+const indiaMark = { borderLeft: `2px solid ${FLAG.saffron}` }
+
 /* The probability bar: the table seen from above, split at the probability,
    with a two-pixel gap standing in for the net. */
 function ProbBar({ p }) {
@@ -86,7 +112,10 @@ function MatchCard({ row, live }) {
   const won = row.games_a > row.games_b
 
   return (
-    <motion.div variants={rise} style={{ ...card, padding: '13px 15px 15px', marginBottom: 8 }}>
+    <motion.div variants={rise} style={{
+      ...card, padding: '13px 15px 15px', marginBottom: 8,
+      ...(isIndia(row) ? indiaMark : null),
+    }}>
       {/* A team rubber is a real singles match, but it is only readable if you
           can see which tie it sits in and where that tie stands. */}
       {row.tie_label && (
@@ -225,7 +254,10 @@ function OddsTable({ eventKey, rows }) {
             const t = 100 * Number(r.p_title)
             return (
               <tr key={r.qkey}>
-                <td style={{ padding: '7px 0', borderBottom: `1px solid ${T.divider}`, color: T.ink }}>
+                <td style={{
+                  padding: '7px 0 7px 8px', borderBottom: `1px solid ${T.divider}`, color: T.ink,
+                  marginLeft: -8, ...(r.org === IND ? indiaMark : null),
+                }}>
                   {r.label}
                   <span style={{ ...nums, fontSize: 10, color: T.muted, marginLeft: 6 }}>{r.org}</span>
                   {r.is_rated === false && (
@@ -257,11 +289,144 @@ function OddsTable({ eventKey, rows }) {
   )
 }
 
+/* Module scope, not inside IndiaBoard: a component declared during render is a
+   new type on every render, so React would tear down and rebuild every row
+   instead of updating it. */
+const Row = ({ children, last }) => (
+  <div style={{
+    display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center',
+    padding: '8px 13px', fontSize: 13,
+    borderBottom: last ? 'none' : `1px solid ${T.divider}`,
+  }}>{children}</div>
+)
+
+/* India's own section. Dense rows rather than full match cards: this is the
+   part a TOPS coach checks first and often, so it has to answer "how did we do
+   and who is next" in one screen, not four scrolls. */
+function IndiaBoard({ live, results, next, odds }) {
+  const won = results.filter(r => fromIndia(r).won).length
+  const lost = results.length - won
+  const upsets = results.filter(r => {
+    const f = fromIndia(r)
+    return f.pre != null && f.pre < 50 && f.won
+  })
+
+  return (
+    <motion.section variants={rise} style={{ marginTop: 26 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 11, flexWrap: 'wrap' }}>
+        <h2 style={{
+          ...labelStyle, margin: 0, fontSize: 12, color: T.ink,
+          borderLeft: `3px solid ${FLAG.saffron}`, paddingLeft: 8,
+        }}>India</h2>
+        {results.length > 0 && (
+          <span style={{ ...nums, fontSize: 13, color: T.slate }}>
+            <b style={{ color: FLAG.green, fontWeight: 600 }}>{won} won</b>
+            <span style={{ color: T.muted }}> · </span>
+            {lost} lost
+          </span>
+        )}
+        {upsets.length > 0 && (
+          <span style={chip(FLAG.green)}>
+            {upsets.length} {upsets.length === 1 ? 'win' : 'wins'} the model did not expect
+          </span>
+        )}
+      </div>
+
+      {live.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          {live.map(r => <MatchCard key={r.unit_key} row={r} live />)}
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 12 }}>
+
+        <div style={{ ...card, ...indiaMark, overflow: 'hidden' }}>
+          <div style={{ ...labelStyle, fontSize: 10, padding: '11px 13px 8px' }}>Next up</div>
+          {next.length === 0
+            ? <div style={{ padding: '0 13px 13px', fontSize: 13, color: T.slate }}>
+                Nothing scheduled in the window.
+              </div>
+            : next.slice(0, 6).map((u, i, a) => (
+              <Row key={u.unit_key} last={i === a.length - 1}>
+                <span style={{ minWidth: 0, overflowWrap: 'anywhere', color: T.ink }}>
+                  {u.home_name || u.away_name
+                    ? <>{u.home_name || 'Bye'}<span style={{ color: T.muted }}> v </span>{u.away_name || 'Bye'}</>
+                    : <span style={{ color: T.slate }}>{u.event_desc}</span>}
+                </span>
+                <span style={{ ...nums, fontSize: 11, color: T.slate, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  {new Date(u.start_at).toLocaleString('en-GB', {
+                    weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo',
+                  })}
+                  {u.round_label ? ` · ${u.round_label}` : ''}
+                </span>
+              </Row>
+            ))}
+        </div>
+
+        <div style={{ ...card, ...indiaMark, overflow: 'hidden' }}>
+          <div style={{ ...labelStyle, fontSize: 10, padding: '11px 13px 8px' }}>
+            Results · model verdict
+          </div>
+          {results.length === 0
+            ? <div style={{ padding: '0 13px 13px', fontSize: 13, color: T.slate }}>
+                No matches played yet.
+              </div>
+            : results.slice(0, 8).map((r, i, a) => {
+              const f = fromIndia(r)
+              const surprise = f.pre != null && (f.pre < 50) === f.won
+              return (
+                <Row key={r.unit_key} last={i === a.length - 1}>
+                  <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                    <b style={{ fontWeight: 600, color: T.ink }}>{f.player}</b>
+                    <span style={{ color: T.muted }}> v </span>
+                    <span style={{ color: T.slate }}>{f.opponent}</span>
+                    <span style={{ ...nums, fontSize: 10, color: T.muted, marginLeft: 5 }}>{f.oppOrg}</span>
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 7, whiteSpace: 'nowrap' }}>
+                    <span style={{ ...nums, fontWeight: 600, color: f.won ? FLAG.green : T.slate }}>
+                      {f.gf}&ndash;{f.ga}
+                    </span>
+                    {f.pre != null && (
+                      <span style={chip(surprise ? FLAG.saffron : T.muted, { fontSize: 9.5 })}>
+                        {f.pre}%
+                      </span>
+                    )}
+                  </span>
+                </Row>
+              )
+            })}
+        </div>
+      </div>
+
+      {odds.length > 0 && (
+        <div style={{ ...card, ...indiaMark, marginTop: 12, padding: '11px 13px 12px' }}>
+          <div style={{ ...labelStyle, fontSize: 10, marginBottom: 8 }}>Singles medal chance</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 18px' }}>
+            {odds.map(o => (
+              <span key={o.qkey} style={{ fontSize: 13, color: T.ink }}>
+                {o.label}
+                <span style={{ ...nums, color: T.slate, marginLeft: 6 }}>
+                  {(100 * Number(o.p_medal)).toFixed(1)}%
+                </span>
+              </span>
+            ))}
+          </div>
+          <div style={{ fontSize: 11.5, color: T.muted, marginTop: 8 }}>
+            Chance of reaching the semi-final, which is where the Games awards its two bronzes.
+          </div>
+        </div>
+      )}
+    </motion.section>
+  )
+}
+
 export default function AsianGamesPage() {
   const [live, setLive] = useState([])
   const [recent, setRecent] = useState([])
   const [odds, setOdds] = useState([])
   const [sched, setSched] = useState([])
+  const [indResults, setIndResults] = useState([])
+  const [indNext, setIndNext] = useState([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState(null)
   const chanRef = useRef(null)
@@ -271,7 +436,9 @@ export default function AsianGamesPage() {
     const from = new Date(now - 3 * 3600e3).toISOString()
     const to   = new Date(now + 30 * 3600e3).toISOString()
 
-    const [l, r, f, s] = await Promise.all([
+    // India is queried separately rather than filtered out of the lists above:
+    // those carry a limit, and India's rows must never fall off the end of it.
+    const [l, r, f, s, ir, inx] = await Promise.all([
       supabase.from('ag2026_live_state')
         .select('unit_key,event_key,round_label,comp1_name,comp2_name,comp1_org,comp2_org,games_a,games_b,pts_a,pts_b,best_of,p_win,p_prematch,prob_level,res_detail,data_age_s,parent_unit,rubber_num,tie_label,tie_score')
         // Rubbers of the same tie sit together, in playing order, so a team
@@ -287,16 +454,28 @@ export default function AsianGamesPage() {
         .select('event_key,qkey,label,org,p_title,p_medal,is_rated')
         .order('p_title', { ascending: false }),
       supabase.from('ag2026_units')
-        .select('unit_key,round_label,event_desc,start_at,loc_desc,home_name,away_name,status')
+        .select('unit_key,round_label,event_desc,start_at,loc_desc,home_name,away_name,home_org,away_org,status')
         .eq('rubber_num', 0).not('start_at', 'is', null)
         .gte('start_at', from).lte('start_at', to)
         .order('start_at').limit(50),
+
+      supabase.from('ag2026_live_state')
+        .select('unit_key,event_key,round_label,comp1_name,comp2_name,comp1_org,comp2_org,games_a,games_b,p_prematch,res_detail,tie_label,rubber_num')
+        .or(`comp1_org.eq.${IND},comp2_org.eq.${IND}`)
+        .eq('status', 'finished').order('updated_at', { ascending: false }).limit(20),
+
+      supabase.from('ag2026_units')
+        .select('unit_key,round_label,event_desc,start_at,loc_desc,home_name,away_name,home_org,away_org,status')
+        .eq('rubber_num', 0).or(`home_org.eq.${IND},away_org.eq.${IND}`)
+        .not('start_at', 'is', null).gte('start_at', from)
+        .order('start_at').limit(10),
     ])
 
-    const bad = [l, r, f, s].find(x => x.error)
+    const bad = [l, r, f, s, ir, inx].find(x => x.error)
     setErr(bad ? bad.error.message : null)
     setLive(l.data || []); setRecent(r.data || [])
     setOdds(f.data || []); setSched(s.data || [])
+    setIndResults(ir.data || []); setIndNext(inx.data || [])
     setLoading(false)
   }
 
@@ -319,9 +498,13 @@ export default function AsianGamesPage() {
   const hits = scored.filter(r => (Number(r.p_prematch) > 0.5) === (r.games_a > r.games_b))
   const worstLag = live.reduce((m, r) => Math.max(m, r.data_age_s ?? 0), 0)
 
+  const indWon = indResults.filter(r => fromIndia(r).won).length
+  const indLive = live.filter(isIndia)
+
   const stats = [
+    ['India record', indResults.length ? `${indWon}–${indResults.length - indWon}` : '—'],
+    ['India live', indLive.length],
     ['Live now', live.length],
-    ['Recent scored', recent.length],
     ['Favourite won', scored.length ? `${Math.round(100 * hits.length / scored.length)}%` : '—'],
     ['Feed lag', live.length ? `${worstLag}s` : '—'],
   ]
@@ -381,9 +564,12 @@ export default function AsianGamesPage() {
           </motion.div>
         )}
 
-        <Section title="Live now" note="Refreshes every 20 seconds">
+        <IndiaBoard live={indLive} results={indResults} next={indNext}
+                    odds={odds.filter(o => o.org === IND)} />
+
+        <Section title="All matches — live now" note="Refreshes every 20 seconds">
           {loading ? <Empty title="Loading" body="Fetching the current state of play." />
-            : live.length ? live.map(r => <MatchCard key={r.unit_key} row={r} live />)
+            : live.length ? indiaFirst(live).map(r => <MatchCard key={r.unit_key} row={r} live />)
             : <Empty title="Nothing on the tables right now"
                      body="Play runs roughly 10:00–21:00 Japan time. Singles begin on 23 September; team ties fill 20–22 September." />}
         </Section>
@@ -411,6 +597,7 @@ export default function AsianGamesPage() {
                       display: 'grid', gridTemplateColumns: '52px 1fr auto', gap: 10, alignItems: 'center',
                       padding: '8px 13px', fontSize: 13, color: T.ink,
                       borderTop: i ? `1px solid ${T.divider}` : 'none',
+                      ...(isIndia(u) ? indiaMark : null),
                     }}>
                       <span style={{ ...nums, fontSize: 12, color: T.slate }}>
                         {new Date(u.start_at).toLocaleTimeString('en-GB',
@@ -431,8 +618,8 @@ export default function AsianGamesPage() {
             ))}
         </Section>
 
-        <Section title="Recent results" note="Pre-match probability against what happened">
-          {recent.length ? recent.map(r => <MatchCard key={r.unit_key} row={r} live={false} />)
+        <Section title="All matches — recent results" note="Pre-match probability against what happened">
+          {recent.length ? indiaFirst(recent).map(r => <MatchCard key={r.unit_key} row={r} live={false} />)
             : <Empty title="No completed matches scored yet"
                      body="Finished matches appear here with the probability the model gave before the first serve." />}
         </Section>
