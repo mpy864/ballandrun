@@ -5,6 +5,7 @@ import DynamicOKRDashboard from './components/DynamicOKRDashboard.jsx'
 import IndiaDashboard from './pages/IndiaDashboard.jsx'
 import H2HDashboard from './components/H2HDashboard.jsx'
 import LivePage from './pages/LivePage.jsx'
+import AsianGamesPage from './pages/AsianGamesPage.jsx'
 import TournamentPage from './pages/TournamentPage.jsx'
 import YouthPipelinePage from './pages/YouthPipelinePage.jsx'
 import PlayerPage from './pages/PlayerPage.jsx'
@@ -58,6 +59,9 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<RedirectIfAuthed><LoginPage /></RedirectIfAuthed>} />
         <Route path="/live" element={<LivePage />} />
+        {/* Public by design: migration 032 opens the ag2026_* tables to anon so
+            this board can be shared by link with no sign-up. */}
+        <Route path="/asiangames" element={<AsianGamesPage />} />
         {/* Outside the shell: the reset link arrives with a recovery session, not an
             approved one, so it must not pass through the approval gate. */}
         <Route path="/reset" element={<ResetPasswordPage />} />
