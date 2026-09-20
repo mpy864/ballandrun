@@ -106,6 +106,12 @@ export default function AppShell() {
         {/* nav */}
         <nav style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
           <NavItem to="/" end label="Home" />
+          {/* One extra link, deliberately, for the nine days the Games run. It earns
+              the space the way the sports do — a live destination people open
+              repeatedly — and it is the only route here that is also public, so the
+              same link works when it is sent to a coach. Delete this line after
+              28 September; the route stays live either way. */}
+          <NavItem to="/asiangames" label="Asian Games 2026" />
           <NavLabel>Sports</NavLabel>
           {SPORTS.map(s => (
             <NavItem key={s.key} to={`/sport/${s.key}`} label={s.name} />
