@@ -1,0 +1,58 @@
+name: Archive Supabase to CSV
+
+# One-time full archive of every public table and materialized view to gzipped CSV.
+# Uses a direct Postgres connection (SUPABASE_DB_URL, session pooler URI) because the
+# REST API is restricted while the project exceeds the free-plan size quota.
+# Output: a downloadable artifact on the run page, kept for 90 days.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [csv-export]
+    paths: ['.github/workflows/archive_supabase.yml']
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      PGCONNECT_TIMEOUT: '20'
+    steps:
+      - name: Install Postgres client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+
+      - name: Check connection
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then echo "SUPABASE_DB_URL secret is missing"; exit 1; fi
+          psql "$SUPABASE_DB_URL" -At -c "select 'connected', pg_size_pretty(pg_database_size(current_database()))"
+
+      - name: Dump tables to CSV
+        run: |
+          set -euo pipefail
+          mkdir -p archive
+          # Personal/app tables are left out: only sports data is archived.
+          psql "$SUPABASE_DB_URL" -At -c "
+            select table_name from information_schema.tables
+             where table_schema='public' and table_type='BASE TABLE'
+               and table_name not in ('user_profiles','audit_view_log')
+            union
+            select matviewname from pg_matviews where schemaname='public'
+            order by 1" > tables.txt
+          echo "table,rows" > archive/_manifest.csv
+          while read -r t; do
+            psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 \
+              -c "\copy (select * from public.\"$t\") to stdout with csv header" \
+              | gzip > "archive/$t.csv.gz"
+            rows=$(( $(zcat "archive/$t.csv.gz" | wc -l) - 1 ))
+            echo "$t,$rows" | tee -a archive/_manifest.csv
+          done < tables.txt
+          du -sh archive
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-archive-${{ github.run_id }}
+          path: archive/
+          retention-days: 90
+          compression-level: 0
