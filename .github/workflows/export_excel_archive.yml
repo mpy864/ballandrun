@@ -1,0 +1,39 @@
+name: Export Excel-ready archive (TT + Tennis)
+
+# Builds two downloadable folders for Excel users:
+#   TT_Data      - Table Tennis (main data, Analysis/, India/, 00_READ_ME.xlsx)
+#   Tennis_Data  - Tennis       (main data, Analysis/, India/, 00_READ_ME.xlsx)
+# Run it any time from the Actions tab (Run workflow). Downloads stay for 90 days.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [csv-export]
+    paths: ['scripts/export_excel_archive.py', '.github/workflows/export_excel_archive.yml']
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install psycopg2-binary openpyxl
+      - name: Build archive
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: python scripts/export_excel_archive.py --out out
+      - name: Upload TT_Data
+        uses: actions/upload-artifact@v4
+        with:
+          name: TT_Data
+          path: out/TT_Data/
+          retention-days: 90
+      - name: Upload Tennis_Data
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tennis_Data
+          path: out/Tennis_Data/
+          retention-days: 90
