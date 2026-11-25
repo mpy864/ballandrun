@@ -1,0 +1,78 @@
+name: Archive Supabase to plain CSV (Excel-ready)
+
+# Same archive as archive_supabase.yml, but every file opens in Excel:
+#  - plain .csv (no .gz), UTF-8 with BOM so names show correctly in Excel
+#  - tables over 1,000,000 rows are split into parts (Excel limit is 1,048,576 rows)
+#    ordered by date, with the header repeated in each part
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [csv-export]
+    paths: ['.github/workflows/archive_supabase_csv.yml']
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      PGCONNECT_TIMEOUT: '20'
+      MAX_ROWS: '1000000'
+    steps:
+      - name: Install Postgres client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+
+      - name: Dump tables to CSV
+        run: |
+          set -euo pipefail
+          mkdir -p archive
+          BOM=$'\xEF\xBB\xBF'
+          psql "$SUPABASE_DB_URL" -At -c "
+            select table_name from information_schema.tables
+             where table_schema='public' and table_type='BASE TABLE'
+               and table_name not in ('user_profiles','audit_view_log')
+            union
+            select matviewname from pg_matviews where schemaname='public'
+            order by 1" > tables.txt
+          echo "file,rows" > archive/_manifest.csv
+
+          order_for() {
+            case "$1" in
+              tennis_rankings)        echo "order by source, rank_date" ;;
+              youth_rankings_singles) echo "order by publish_date" ;;
+              youth_rankings_doubles) echo "order by publish_date" ;;
+              *)                      echo "" ;;
+            esac
+          }
+
+          while read -r t; do
+            n=$(psql "$SUPABASE_DB_URL" -At -c "select count(*) from public.\"$t\"")
+            ord=$(order_for "$t")
+            psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 \
+              -c "\copy (select * from public.\"$t\" $ord) to 'raw.csv' with csv header"
+            if [ "$n" -gt "$MAX_ROWS" ]; then
+              head -n 1 raw.csv > header.csv
+              tail -n +2 raw.csv | split -l "$MAX_ROWS" -d -a 2 - "part_"
+              i=1
+              for p in part_*; do
+                out="archive/${t}_part${i}.csv"
+                { printf '%s' "$BOM"; cat header.csv "$p"; } > "$out"
+                echo "${t}_part${i}.csv,$(wc -l < "$p")" | tee -a archive/_manifest.csv
+                rm "$p"; i=$((i+1))
+              done
+            else
+              { printf '%s' "$BOM"; cat raw.csv; } > "archive/$t.csv"
+              echo "$t.csv,$n" | tee -a archive/_manifest.csv
+            fi
+            rm -f raw.csv header.csv
+          done < tables.txt
+          ls archive | wc -l
+          du -sh archive
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-archive-csv-${{ github.run_id }}
+          path: archive/
+          retention-days: 90
