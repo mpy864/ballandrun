@@ -2,7 +2,7 @@ name: Supabase API check
 
 # Tells whether the Supabase REST API (used by the dashboard and every fetcher)
 # answers. 200 = working. 402 = project still restricted by Supabase.
-# Last manual check: 2026-11-26 11:00 IST
+# Last manual check: 2026-11-26 15:00 IST
 
 on:
   workflow_dispatch:
